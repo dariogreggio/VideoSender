@@ -1,0 +1,16 @@
+ 
+// Commands (ID_* and IDM_*) 
+ 
+// Prompts (IDP_*) 
+HIDP_FAILED_OPEN_DATABASE               0x30067
+HIDP_SOCKETS_INIT_FAILED                0x30068
+ 
+// Resources (IDR_*) 
+HIDR_MAINFRAME                          0x20080
+HIDR_VIDSENTYPE                         0x20081
+ 
+// Dialogs (IDD_*) 
+HIDD_ABOUTBOX                           0x20064
+HIDD_VIDSEND2_FORM                      0x20065
+ 
+// Frame Controls (IDW_*) 

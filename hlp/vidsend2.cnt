@@ -1,0 +1,9 @@
+:Base vidsend2.hlp
+1 Menu
+2 Menu File=menu_file
+2 Menu Modifica=menu_edit
+2 Menu Visualizza=menu_view
+2 Menu Finestra=menu_window
+2 Menu ?=menu_help
+1 <<add your application-specific topics here>>
+2 <<add your topic jumps here>>=main_index

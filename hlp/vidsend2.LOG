@@ -1,0 +1,68 @@
+Microsoft (R) Help Compiler
+HCRTF 4.03.0002
+Copyright (c) Microsoft Corp 1990 - 1995. All rights reserved.
+vidsend2.hpj
+    HC3025: Warning: topic #5 of C:\MSDEV\source\vidsend2\hlp\.\afxcore.rtf : 
+	Jump to undefined Topic ID: "HID_WINDOW_SPLIT".
+    HC3025: Warning: topic #3 of C:\MSDEV\source\vidsend2\hlp\.\afxcore.rtf : 
+	Jump to undefined Topic ID: "HID_OLE_EDIT_LINKS".
+    HC3025: Warning: topic #3 of C:\MSDEV\source\vidsend2\hlp\.\afxcore.rtf : 
+	Jump to undefined Topic ID: "HID_EDIT_PASTE_LINK".
+    HC3025: Warning: topic #3 of C:\MSDEV\source\vidsend2\hlp\.\afxcore.rtf : 
+	Jump to undefined Topic ID: "HID_OLE_INSERT_NEW".
+    HC1010: Note: 
+	The following mapped Topic IDs were not used in any topic:
+	HIDD_VIDSEND2_FORM
+	HID_EDIT_SELECT_ALL
+	HID_FILE_UPDATE
+	AFX_HIDW_RESIZE_BAR
+	AFX_HIDD_BUSY
+	HID_FILE_SAVE_COPY_AS
+	AFX_HIDD_CONVERT
+	HID_OLE_EDIT_CONVERT
+	AFX_HIDD_INSERTOBJECT
+	AFX_HIDP_PARSE_RADIO_BUTTON
+	HID_EDIT_PASTE_SPECIAL
+	HIDP_FAILED_OPEN_DATABASE
+	HIDP_SOCKETS_INIT_FAILED
+	AFX_HIDP_VB2APICALLED
+	HID_OLE_EDIT_CHANGE_ICON
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_OLE_VERB_1
+	HID_WINDOW_SPLIT
+	AFX_HIDP_FAILED_TO_CONVERT
+	AFX_HIDD_PREVIEW_TOOLBAR
+	AFX_HIDD_CHANGEICON
+	AFX_HIDD_FILEBROWSE
+	AFX_HIDD_EDITLINKS
+	HID_OLE_EDIT_LINKS
+	HID_EDIT_PASTE_LINK
+	AFX_HIDD_PASTESPECIAL
+	HID_OLE_INSERT_NEW
+    HC2002: Note: 
+	The keywords "stampa e anteprima di stampa" and "Stampa e anteprima di stampa" are identical except for case. Help Workshop has modified one keyword to match the other.
+76	Topics
+52	Jumps
+16	Keywords
+21	Bitmaps
+
+
+Created C:\MSDEV\source\vidsend2\hlp\vidsend2.HLP, 42,730 bytes
+Bitmaps: 5,215 bytes
+Phrase+Zeck compression decreased help file by 18,489 bytes.
+Compile time: 0 minutes, 0 seconds
+2 notes, 4 warnings

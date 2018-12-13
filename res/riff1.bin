@@ -1,0 +1,1 @@
+						myMenu2.AppendMenu(MF_SEPARATOR);
