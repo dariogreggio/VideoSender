@@ -7,7 +7,8 @@
 
 - Plug in your camera first
 - Since .exe - runs on Windows
-- Create an ODBC entry in your system called "vidsendMDB", 
+- Create an ODBC entry in your system called "vidsendMDB"
+- Install Indeo decrompressor (atm necessary, though would work with other)
 - then start "vidsend.exe" - create server/create client
 
 
