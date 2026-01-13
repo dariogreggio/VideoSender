@@ -77,12 +77,13 @@ int CChildFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
 		}
 
 	myRect.top=3;
-	myRect.left=20;
+	myRect.left=24;
 	myRect.bottom=17;
-	myRect.right=myRect.left+60-1;
+	myRect.right=myRect.left+54-1;
 
 	//TOGLIERE se non trasmette audio!!
-	if(!m_VUMeter->Create("Audio",0 /*CVUMeter::dotOrBar */ /*CVUMeter::digitalOrAnalog*/  /*| WS_VISIBLE | WS_CHILD*/,myRect,&m_wndStatusBar,0,255))	{
+	if(!m_VUMeter->Create("Audio",0 /*CVUMeter::dotOrBar */ /*CVUMeter::digitalOrAnalog*/  /*| WS_VISIBLE | WS_CHILD*/,myRect,
+		&m_wndStatusBar,-1,0,40))	{
 		return -1;      // fail to create
 		}
 
@@ -120,10 +121,11 @@ void CChildFrame::OnSize(UINT nType, int cx, int cy) {
 
 	if(m_wndStatusBar && !IsIconic()) {
 		x=cx2-GetSystemMetrics(SM_CYVSCROLL)*2-GetSystemMetrics(SM_CYEDGE)*4;	// non va bene, ma non trovo i valori giusti...
-		m_wndStatusBar.SetPaneInfo(0,ID_INDICATOR2,SBPS_NORMAL,(x-(18*2))/2);
-		m_wndStatusBar.SetPaneInfo(1,ID_INDICATOR2,SBPS_NORMAL,(x-(18*2))/2);
-		m_wndStatusBar.SetPaneInfo(2,ID_INDICATOR3,SBPS_NORMAL,18);
-		m_wndStatusBar.SetPaneInfo(3,ID_INDICATOR3,SBPS_NORMAL,18);
+		m_wndStatusBar.SetPaneInfo(0,ID_INDICATOR2,SBPS_NORMAL,(x-(22*2))/2);
+		m_wndStatusBar.SetPaneInfo(1,ID_INDICATOR2,SBPS_NORMAL,(x-(22*2))/2);
+		m_wndStatusBar.SetPaneInfo(2,ID_INDICATOR3,SBPS_NORMAL /*| SBPS_STRETCH*/,22);
+		m_wndStatusBar.SetPaneInfo(3,ID_INDICATOR3,SBPS_NORMAL,22);
+		
 		}
 	
 //	if(m_VUMeter)
@@ -287,19 +289,34 @@ void CChildFrame2::OnGetMinMaxInfo(MINMAXINFO *lpMMI) {
 
 
 void CChildFrame2::setStatusIcons(CVidsendDoc2 *d) {		// passandogli il Doc2 POTREI impostare le icone subito dopo la creazione della finestra live (laddove altrimenti GetActiveDoc... restituirebbe ancora 0!)
+	CString S;
+
 	if(!d) 
 		d=(CVidsendDoc2 *)GetActiveDocument();
 	
 	if(m_wndStatusBar && ::IsWindow(m_hWnd) && !IsIconic()) {
 		if(d) {
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(0,d->bPaused ? iconPause : iconPlay);
+			switch(d->trasmMode) {
+				case 1:
+					S="playback in corso...";
+					break;
+				case 2:
+					S="suono di test...";
+					break;
+				case 0:
+					S="live";
+					break;
+				}
+			if(!(d->Opzioni & (CVidsendDoc2::maySendAudio | CVidsendDoc2::maySendVideo)))
+				S+=" (disabilitato)";
 #ifndef _CAMPARTY_MODE
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(1,d->bAudio ? iconSpkOn : iconSpkOff);
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(2,d->theTV && d->theTV->isRecordingVideo() ? iconRecOn : iconRecOff);
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(3,d->myID ? iconCamera : NULL);
-			m_wndStatusBar.SetPaneText(4,d->trasmMode==1 ? "playback in corso..." : (d->trasmMode==2 ? "pagina di test..." : ""),TRUE);
+			m_wndStatusBar.SetPaneText(4,S,TRUE);
 #else
-			m_wndStatusBar.SetPaneText(1,d->trasmMode==1 ? "playback in corso..." : (d->trasmMode==2 ? "pagina di test..." : ""),TRUE);
+			m_wndStatusBar.SetPaneText(1,S,TRUE);
 #endif
 			}
 		else {
@@ -308,9 +325,9 @@ void CChildFrame2::setStatusIcons(CVidsendDoc2 *d) {		// passandogli il Doc2 POT
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(1,iconSpkOn);
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(2,iconRecOff);
 			m_wndStatusBar.GetStatusBarCtrl().SetIcon(3,NULL);
-			m_wndStatusBar.SetPaneText(4,"",TRUE);
+			m_wndStatusBar.SetPaneText(4,S,TRUE);
 #else
-			m_wndStatusBar.SetPaneText(1,"",TRUE);
+			m_wndStatusBar.SetPaneText(1,S,TRUE);
 #endif
 			}
 		}
@@ -369,6 +386,181 @@ void CChildFrame2::OnClose() {
 	CMDIChildWnd::OnClose();
 #endif
 	
+	}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CChildFrame22
+
+IMPLEMENT_DYNCREATE(CChildFrame22, CMDIChildWnd)
+
+CChildFrame22::CChildFrame22() {
+
+	iconOff=theApp.LoadIcon(IDI_LEDOFF);
+	iconOn=theApp.LoadIcon(IDI_LEDON);
+	iconSpkOn=theApp.LoadIcon(IDI_SPEAKER);
+	iconSpkOff=theApp.LoadIcon(IDI_SPEAKEROFF);
+	iconPlay=theApp.LoadIcon(IDI_PLAY);
+	iconPause=theApp.LoadIcon(IDI_PAUSE);
+#ifdef _NEWMEET_MODE
+	iconRecOn=theApp.LoadIcon(IDI_RECORD_NM);
+#else
+	iconRecOn=theApp.LoadIcon(IDI_RECORD);
+#endif
+#ifdef _NEWMEET_MODE
+	iconRecOff=theApp.LoadIcon(IDI_PAUSE_NM);
+#else
+	iconRecOff=theApp.LoadIcon(IDI_PAUSE);
+#endif
+	}
+
+CChildFrame22::~CChildFrame22() {
+	}
+
+
+BEGIN_MESSAGE_MAP(CChildFrame22, CMDIChildWnd)
+	//{{AFX_MSG_MAP(CChildFrame22)
+	ON_WM_MOVE()
+	ON_WM_CREATE()
+	ON_WM_SIZE()
+	ON_WM_CLOSE()
+	//}}AFX_MSG_MAP
+	ON_WM_GETMINMAXINFO()
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CChildFrame2 message handlers
+static UINT indicators22[] = {
+	ID_INDICATOR3,
+	ID_INDICATOR3,
+	ID_INDICATOR3,
+	ID_INDICATOR3
+	};
+
+int CChildFrame22::OnCreate(LPCREATESTRUCT lpCreateStruct) {
+
+	if(CMDIChildWnd::OnCreate(lpCreateStruct) == -1)
+		return -1;
+	
+	if(!m_wndStatusBar.Create(this) ||
+		!m_wndStatusBar.SetIndicators(indicators22,
+		  sizeof(indicators22)/sizeof(UINT)))	{
+		return -1;      // fail to create
+		}
+	setStatusIcons();
+
+	return 0;
+	}
+
+void CChildFrame22::OnSize(UINT nType, int cx, int cy) {
+	int x;
+	
+	if(m_wndStatusBar && !IsIconic()) {
+		x=cx-GetSystemMetrics(SM_CYVSCROLL)*2-GetSystemMetrics(SM_CYEDGE)*4;	// non va bene, ma non trovo i valori giusti...
+		m_wndStatusBar.SetPaneInfo(0,ID_INDICATOR3,SBPS_NORMAL,18);
+		m_wndStatusBar.SetPaneInfo(1,ID_INDICATOR3,SBPS_NORMAL,18);
+		m_wndStatusBar.SetPaneInfo(2,ID_INDICATOR3,SBPS_NORMAL,18);
+		m_wndStatusBar.SetPaneInfo(3,ID_INDICATOR3,SBPS_NORMAL | SBPS_STRETCH,100);
+		setStatusIcons();
+		}
+	
+	CMDIChildWnd::OnSize(nType, cx, cy);
+	}
+
+void CChildFrame22::OnMove(int x, int y) {
+	RECT r;
+	CVidsendDoc22 *d=(CVidsendDoc22 *)GetActiveDocument();
+	
+	CMDIChildWnd::OnMove(x, y);
+	if(d) {
+		GetClientRect(&r);
+		}
+
+	}
+
+void CChildFrame22::OnGetMinMaxInfo(MINMAXINFO *lpMMI) {
+	CVidsendDoc22 *d=(CVidsendDoc22 *)GetActiveDocument();
+
+	if(d) {
+		}
+	}
+
+
+void CChildFrame22::setStatusIcons(CVidsendDoc22 *d) {		// passandogli il Doc2 POTREI impostare le icone subito dopo la creazione della finestra live (laddove altrimenti GetActiveDoc... restituirebbe ancora 0!)
+	CString S;
+
+	if(!d) 
+		d=(CVidsendDoc22 *)GetActiveDocument();
+	
+	if(m_wndStatusBar && ::IsWindow(m_hWnd) && !IsIconic()) {
+		if(d) {
+			m_wndStatusBar.GetStatusBarCtrl().SetIcon(0,d->bPaused ? iconPause : iconPlay);
+			m_wndStatusBar.GetStatusBarCtrl().SetIcon(1,d->bAudio ? iconSpkOn : iconSpkOff);
+			switch(d->trasmMode) {
+				case 1:
+					S="playback in corso...";
+					if(!d->psAudio)
+						S+=" (file non trovato)";
+					break;
+				case 2:
+					S="suono di test...";
+					break;
+				case 0:
+					S="live";
+					break;
+				}
+			if(!(d->Opzioni & CVidsendDoc22::maySendAudio))
+				S+=" (disabilitato)";
+			m_wndStatusBar.SetPaneText(3,S,TRUE);
+			}
+		else {
+			m_wndStatusBar.GetStatusBarCtrl().SetIcon(0,iconPlay);
+			m_wndStatusBar.GetStatusBarCtrl().SetIcon(1,iconSpkOn);
+			m_wndStatusBar.GetStatusBarCtrl().SetIcon(2,iconRecOff);
+			m_wndStatusBar.SetPaneText(3,S,TRUE);
+			}
+		}
+	}
+
+BOOL CChildFrame22::OnNotify(WPARAM wParam, LPARAM lParam, LRESULT* pResult) {
+	CVidsendDoc22 *d=(CVidsendDoc22 *)GetActiveDocument();
+	TBNOTIFY *p=(TBNOTIFY *)lParam;
+	
+	if(d) {
+		if(p->hdr.hwndFrom == m_wndStatusBar.m_hWnd) {
+			switch(p->hdr.code) {
+				case NM_CLICK:
+					switch(p->iItem) {
+						case 0:
+							d->bPaused = !d->bPaused;
+							((CVidsendView22*)d->getView())->buttonS->SetCheck(!d->bPaused);
+							break;
+						case 1:
+							if(d->Opzioni & CVidsendDoc22::maySendAudio) {
+								d->bAudio = !d->bAudio;
+								}
+							break;
+						case 2:
+							if(d->getView())
+								d->getView()->PostMessage(MAKELONG(WM_COMMAND,0),ID_FILE_SAVE_VIDEO,0);
+							break;
+						}
+					setStatusIcons();
+					break;
+				}
+			}
+		}
+	return CMDIChildWnd::OnNotify(wParam, lParam, pResult);
+	}
+
+BOOL CChildFrame22::PreCreateWindow(CREATESTRUCT& cs) {
+	
+	return CMDIChildWnd::PreCreateWindow(cs);
+	}
+
+void CChildFrame22::OnClose() {
+
+	CMDIChildWnd::OnClose();
 	}
 
 

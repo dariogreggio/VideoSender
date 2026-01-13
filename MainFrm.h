@@ -9,6 +9,23 @@
 #pragma once
 #endif // _MSC_VER > 1000
 
+class CBackWnd : public CWnd {
+// Construction
+public:
+	CBackWnd() {};
+
+// Implementation
+public:
+	virtual ~CBackWnd() {};
+
+// Generated message map functions
+protected:
+	//{{AFX_MSG(CBackWnd)
+	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+};
+
 class CMainFrame : public CMDIFrameWnd {
 
 	DECLARE_DYNAMIC(CMainFrame)
@@ -17,6 +34,7 @@ public:
 
 // Attributes
 public:
+	CBackWnd m_BackWnd;
 
 // Operations
 public:
@@ -43,16 +61,20 @@ protected:  // control bar embedded members
 	CStatusBar  m_wndStatusBar;
 	CToolBar    m_wndToolBar;
 	CReBar      m_wndReBar;
-	CDialogBar      m_wndDlgBar;
+	CDialogBar  m_wndDlgBar;
 
 // Generated message map functions
 protected:
 	//{{AFX_MSG(CMainFrame)
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+	afx_msg BOOL OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext);
 	afx_msg void OnDropFiles(HDROP hDropInfo);
 	afx_msg void OnMove(int x, int y);
 	afx_msg void OnEndSession(BOOL bEnding);
 	afx_msg void OnClose();
+//	afx_msg void OnDraw(CDC*);
+//	afx_msg void OnPaint();
+//	afx_msg BOOL OnEraseBkgnd(CDC *pDC);
 	afx_msg void OnNcPaint();
 	afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
 	afx_msg BOOL OnQueryEndSession();

@@ -1,5 +1,5 @@
 // DigitalText.cpp : implementation file
-//
+// G.Dar 1997-2023
 
 #include "stdafx.h"
 //#include "Joshua.h"
@@ -15,6 +15,7 @@ static char THIS_FILE[] = __FILE__;
 
 // 11/4/09; 29.6.17
 // using vectors, Juli 2017
+// logarithmic vu-meter, 2023
 
 /////////////////////////////////////////////////////////////////////////////
 // CDigitalText
@@ -95,7 +96,7 @@ void CDigitalText::paint(CDC *dc) {
 			bkColor=RGB(255,255,255);
 			break;
 		default:			//non deve succedere!
-			bkColor=RGB(40,0,0);			// 40,0,0 NON è in palette e questo provoca problemi alle GIF!!
+			bkColor=RGB(40,0,0);			// 40,0,0 NON  in palette e questo provoca problemi alle GIF!!
 			break;
 		}
 
@@ -517,7 +518,7 @@ void CDigitalText::drawSegmentDot(CDC *dc,POINT coords[],int noOverlap) {
 	int sz=max(1,(coords[5].x-coords[4].x)/15);
 
 	dc->Ellipse(coords[4].x+3-sz,coords[4].y-sz,coords[4].x+3+sz,coords[4].y+sz);
-	//uso la coordinata del bottom-left perché il puntino occupa un suo spazio, ridotto :)
+	//uso la coordinata del bottom-left perch il puntino occupa un suo spazio, ridotto :)
 	}
 
 void CDigitalText::SetCaption(LPSTR lpszCaption) {
@@ -547,7 +548,7 @@ BOOL CDigitalText::Create(LPCTSTR lpszWindowName, LPSTR lpszCaption, DWORD st, W
 	if(!(style & useVector))
 		loadBitmap();
 
-	i=CStatic::Create(myBuf, (style & noClipSiblings /* ma risp. agli stili privati com'è?? */ ? 0 : WS_CLIPSIBLINGS) | WS_VISIBLE | WS_CHILD /*| WS_BORDER*/, 
+	i=CStatic::Create(myBuf, (style & noClipSiblings /* ma risp. agli stili privati com'?? */ ? 0 : WS_CLIPSIBLINGS) | WS_VISIBLE | WS_CHILD /*| WS_BORDER*/, 
 		myRect, pParentWnd, nID);
 	if(lpszCaption)
 		_tcscpy(m_Caption,lpszCaption);
@@ -783,7 +784,7 @@ void CDigitalText::OnWindowPosChanging(WINDOWPOS FAR* lpwndpos) {
 //		lpwndpos->flags &= ~SWP_NOSIZE;
 		}
 	if(style & hasTitleLeft) {
-		lpwndpos->cx+=captionToTextOffset.x ? captionToTextOffset.x : // finire... al primo giro non è valido e così... improvviso...
+		lpwndpos->cx+=captionToTextOffset.x ? captionToTextOffset.x : // finire... al primo giro non  valido e cos... improvviso...
 			((2)*((lpwndpos->cy-2)*ratio))/100+(style & border ? (style & border3D ? 2 : 4) : 6);
 		}
 	if(style & hasTitleTop) {
@@ -823,9 +824,10 @@ END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
 // CVUMeter message handlers
+//https://forums.codeguru.com/showthread.php?445227-RESOLVED-VU-Meter directX
 
-
-BOOL CVUMeter::Create(LPSTR lpszCaption, short int st, const RECT& rect, CWnd* pParentWnd, int v1,int v2) {
+BOOL CVUMeter::Create(LPSTR lpszCaption, short unsigned int st, const RECT& rect, CWnd* pParentWnd, 
+											UINT nID, int v1,int v2) {
 	int i;
 	TCHAR myBuf[16];
 	RECT myRect=rect;
@@ -834,7 +836,7 @@ BOOL CVUMeter::Create(LPSTR lpszCaption, short int st, const RECT& rect, CWnd* p
 	
 	style=st;
 //	BDisplay.LoadBitmap(style & ledOrLCD ? IDB_DISPLAY_LCD : IDB_DISPLAY);
-	i=CStatic::Create(myBuf, (style & noClipSiblings ? 0 : WS_CLIPSIBLINGS) | WS_VISIBLE | WS_CHILD /*| WS_BORDER*/, myRect, pParentWnd);
+	i=CStatic::Create(myBuf, (style & noClipSiblings ? 0 : WS_CLIPSIBLINGS) | WS_VISIBLE | WS_CHILD /*| WS_BORDER*/, myRect, pParentWnd, nID);
 	if(lpszCaption)
 		strcpy(m_Caption,lpszCaption);
 	SetRange(v1,v2);
@@ -872,8 +874,15 @@ void CVUMeter::OnPaint() {
 		y2=myRect.bottom/10;
 
 #ifndef _WIN32_WCE
-		dc.Chord(x-x2,myRect.bottom-(myRect.bottom/5),x+x2,myRect.bottom,x-x2,myRect.bottom,x+x2,myRect.bottom);
-		dc.Arc(myRect.left,myRect.top,myRect.right,myRect.bottom,x2,y2,myRect.right-x2,myRect.bottom/4);
+		if(style & linearOrLogarithmic) {
+
+			dc.Chord(x-x2,myRect.bottom-(myRect.bottom/5),x+x2,myRect.bottom,x-x2,myRect.bottom,x+x2,myRect.bottom);
+			dc.Arc(myRect.left,myRect.top,myRect.right,myRect.bottom,x2,y2,myRect.right-x2,myRect.bottom/4);
+			}
+		else {
+			dc.Chord(x-x2,myRect.bottom-(myRect.bottom/5),x+x2,myRect.bottom,x-x2,myRect.bottom,x+x2,myRect.bottom);
+			dc.Arc(myRect.left,myRect.top,myRect.right,myRect.bottom,x2,y2,myRect.right-x2,myRect.bottom/4);
+			}
 #endif
 
 		dc.SelectObject(&pen2);
@@ -895,14 +904,29 @@ void CVUMeter::OnPaint() {
 
 		if(!(style & dotOrBar)) {
 			int i,x2,y2,x3;
+			int steps[256 /*numLed*/];
+
 			x2=((myRect.right-myRect.left)/numLed)-1;
 			y2=(myRect.bottom-myRect.top)/3;
 			x3=(maxVal-minVal)/numLed;
+			if(style & linearOrLogarithmic) {
+				for(i=0; i<numLed; i++) {
+					steps[i]=x3*pow(2,i/3.0);	// https://forum.arduino.cc/t/map-da-lineare-a-logaritmico/902689/27
+					// log(i*i)*111.08;
+					// OCCHIO a usare un range limitato... p.es. con 0.10 i primi 3 led si accendono insieme (giustamente)
+					// ci va almeno 40
+					}
+				}
+			else {
+				for(i=0; i<numLed; i++) {
+					steps[i]=x3*i;
+					}
+				}
 			x=1;
 			oldPen=dc.SelectObject(&pen1);
 			oldBrush=dc.SelectObject(&brush1);
 			for(i=0; i<numLed; i++) {
-				if(value>(x3*i))
+				if(value>steps[i])
 					dc.SelectObject(&brush1);
 				else
 					dc.SelectObject(&brush2);
@@ -938,9 +962,10 @@ void CVUMeter::SetWindowText(int n) {
 	Invalidate();
 	}
 
-void CVUMeter::SetWindowText(BYTE *p,DWORD len) {
+void CVUMeter::SetWindowText(const BYTE *p,DWORD len) {
 	int i;
 	DWORD n,n1=len;
+	// wow, e una FFT? :) 2019 v. Bestaudioplayer
 
 	n=0;
 	while(n1--) {
@@ -992,14 +1017,14 @@ BOOL CVUMeter::OnEraseBkgnd(CDC* pDC) {
 //!    no expressed  or  implied warranty.  No responsibilities  for possible
 //!    damages, or side effects in its functionality.  The  user must assume 
 //!    the entire risk of using this code.  The author accepts no  liability
-//!    if it causes any damage to your computer, causes your pet to fall ill, 
+//!    ifit causes any damage to your computer, causes your pet to fall ill, 
 //!    increases baldness or makes your car  start  emitting  strange noises 
 //!    when you start it up.  <i>This code  has no bugs,  just  undocumented 
 //!    features!.</i>
 //!
 //! \par Terms of use
 //!    This code is <b>free</b> for personal use, or freeware applications as
-//!    long as this comment-header  header remains like this.  If you plan to 
+//!    long as this comment-header  header remains like this.  ifyou plan to 
 //!    use  this  code in  a commercial  or shareware  application,   you are 
 //!    politely  asked  to  contact the author for his permission via e-mail. 
 //!    From: <A HREF="mailto:ricky.marek@gmail.com">ricky.marek@gmail.com</A>
@@ -1024,7 +1049,7 @@ BOOL CVUMeter::OnEraseBkgnd(CDC* pDC) {
 
 #ifndef BS_TYPEMASK
 # define BS_TYPEMASK  0x0000000F
-#endif // BS_TYPEMASK
+#endif// BS_TYPEMASK
 
 // ###########################################################################
 // ##                                                                       ##
@@ -1036,8 +1061,8 @@ BOOL CVUMeter::OnEraseBkgnd(CDC* pDC) {
 // Default Constructor (Public)
 // ///////////////////////////////////////////////////////////////////////////
 IMPLEMENT_DYNAMIC(CLedButton, CButton)
-CLedButton::CLedButton()
-{
+CLedButton::CLedButton() {
+
     m_ledDataList.RemoveAll();
 
     m_listCount        = 0;
@@ -1051,22 +1076,19 @@ CLedButton::CLedButton()
     m_pCondition       = NULL;
 
     SetLedStatesNumber(LED_BUTTON_PREDEFINED_STATES_NUMBER, false);
-}
+	}
 
 
 // ///////////////////////////////////////////////////////////////////////////
 // Default Destructor (Public)
 // ///////////////////////////////////////////////////////////////////////////
-CLedButton::~CLedButton()
-{
+CLedButton::~CLedButton() {
 
-    for(LedState ledState=0; ledState < m_listCount; ledState++)
-    {
+    for(LedState ledState=0; ledState < m_listCount; ledState++) {
         RemoveIcon(ledState);
     }
     
-    if (NULL != m_activityTimer)
-    {
+    if(m_activityTimer) {
         KillTimer(m_activityTimer);
         m_activityTimer = NULL;
     }
@@ -1074,7 +1096,7 @@ CLedButton::~CLedButton()
     m_ledDataList.RemoveAll();
     m_listCount = 0;
 
-}
+	}
 
 
 // ///////////////////////////////////////////////////////////////////////////
@@ -1099,13 +1121,12 @@ END_MESSAGE_MAP()
 // ///////////////////////////////////////////////////////////////////////////
 // SetLedStatesNumber (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetLedStatesNumber(int maxLedStatesNumber, bool isInvalidate /*=true*/)
-{
+void CLedButton::SetLedStatesNumber(int maxLedStatesNumber, bool isInvalidate /*=true*/) {
+
     ASSERT(maxLedStatesNumber > 0);
 	LedState ledState;
 
-    for(ledState=0; ledState < m_listCount; ledState++)
-    {
+    for(ledState=0; ledState < m_listCount; ledState++) {
         RemoveIcon(ledState);
     }
 
@@ -1115,25 +1136,23 @@ void CLedButton::SetLedStatesNumber(int maxLedStatesNumber, bool isInvalidate /*
 
     LedData *pData = m_ledDataList.GetData();
     
-    for(ledState=0; ledState < m_listCount; ledState++)
-    {
+    for(ledState=0; ledState < m_listCount; ledState++) {
         ::ZeroMemory(&(pData[ledState]), sizeof(LedData));
 
     }
 
     RestoreDefaultColors(isInvalidate);
 
-}
+	}
 
 
 
 // ///////////////////////////////////////////////////////////////////////////
 // SetLedState (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetLedState(LedState ledState, bool isForcedChange /*=false*/)
-{
-    if (NULL != m_pCondition)
-    {
+void CLedButton::SetLedState(LedState ledState, bool isForcedChange /*=false*/) {
+
+    if(m_pCondition) {
         ledState = m_pCondition->ChangeState(ledState, m_ledState, isForcedChange);
     }
 
@@ -1141,37 +1160,32 @@ void CLedButton::SetLedState(LedState ledState, bool isForcedChange /*=false*/)
     // the following is added to remove flickering when the led is called
     // with the same led state as it is displaying.
     //
-    if (ledState == m_ledState)
-    {
+    if(ledState == m_ledState) {
         return;
     }
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
         m_ledState = ledState;
     }
 
-    if (0 != m_activityId)
-    {
+    if(m_activityId) {
         //
-        // Kill Timer if running.
+        // Kill Timer ifrunning.
         //
-        if (NULL != m_activityTimer)
-        {
+        if(m_activityTimer) {
             KillTimer(m_activityTimer);
             m_activityTimer = NULL;
 
         }
      
-        if (m_ledState != m_activityState)
-        {
+        if(m_ledState != m_activityState) {
             m_activityTimer = SetTimer(m_activityId, m_activityDuration, NULL);
         }
-    }
+		  }
 
     Invalidate();
 
-}
+	}
 
 
 // ///////////////////////////////////////////////////////////////////////////
@@ -1179,10 +1193,9 @@ void CLedButton::SetLedState(LedState ledState, bool isForcedChange /*=false*/)
 // ///////////////////////////////////////////////////////////////////////////
 void CLedButton::SetLedActivityTimer(UINT timerId, 
                                      int duration /* =LED_BUTTON_DEFAULT_ACTIVITY_DURATION */, 
-                                     LedState offState /*=LED_BUTTON_STATE_OFF*/)
-{
-    if (NULL != m_activityTimer)
-    {
+                                     LedState offState /*=LED_BUTTON_STATE_OFF*/) {
+
+    if(m_activityTimer) {
         KillTimer(m_activityTimer);
         m_activityTimer = NULL;
     }
@@ -1191,15 +1204,15 @@ void CLedButton::SetLedActivityTimer(UINT timerId,
     m_activityDuration = duration;
     m_activityState    = offState;
 
-}
+	}
 
 
 
 // ///////////////////////////////////////////////////////////////////////////
 // SetLedStateCondition (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetLedStateCondition(CLedStateCondition *pCondition)
-{
+void CLedButton::SetLedStateCondition(CLedStateCondition *pCondition) {
+
     m_pCondition = pCondition;
     SetLedState(m_ledState, true);
 }
@@ -1214,12 +1227,11 @@ void CLedButton::SetLedStateCondition(CLedStateCondition *pCondition)
 // ///////////////////////////////////////////////////////////////////////////
 // SetIcon(1) (Public)
 // ///////////////////////////////////////////////////////////////////////////
-bool CLedButton::SetIcon(LedState ledState, UINT iconId, int width/*=0*/, int height/*=0*/)
-{
+bool CLedButton::SetIcon(LedState ledState, UINT iconId, int width/*=0*/, int height/*=0*/) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?.
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
 	    HINSTANCE hInstResource = AfxFindResourceHandle(MAKEINTRESOURCE(iconId), RT_GROUP_ICON);
         HICON     hIcon = (HICON)::LoadImage(hInstResource, MAKEINTRESOURCE(iconId), IMAGE_ICON, width,height,0);
 
@@ -1234,23 +1246,21 @@ bool CLedButton::SetIcon(LedState ledState, UINT iconId, int width/*=0*/, int he
 // ///////////////////////////////////////////////////////////////////////////
 // SetIcon(2) (Public)
 // ///////////////////////////////////////////////////////////////////////////
-bool CLedButton::SetIcon(LedState ledState, HICON hIcon)
-{
+bool CLedButton::SetIcon(LedState ledState, HICON hIcon) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
         RemoveIcon(ledState);
 
-        if (hIcon)
-        {
+        if(hIcon) {
       	    ICONINFO	iconInfo;
 
             m_ledDataList[ledState].hIcon = hIcon;
 
 		    ::ZeroMemory(&iconInfo, sizeof(ICONINFO));
 
-		    if (FALSE == ::GetIconInfo(hIcon, &iconInfo))
+		    if(FALSE == ::GetIconInfo(hIcon, &iconInfo))
             {
                 RemoveIcon(ledState);
                 return(false);
@@ -1273,16 +1283,15 @@ bool CLedButton::SetIcon(LedState ledState, HICON hIcon)
 // ///////////////////////////////////////////////////////////////////////////
 // SetIcons (Public)
 // ///////////////////////////////////////////////////////////////////////////
-bool CLedButton::SetIcons(UINT offIconId, UINT onIconId)
-{
+bool CLedButton::SetIcons(UINT offIconId, UINT onIconId) {
     bool retVal = true;  // Optimistic..
 
-    if ((offIconId > 0) && (m_listCount > 0))
+    if((offIconId > 0) && (m_listCount > 0))
     {
         retVal = SetIcon(LED_BUTTON_STATE_OFF, offIconId);
     }
 
-    if ((retVal) && (onIconId > 0) && (m_listCount > 0))
+    if((retVal) && (onIconId > 0) && (m_listCount > 0))
     {
         retVal = SetIcon(LED_BUTTON_STATE_ON, onIconId);
     }
@@ -1294,14 +1303,12 @@ bool CLedButton::SetIcons(UINT offIconId, UINT onIconId)
 // ///////////////////////////////////////////////////////////////////////////
 // RemoveIcon (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::RemoveIcon(LedState ledState)
-{
+void CLedButton::RemoveIcon(LedState ledState) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
-    if (ledState < m_listCount)
-    {
-        if (NULL != m_ledDataList[ledState].hIcon)
-        {
+    if(ledState < m_listCount) {
+        if(m_ledDataList[ledState].hIcon) {
             ::DestroyIcon(m_ledDataList[ledState].hIcon);
             m_ledDataList[ledState].hIcon = NULL;
         }
@@ -1324,17 +1331,14 @@ void CLedButton::RemoveIcon(LedState ledState)
 // ///////////////////////////////////////////////////////////////////////////
 // RestoreDefaultColors (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::RestoreDefaultColors(bool isInvalidate /* =true */)
-{
+void CLedButton::RestoreDefaultColors(bool isInvalidate /* =true */) {
 
-    for(LedState ledState = 0; ledState < m_listCount; ledState++)
-    {
+    for(LedState ledState = 0; ledState < m_listCount; ledState++) {
         m_ledDataList[ledState].textForegroundColor = ::GetSysColor(COLOR_BTNTEXT);
         m_ledDataList[ledState].textBackgroundColor = ::GetSysColor(COLOR_BTNFACE);
     }
 
-	if (isInvalidate)
-    {
+	if(isInvalidate) {
         Invalidate();
     }
 }
@@ -1343,17 +1347,15 @@ void CLedButton::RestoreDefaultColors(bool isInvalidate /* =true */)
 // ///////////////////////////////////////////////////////////////////////////
 // SetTextForeground (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetTextForeground(LedState ledState, COLORREF colorRef, bool isInvalidate /*=true*/)
-{
-    ASSERT(ledState < m_listCount);  // No room for this Led?
+void CLedButton::SetTextForeground(LedState ledState, COLORREF colorRef, bool isInvalidate /*=true*/) {
 
-    if (ledState < m_listCount)
-    {
+	ASSERT(ledState < m_listCount);  // No room for this Led?
+
+    if(ledState < m_listCount) {
         m_ledDataList[ledState].textForegroundColor = colorRef;
     }
 
-    if (isInvalidate)
-    {
+    if(isInvalidate) {
         Invalidate();
     }
 
@@ -1363,16 +1365,15 @@ void CLedButton::SetTextForeground(LedState ledState, COLORREF colorRef, bool is
 // ///////////////////////////////////////////////////////////////////////////
 // SetTextBackground (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetTextBackground(LedState ledState, COLORREF colorRef, bool isInvalidate /*=true*/)
-{
+void CLedButton::SetTextBackground(LedState ledState, COLORREF colorRef, bool isInvalidate /*=true*/) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
         m_ledDataList[ledState].textBackgroundColor = colorRef;
     }
 
-    if (isInvalidate)
+    if(isInvalidate)
     {
         Invalidate();
     }
@@ -1384,8 +1385,8 @@ void CLedButton::SetTextBackground(LedState ledState, COLORREF colorRef, bool is
 // ///////////////////////////////////////////////////////////////////////////
 // SetTextColors (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetTextColors(LedState ledState, COLORREF fgColorRef, COLORREF bgColorRef, bool isInvalidate /*=true*/)
-{
+void CLedButton::SetTextColors(LedState ledState, COLORREF fgColorRef, COLORREF bgColorRef, bool isInvalidate /*=true*/) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
     CLedButton::SetTextBackground(ledState, bgColorRef, false);
@@ -1396,12 +1397,11 @@ void CLedButton::SetTextColors(LedState ledState, COLORREF fgColorRef, COLORREF 
 // ///////////////////////////////////////////////////////////////////////////
 // GetTextForegroundColor (Public)
 // ///////////////////////////////////////////////////////////////////////////
-COLORREF CLedButton::GetTextForegroundColor(LedState ledState)
-{
+COLORREF CLedButton::GetTextForegroundColor(LedState ledState) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
         return(m_ledDataList[ledState].textForegroundColor);
     }
 
@@ -1412,12 +1412,11 @@ COLORREF CLedButton::GetTextForegroundColor(LedState ledState)
 // ///////////////////////////////////////////////////////////////////////////
 // GetTextBackgroundColor (Public)
 // ///////////////////////////////////////////////////////////////////////////
-COLORREF CLedButton::GetTextBackgroundColor(LedState ledState)
-{
+COLORREF CLedButton::GetTextBackgroundColor(LedState ledState) {
+
     ASSERT(ledState < m_listCount);  // No room for this Led?
 
-    if (ledState < m_listCount)
-    {
+    if(ledState < m_listCount) {
         return(m_ledDataList[ledState].textBackgroundColor);
     }
 
@@ -1435,10 +1434,9 @@ COLORREF CLedButton::GetTextBackgroundColor(LedState ledState)
 // ///////////////////////////////////////////////////////////////////////////
 // ToolTipInit (Private)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::ToolTipInit(void)
-{
-	if (NULL == m_toolTip.m_hWnd)
-	{
+void CLedButton::ToolTipInit(void) {
+
+	if(!m_toolTip.m_hWnd)	{
 		m_toolTip.Create(this);
 		m_toolTip.Activate(FALSE);
 		m_toolTip.SendMessage(TTM_SETMAXTIPWIDTH, 0, 400);
@@ -1450,12 +1448,10 @@ void CLedButton::ToolTipInit(void)
 // ///////////////////////////////////////////////////////////////////////////
 // SetTooltipText(1) (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetTooltipText(UINT id, bool isActivate /*=true*/)
-{
+void CLedButton::SetTooltipText(UINT id, bool isActivate /*=true*/) {
    	CString text;
 	
-    if (text.LoadString(id))
-    {
+    if(text.LoadString(id)) {
         SetTooltipText(text, isActivate);
     }
 
@@ -1463,16 +1459,16 @@ void CLedButton::SetTooltipText(UINT id, bool isActivate /*=true*/)
 // ///////////////////////////////////////////////////////////////////////////
 // SetTooltipText(2) (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::SetTooltipText(LPCTSTR text, bool isActivate /*=true*/)
-{
-	if (NULL == text)
+void CLedButton::SetTooltipText(LPCTSTR text, bool isActivate /*=true*/) {
+
+	if(!text)
     {
         return;
     }
 
 	ToolTipInit();
 
-	if (0 == m_toolTip.GetToolCount())
+	if(0 == m_toolTip.GetToolCount())
 	{
 		CRect rect; 
 		GetClientRect(rect);
@@ -1487,10 +1483,9 @@ void CLedButton::SetTooltipText(LPCTSTR text, bool isActivate /*=true*/)
 // ///////////////////////////////////////////////////////////////////////////
 // ActivateTooltip (Public)
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::ActivateTooltip(bool isActivate /*=true*/)
-{
-	if (0 != m_toolTip.GetToolCount())
-    {
+void CLedButton::ActivateTooltip(bool isActivate /*=true*/) {
+
+	if(m_toolTip.GetToolCount()) {
     	m_toolTip.Activate(isActivate);
     }
 
@@ -1508,15 +1503,14 @@ void CLedButton::ActivateTooltip(bool isActivate /*=true*/)
 // ///////////////////////////////////////////////////////////////////////////
 // OnDestroy
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::OnDestroy()
-{
+void CLedButton::OnDestroy() {
+
     CButton::OnDestroy();
 
     //
     // Kill timer
     //
-    if (NULL != m_activityTimer)
-    {
+    if(m_activityTimer) {
         KillTimer(m_activityTimer);
         m_activityTimer = NULL;
     }
@@ -1528,8 +1522,7 @@ void CLedButton::OnDestroy()
 // ///////////////////////////////////////////////////////////////////////////
 // DrawItem
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
-{
+void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS) {
    	CDC* pDC = CDC::FromHandle(lpDIS->hDC);
 
 	m_isDisabled = ((lpDIS->itemState & ODS_DISABLED) != 0);
@@ -1556,19 +1549,16 @@ void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
     ledData.textForegroundColor = ::GetSysColor(COLOR_BTNTEXT);
     ledData.textBackgroundColor = ::GetSysColor(COLOR_BTNFACE);
 
-    if (m_ledState < m_listCount)
-    {
+    if(m_ledState < m_listCount) {
         ledData = m_ledDataList[m_ledState];
     }
 
-    if (m_buttonStyle & BS_LEFTTEXT)
-    {
+    if(m_buttonStyle & BS_LEFTTEXT) {
         ledRect.left      = captionRect.right - ledData.width;
         ledRect.right     = ledRect.left + ledData.width;
         captionRect.right = ledRect.left - 3;
     }
-    else
-    {
+    else {
         ledRect.left     = captionRect.left;
         ledRect.right    = ledRect.left + ledData.width;
         captionRect.left = ledRect.right + 3;
@@ -1577,8 +1567,7 @@ void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
     ledRect.top    = (captionRect.Height() - ledData.height)/2;
     ledRect.bottom = ledRect.top + ledData.height;
 
-    if (ledData.hIcon)
-    {
+    if(ledData.hIcon)  {
         pDC->DrawState(ledRect.TopLeft(), 
                        ledRect.Size(),  
                        ledData.hIcon, 
@@ -1588,33 +1577,29 @@ void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
     }
 
     //
-    // Now deal with the text.(if any)
+    // Now deal with the text.(ifany)
     //
 	CString title;
 	GetWindowText(title);
 
-    if (FALSE == title.IsEmpty())
-    {
+    if(!title.IsEmpty())     {
         CRect centerRect = captionRect;
         UINT textFormat = DT_WORDBREAK | DT_VCENTER;
 
-        if (BS_CENTER == (m_buttonStyle &  BS_CENTER))
-        {
+        if(BS_CENTER == (m_buttonStyle &  BS_CENTER))        {
             textFormat |= DT_CENTER;
             pDC->DrawText(title, -1, &captionRect, (textFormat | DT_CALCRECT));
             captionRect.OffsetRect((centerRect.Width() - captionRect.Width())/2, 
                                    ((centerRect.Height() - captionRect.Height())/2));
 
         }
-        else if (BS_RIGHT == (m_buttonStyle & BS_RIGHT))
-        {
+        else if(BS_RIGHT == (m_buttonStyle & BS_RIGHT)) {
             textFormat |= DT_RIGHT;
             pDC->DrawText(title, -1, &captionRect, (textFormat | DT_CALCRECT));
             captionRect.OffsetRect((centerRect.Width() - captionRect.Width()), 
                                    ((centerRect.Height() - captionRect.Height())/2));
         }
-        else
-        {
+        else {
             textFormat |= DT_LEFT;
             pDC->DrawText(title, -1, &captionRect, (textFormat | DT_CALCRECT));
             captionRect.OffsetRect(0, ((centerRect.Height() - captionRect.Height())/2));
@@ -1623,8 +1608,7 @@ void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 
 	    pDC->SetBkMode(TRANSPARENT);
 
-        if (m_isDisabled)
-        {
+        if(m_isDisabled) {
             captionRect.OffsetRect(1, 1);
             pDC->SetTextColor(::GetSysColor(COLOR_3DHILIGHT));
             pDC->DrawText(title, -1, &captionRect, textFormat);
@@ -1648,9 +1632,9 @@ void CLedButton::DrawItem(LPDRAWITEMSTRUCT lpDIS)
 // ///////////////////////////////////////////////////////////////////////////
 // OnTimer
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::OnTimer(UINT nIDEvent)
-{
-    if ((nIDEvent == m_activityId) && (0 != m_activityId))
+void CLedButton::OnTimer(UINT nIDEvent) {
+
+    if((nIDEvent == m_activityId) && (0 != m_activityId))
     {
         SetLedState(m_activityState);
         return;
@@ -1662,8 +1646,7 @@ void CLedButton::OnTimer(UINT nIDEvent)
 // ///////////////////////////////////////////////////////////////////////////
 // OnSysColorChange
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::OnSysColorChange()
-{
+void CLedButton::OnSysColorChange() {
     CWnd::OnSysColorChange();
     
     RestoreDefaultColors();
@@ -1673,8 +1656,7 @@ void CLedButton::OnSysColorChange()
 // ///////////////////////////////////////////////////////////////////////////
 // OnDrawBackground
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::OnDrawBackground(CDC* pDC, CRect* pRect)
-{
+void CLedButton::OnDrawBackground(CDC* pDC, CRect* pRect) {
     ASSERT(pDC);
     ASSERT(pRect);
 
@@ -1687,8 +1669,7 @@ void CLedButton::OnDrawBackground(CDC* pDC, CRect* pRect)
 // ///////////////////////////////////////////////////////////////////////////
 // OnSetStyle
 // ///////////////////////////////////////////////////////////////////////////
-LRESULT CLedButton::OnSetStyle(WPARAM wParam, LPARAM lParam)
-{
+LRESULT CLedButton::OnSetStyle(WPARAM wParam, LPARAM lParam) {
 	return(DefWindowProc(BM_SETSTYLE, (wParam & ~BS_TYPEMASK) | BS_OWNERDRAW, lParam));
 }
 
@@ -1696,8 +1677,8 @@ LRESULT CLedButton::OnSetStyle(WPARAM wParam, LPARAM lParam)
 // ///////////////////////////////////////////////////////////////////////////
 // PreTranslateMessage
 // ///////////////////////////////////////////////////////////////////////////
-BOOL CLedButton::PreTranslateMessage(MSG* pMsg)
-{
+BOOL CLedButton::PreTranslateMessage(MSG* pMsg) {
+
 	ToolTipInit();
 	m_toolTip.RelayEvent(pMsg);
 	
@@ -1716,8 +1697,7 @@ BOOL CLedButton::PreTranslateMessage(MSG* pMsg)
 // ///////////////////////////////////////////////////////////////////////////
 // PreSubclassWindow
 // ///////////////////////////////////////////////////////////////////////////
-void CLedButton::PreSubclassWindow()
-{
+void CLedButton::PreSubclassWindow() {
 	UINT style = BS_TYPEMASK  & GetButtonStyle();
     
     ASSERT(style & BS_CHECKBOX);
@@ -1739,8 +1719,8 @@ void CLedButton::PreSubclassWindow()
 // ///////////////////////////////////////////////////////////////////////////
 // CtlColor
 // ///////////////////////////////////////////////////////////////////////////
-HBRUSH CLedButton::CtlColor(CDC* /*pDC*/, UINT /*CtlColor*/)
-{
+HBRUSH CLedButton::CtlColor(CDC* /*pDC*/, UINT /*CtlColor*/) {
+
 	return ((HBRUSH)::GetStockObject(NULL_BRUSH)); 
 }
 

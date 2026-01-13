@@ -9,6 +9,7 @@
 // Exif: 29-31/12/2005 (default Exif su colore YCbCr, JFIF su Grayscale); 2010
 // estensioni 16:9 2016 GC
 // aggiunta (compilazione) decompressed Progressive JPG, 9.17 (la morte a chirin perisic)
+// gen 2021: uso di HeapAlloc ecc, messo const in m_parent
 
 
 jmp_buf exitEnv;
@@ -96,7 +97,7 @@ void J_PROGRESS_MGR::progressMonitor() {
 	}
 
 
-J_PROGRESS_MGR::J_PROGRESS_MGR(CJpeg *p) : m_Parent(p) {
+J_PROGRESS_MGR::J_PROGRESS_MGR(const CJpeg *p) : m_Parent(p) {
 
   // Enable progress display, unless trace output is on
   if(m_Parent->err->traceLevel == 0) {
@@ -173,7 +174,7 @@ FILE *writeStdout() {
  * than 8 bits on your machine, you may need to do some tweaking.
  */
 
-CDestMgr::CDestMgr(CJpeg *p,const char *nomefile) :	m_Parent(p) {
+CDestMgr::CDestMgr(const CJpeg *p,const char *nomefile) :	m_Parent(p) {
 
 	// Allocate the output buffer --- it will be released when done with image
 	buffer=(JOCTET *)m_Parent->mem->allocSmall(JPOOL_IMAGE,OUTPUT_BUF_SIZE *sizeof(JOCTET));
@@ -186,7 +187,7 @@ CDestMgr::CDestMgr(CJpeg *p,const char *nomefile) :	m_Parent(p) {
 		}
 	}
 
-CDestMgr::CDestMgr(CJpeg *p,CFile *f) :	m_Parent(p) {
+CDestMgr::CDestMgr(const CJpeg *p,CFile *f) :	m_Parent(p) {
 
 	// Allocate the output buffer --- it will be released when done with image
 	buffer=(JOCTET *)m_Parent->mem->allocSmall(JPOOL_IMAGE,OUTPUT_BUF_SIZE *sizeof(JOCTET));
@@ -195,7 +196,7 @@ CDestMgr::CDestMgr(CJpeg *p,CFile *f) :	m_Parent(p) {
 	outputMode=OUT_TO_FILE;
 	}
 
-CDestMgr::CDestMgr(CJpeg *p,BYTE *d,DWORD buflen) :	m_Parent(p) {
+CDestMgr::CDestMgr(const CJpeg *p,BYTE *d,DWORD buflen) :	m_Parent(p) {
 	
 	outfile=NULL;
   buffer=d;
@@ -324,7 +325,7 @@ void CDestMgr::termDestination() {
 
 
 
-CSourceMgr::CSourceMgr(CJpeg *p,CFile *f) :	m_Parent(p) {
+CSourceMgr::CSourceMgr(const CJpeg *p,CFile *f) :	m_Parent(p) {
 
   buffer = (JOCTET *)(m_Parent->mem->allocSmall) (JPOOL_PERMANENT,
 	  INPUT_BUF_SIZE *sizeof(JOCTET));
@@ -339,7 +340,7 @@ CSourceMgr::CSourceMgr(CJpeg *p,CFile *f) :	m_Parent(p) {
 	startOfFile=0;
 	}
 
-CSourceMgr::CSourceMgr(CJpeg *p,const char *nomefile) :	m_Parent(p)	{
+CSourceMgr::CSourceMgr(const CJpeg *p,const char *nomefile) :	m_Parent(p)	{
 
   buffer = (JOCTET *)(m_Parent->mem->allocSmall) (JPOOL_PERMANENT,
 	  INPUT_BUF_SIZE *sizeof(JOCTET));
@@ -357,7 +358,7 @@ CSourceMgr::CSourceMgr(CJpeg *p,const char *nomefile) :	m_Parent(p)	{
 	startOfFile=0;
 	}
 
-CSourceMgr::CSourceMgr(CJpeg *p,BYTE *d,DWORD buflen) :	m_Parent(p)	{
+CSourceMgr::CSourceMgr(const CJpeg *p,BYTE *d,DWORD buflen) :	m_Parent(p)	{
 
   buffer = d;
 	totalBuffer=buflen;
@@ -481,13 +482,13 @@ void CSourceMgr::skipInputData(long numBytes) {
   if(numBytes > 0) {
     while(numBytes > (long) bytesInBuffer) {
       numBytes -= (long) bytesInBuffer;
-      (void) fillInputBuffer();
+      (void)fillInputBuffer();
       /* note we assume that fill_input_buffer will never return FALSE,
        * so suspension need not be handled.
        */
     }
-    nextInputByte += (size_t) numBytes;
-    bytesInBuffer -= (size_t) numBytes;
+    nextInputByte += (size_t)numBytes;
+    bytesInBuffer -= (size_t)numBytes;
 		}
 	}
 
@@ -605,7 +606,7 @@ void CJMemoryMgr::printMemStats(int pool_id) {
 		}
 
   for(shdr_ptr = mem->small_list[pool_id]; shdr_ptr != NULL;
-       shdr_ptr = shdr_ptr->hdr.next) {
+      shdr_ptr = shdr_ptr->hdr.next) {
     fprintf(stderr,"  Small chunk used %ld free %ld\n",
 	    (long)shdr_ptr->hdr.bytes_used,
 	    (long)shdr_ptr->hdr.bytes_left);
@@ -639,7 +640,7 @@ void CJMemoryMgr::outOfMemory(int which) {
  * machines, but may be too small if longs are 64 bits or more.
  */
 
-CJMemoryMgr::CJMemoryMgr(CJpeg *p) :	m_Parent(p) {
+CJMemoryMgr::CJMemoryMgr(const CJpeg *p) :	m_Parent(p) {
 	int pool;
 
 	// Make CJMemoryMgr::MAX_ALLOC_CHUNK accessible to other modules 
@@ -655,7 +656,7 @@ CJMemoryMgr::CJMemoryMgr(CJpeg *p) :	m_Parent(p) {
 	extraPoolSlop[1]=5000;	// additional IMAGE pools
 	}
 
-CJMemoryMgrExt::CJMemoryMgrExt(CJpeg *p) : CJMemoryMgr(p) {
+CJMemoryMgrExt::CJMemoryMgrExt(const CJpeg *p) : CJMemoryMgr(p) {
 
 	totalSpaceAllocated=0; 
 	maxMemoryToUse=16000000UL;
@@ -764,8 +765,7 @@ void *CJMemoryMgr::allocLarge(int pool_id, size_t sizeofobject) {
   if(pool_id < 0 || pool_id >= JPOOL_NUMPOOLS)
     m_Parent->err->errorExit(JERR_BAD_POOL_ID, pool_id);	// safety check
 
-  hdrPtr=(LARGE_POOL_PTR)getLarge(sizeofobject +
-					    sizeof(LARGE_POOL_HDR));
+  hdrPtr=(LARGE_POOL_PTR)getLarge(sizeofobject + sizeof(LARGE_POOL_HDR));
   if(hdrPtr == NULL)
     outOfMemory(4);	// jpeg_get_large failed
   totalSpaceAllocated += sizeofobject + sizeof(LARGE_POOL_HDR);
@@ -824,8 +824,7 @@ JSAMPARRAY CJMemoryMgr::allocSarray(int pool_id,
   while(currow < numrows) {
     rowsperchunk = min(rowsperchunk, numrows - currow);
     workspace=(JSAMPROW)allocLarge(pool_id,
-			(size_t) ((size_t) rowsperchunk * (size_t) samplesperrow
-		  * sizeof(JSAMPLE)));
+			(size_t) ((size_t) rowsperchunk * (size_t) samplesperrow * sizeof(JSAMPLE)));
     for(i=rowsperchunk; i > 0; i--) {
       result[currow++] = workspace;
       workspace += samplesperrow;
@@ -841,8 +840,7 @@ JSAMPARRAY CJMemoryMgr::allocSarray(int pool_id,
  * This is essentially the same as the code for sample arrays, above.
  */
 
-JBLOCKARRAY CJMemoryMgr::allocBarray(int pool_id,
-	JDIMENSION blocksperrow, JDIMENSION numrows) {
+JBLOCKARRAY CJMemoryMgr::allocBarray(int pool_id, JDIMENSION blocksperrow, JDIMENSION numrows) {
 // Allocate a 2-D coefficient-block array
   JBLOCKARRAY result;
   JBLOCKROW workspace;
@@ -1553,7 +1551,7 @@ CJMemoryMgrExt *CJpeg::initMemoryMgr() {
  * The error manager must already be set up (in case memory manager fails).
  */
 
-CCompressJpeg *CJpeg::createCompress(const char *note,int version) {
+CCompressJpeg *CJpeg::createCompress(const char *note,const char *autore,int version) {
 //  int i;
 
   // Guard against version mismatches between library and caller.
@@ -1567,7 +1565,7 @@ CCompressJpeg *CJpeg::createCompress(const char *note,int version) {
    * Note: if application hasn't set client_data, tools like Purify may
    * complain here.
    */
-	co=new CCompressJpeg(this,clientData,note);
+	co=new CCompressJpeg(this,clientData,note,autore);
   isDecompressor = FALSE;
 
 // Memory manager initialization
@@ -1608,13 +1606,18 @@ const	int CCompressJpeg::nOrder[DCTSIZE2+16] = {
 		};
 
 
-CCompressJpeg::CCompressJpeg(CJpeg *p,void *cData,const char *note) :	m_Parent(p) {
+CCompressJpeg::CCompressJpeg(/*const*/ CJpeg *p,void *cData,const char *note,const char *autore) :	m_Parent(p) {
 	int i;
 
 	*m_note=0;
 	if(note) {
 		_tcsncpy(m_note,note,127);
 		m_note[127]=0;
+		}
+	*m_autore=0;
+	if(autore) {
+		_tcsncpy(m_autore,autore,127);
+		m_autore[127]=0;
 		}
 
 	imageWidth=imageHeight=0;
@@ -1713,6 +1716,7 @@ void CJpeg::destroyCompress() {
  */
 
 void CJpeg::abortCompress() {
+
   abort(); // use common routine
 	}
 
@@ -4142,7 +4146,7 @@ BOOL CEntropyEncoder::emitRestart(WORKING_STATE *state, int restart_num) {
   return TRUE;
 	}
 
-CEntropyEncoder::CEntropyEncoder(CCompressJpeg *p) : m_Parent(p) {
+CEntropyEncoder::CEntropyEncoder(const CCompressJpeg *p) : m_Parent(p) {
   
 	doEncodeMCU=NULL;
 	doFinishPass=NULL;
@@ -4945,7 +4949,7 @@ BOOL CHuffEntropyEncoder::encodeMCU_Gather(JBLOCKROW *MCU_data) {
   for(blkn=0; blkn < m_Parent->blocksInMCU; blkn++) {
     ci=m_Parent->MCU_membership[blkn];
     compptr=m_Parent->curCompInfo[ci];
-    m_Parent->htestOneBlock(MCU_data[blkn][0], saved.lastDCVal[ci],
+    ((CCompressJpeg *)m_Parent)->htestOneBlock(MCU_data[blkn][0], saved.lastDCVal[ci],
 		  DC_CountPtrs[compptr->dc_tbl_no], AC_CountPtrs[compptr->ac_tbl_no]);
     saved.lastDCVal[ci]=MCU_data[blkn][0][0];
 		}
@@ -5139,16 +5143,16 @@ ASSERT(0);
     dctbl = compptr->dc_tbl_no;
     actbl = compptr->ac_tbl_no;
     if(!did_dc[dctbl]) {
-      htblptr = &m_Parent->DC_HuffTblPtrs[dctbl];
+      htblptr = &((CCompressJpeg *)m_Parent)->DC_HuffTblPtrs[dctbl];
       if(!*htblptr)
-				*htblptr = m_Parent->allocHuffTable();
+				*htblptr = ((CCompressJpeg *)m_Parent)->allocHuffTable();
       genOptimalTable(*htblptr, DC_CountPtrs[dctbl]);
       did_dc[dctbl] = TRUE;
 			}
     if(!did_ac[actbl]) {
-      htblptr = &m_Parent->AC_HuffTblPtrs[actbl];
+      htblptr = &((CCompressJpeg *)m_Parent)->AC_HuffTblPtrs[actbl];
       if(!*htblptr)
-				*htblptr = m_Parent->allocHuffTable();
+				*htblptr = ((CCompressJpeg *)m_Parent)->allocHuffTable();
       genOptimalTable(*htblptr, AC_CountPtrs[actbl]);
       did_ac[actbl] = TRUE;
 			}
@@ -5162,7 +5166,7 @@ ASSERT(0);
 /*
  * Module initialization routine for Huffman entropy encoding.
  */
-CHuffEntropyEncoder::CHuffEntropyEncoder(CCompressJpeg *p) : CEntropyEncoder(p) {
+CHuffEntropyEncoder::CHuffEntropyEncoder(const CCompressJpeg *p) : CEntropyEncoder(p) {
   int i;
   
   restartsToGo=p->restartInterval;	// c'e' poi anche in startPass, ma lo metto pure qua!
@@ -5832,10 +5836,13 @@ void CCompressJpeg::emit_exif_app1() {
    * Zero byte			(1 byte to terminate the ID string)
    * offset to 1st TIFF directory (4 byte, usually 0x00000008)
    */
-  
+
+// https://www.awaresystems.be/imaging/tiff/tifftags/privateifd/exif.html  
+
   marker->emitMarker(CMarkerWriter::M_APP1);
   
-#define EXIF_LEN (4 + 2 + 3 + 1 + 4  + 2 + (7*12) + 20 + 20 + 128 + 256 + 4)
+#define EXIF_LEN (4 + 2 + 3 + 1 + 4  + 2 + (8*12) + 20 + 20 + 128 + 256 + 128 + 4)
+#define EXIF_OFFSET ((8*12) +(4 + 2 + 3 + 1 + 4)+12 -12)
   marker->emit2bytes(2 + EXIF_LEN); // length
 
   marker->emitByte('E');	// Identifier: ASCII "Exif"
@@ -5851,7 +5858,14 @@ void CCompressJpeg::emit_exif_app1() {
   marker->emitword(0x8);
   marker->emitword(0);
 
-  marker->emitword(0x7);			// 7 directory entry
+  marker->emitword(0x8);			// 8 directory entry
+
+/*  marker->emitword(CMarkerWriter::TAG_EXIF_VERSION);		// version... 2.20
+  marker->emitword(0x0000);			// type "short"
+  marker->emitword(0x0004);			// len=4
+  marker->emitword(0x0000);
+  marker->emitword((DWORD)MAKEFOURCC('0','2','2','0'));
+  marker->emitword(0x0000);*/
 
   marker->emitword(CMarkerWriter::TAG_EXIF_IMAGEWIDTH);		// width
   marker->emitword(0x0003);			// type "short"
@@ -5879,21 +5893,21 @@ void CCompressJpeg::emit_exif_app1() {
   marker->emitword(0x0002);			// type "ASCII"
   marker->emitword(20);			// len=20
   marker->emitword(0x0000);
-  marker->emitword(0x006e-12);			// ofs= ? 0x00000046-12 (all'interno del TIFF!) (parametrizzare!)
+  marker->emitword(EXIF_OFFSET);			// ofs= ? 0x00000046-12 (all'interno del TIFF!) (parametrizzare!)
   marker->emitword(0x0000);
 
   marker->emitword(CMarkerWriter::TAG_DATETIME_ORIGINAL);		// DateTimeOriginal
   marker->emitword(0x0002);			// type "ASCII"
   marker->emitword(20);			// len=20
   marker->emitword(0x0000);
-  marker->emitword(0x006e+20-12);	// ofs= ? 0x00000046 +20 -12 (all'interno del TIFF!) (parametrizzare!)
+  marker->emitword(EXIF_OFFSET+20);	// ofs= ? 0x00000046 +20 -12 (all'interno del TIFF!) (parametrizzare!)
   marker->emitword(0x0000);
 
   marker->emitword(CMarkerWriter::TAG_USERCOMMENT);		// Usercomment
   marker->emitword(0x0002);			// type "ASCII"
   marker->emitword(128);			// len=128
   marker->emitword(0x0000);
-  marker->emitword(0x006e+40-12);			// ofs= ? 0x00000046+40-12 (all'interno del TIFF!) (parametrizzare!)
+  marker->emitword(EXIF_OFFSET+40);			// ofs= ? 0x00000046+40-12 (all'interno del TIFF!) (parametrizzare!)
   marker->emitword(0x0000);
 	//n.b. 2016: The Exif 2.3 specification explains this.  The first 8 bytes of the UserComment data specify the encoding.  For ASCII text, this is "ASCII\0\0\0".  For unknown encoding, use all zero bytes ("\0\0\0\0\0\0\0\0").
 	// ovviamente è una cazzata... 2018
@@ -5902,17 +5916,26 @@ void CCompressJpeg::emit_exif_app1() {
   marker->emitword(0x0001);			// type 1byte
   marker->emitword(256);			// len=128*2 UNICODE
   marker->emitword(0x0000);
-  marker->emitword(0x006e+168-12);			// ofs= ? 0x00000046+168-12 (all'interno del TIFF!) (parametrizzare!)
+  marker->emitword(EXIF_OFFSET+168);			// ofs= ? 0x00000046+168-12 (all'interno del TIFF!) (parametrizzare!)
   marker->emitword(0x0000);
 	//2018: 
+
+  marker->emitword(CMarkerWriter::TAG_AUTHOR);		// Author
+  marker->emitword(0x0002);			// type "ASCII"
+  marker->emitword(128);			// len=128
+  marker->emitword(0x0000);
+  marker->emitword(EXIF_OFFSET+168+256);			// ofs= ? 0x00000046+40+128+256-12 (all'interno del TIFF!) (parametrizzare!)
+  marker->emitword(0x0000);
+	//2021: 
 
   marker->emitword(0x0000);			// last IFD
   marker->emitword(0x0000);
 
-	marker->emitDateTimeExif();
+	marker->emitDateTimeExif();		// 2 volte, sia "normale" che "original" :)
 	marker->emitDateTimeExif();
 	/*marker->emitTextExif("ASCII\0\0",7); 	*/ marker->emitTextExif(m_note,128-1);
 	marker->emitTextExifUnicode(m_note,128-1);
+	marker->emitTextExif(m_autore,128-1);
 
 	}
 
@@ -6006,7 +6029,7 @@ void CCompressJpeg::writeFileHeader() {
   if(write_JFIF_header)	// next an optional JFIF APP0
     emit_jfif_app0();
   if(write_EXIF_header)	// next an optional EXIF APP1
-		emit_exif_app1();		// (per Data/Ora)
+		emit_exif_app1();		// (per Data/Ora/nome/tag)
   if(writeAdobeMarker) // next an optional Adobe APP14
     emitAdobeApp14();
 
@@ -9381,7 +9404,7 @@ void CCompPrepController::preProcessData(JSAMPARRAY input_buf, JDIMENSION *in_ro
     // If at bottom of image, pad to fill the conversion buffer.
     if(rowsToGo == 0 &&	nextBufRow < m_Parent->max_V_SampFactor) {
       for(ci=0; ci < m_Parent->numComponents; ci++) {
-				m_Parent->expandBottomEdge(colorBuf[ci], m_Parent->imageWidth,
+				((CCompressJpeg *)m_Parent)->expandBottomEdge(colorBuf[ci], m_Parent->imageWidth,
 					nextBufRow, m_Parent->max_V_SampFactor);
 				}
       nextBufRow = m_Parent->max_V_SampFactor;
@@ -9398,7 +9421,7 @@ void CCompPrepController::preProcessData(JSAMPARRAY input_buf, JDIMENSION *in_ro
      */
     if(rowsToGo == 0 &&	*out_row_group_ctr < out_row_groups_avail) {
       for(ci=0, compptr = m_Parent->compInfo; ci < m_Parent->numComponents; ci++, compptr++) {
-				m_Parent->expandBottomEdge(output_buf[ci],
+				((CCompressJpeg *)m_Parent)->expandBottomEdge(output_buf[ci],
 					compptr->widthInBlocks * DCTSIZE,
 					(int)(*out_row_group_ctr * compptr->vSampFactor),
 					(int)(out_row_groups_avail * compptr->vSampFactor));
@@ -9453,7 +9476,7 @@ void CCompPrepController::preProcessContext(JSAMPARRAY input_buf, JDIMENSION *in
       // When at bottom of image, pad to fill the conversion buffer.
       if(nextBufRow < nextBufStop) {
 				for(ci=0; ci < m_Parent->numComponents; ci++) {
-					m_Parent->expandBottomEdge(colorBuf[ci], m_Parent->imageWidth,
+					((CCompressJpeg *)m_Parent)->expandBottomEdge(colorBuf[ci], m_Parent->imageWidth,
 						nextBufRow, nextBufStop);
 				}
 			nextBufRow = nextBufStop;
@@ -10178,8 +10201,7 @@ JMESSAGE(JTRC_THUMB_PALETTE,
 	 "JFIF extension marker: palette thumbnail image, length %u")
 JMESSAGE(JTRC_THUMB_RGB,
 	 "JFIF extension marker: RGB thumbnail image, length %u")
-JMESSAGE(JTRC_UNKNOWN_IDS,
-	 "Unrecognized component IDs %d %d %d, assuming YCbCr")
+JMESSAGE(JTRC_UNKNOWN_IDS, "Unrecognized component IDs %d %d %d, assuming YCbCr")
 JMESSAGE(JTRC_XMS_CLOSE, "Freed XMS handle %u")
 JMESSAGE(JTRC_XMS_OPEN, "Obtained XMS handle %u")
 JMESSAGE(JWRN_ADOBE_XFORM, "Unknown Adobe color transform code %d")
@@ -10191,8 +10213,7 @@ JMESSAGE(JWRN_HIT_MARKER, "Corrupt JPEG data: premature end of data segment")
 JMESSAGE(JWRN_HUFF_BAD_CODE, "Corrupt JPEG data: bad Huffman code")
 JMESSAGE(JWRN_JFIF_MAJOR, "Warning: unknown JFIF revision number %d.%02d")
 JMESSAGE(JWRN_JPEG_EOF, "Premature end of JPEG file")
-JMESSAGE(JWRN_MUST_RESYNC,
-	 "Corrupt JPEG data: found marker 0x%02x instead of RST%d")
+JMESSAGE(JWRN_MUST_RESYNC, "Corrupt JPEG data: found marker 0x%02x instead of RST%d")
 JMESSAGE(JWRN_NOT_SEQUENTIAL, "Invalid SOS parameters for sequential JPEG")
 JMESSAGE(JWRN_TOO_MUCH_DATA, "Application transferred too many scanlines")
 	};
@@ -10203,7 +10224,7 @@ void CErrorMgr::errorExit() {
   outputMessage();
 
   // Let the memory manager delete any temp files before we die
-  m_Parent->destroy();
+  ((CJpeg *)m_Parent)->destroy();
 //	jpeg_abort(); jpeg_destroy();
 
 //  exit(EXIT_FAILURE);
@@ -10358,7 +10379,7 @@ void CErrorMgr::resetErrorMgr() {
  * after which the application may override some of the methods.
  */
 
-CErrorMgr::CErrorMgr(CJpeg *p) : m_Parent(p) {
+CErrorMgr::CErrorMgr(const CJpeg *p) : m_Parent(p) {
 
 
 // Default error-management setup
@@ -11039,7 +11060,7 @@ long CJMemoryMgr::memAvailable(long min_bytes_needed,
  * this should never be called and we can just error out.
  */
 
-CBackingStore::CBackingStore(CJpeg *p,long total_bytes_needed) {
+CBackingStore::CBackingStore(const CJpeg *p,long total_bytes_needed) {
 
 	isOpen=FALSE;
 	p->err->errorExit(JERR_NO_BACKING_STORE);
@@ -11104,7 +11125,7 @@ CDecompressJpeg *CJpeg::createDecompress(int version) {
 	return de;
 	}
 
-CDecompressJpeg::CDecompressJpeg(CJpeg *p,void *cData) : m_Parent(p) {
+CDecompressJpeg::CDecompressJpeg(const CJpeg *p,void *cData) : m_Parent(p) {
 	int i;
 
 	globalState=0;
@@ -12870,30 +12891,58 @@ BOOL CMarkerReader::getApp0()
 	}
 
 BOOL CMarkerReader::getApp1() {
+/* Process an APP1 marker (diciamo Exif) */
   INT32 length;
   INPUT_VARS();
-  UINT8 b[256];
+  UINT8 b[1024];			// TUTTO un header EXIF!
 
   INPUT_2BYTES(length, return FALSE);
   length -= 2;
+ASSERT(0);
 
-  if(length >= EXIF_LEN) {
-    for(int buffp=0; buffp < JFIF_LEN; buffp++)
+/*{
+	char buf[64];
+wsprintf(buf,"len=%u",length);
+AfxMessageBox(buf);
+}*/
+
+  if(length >= 4) {
+    for(int buffp=0; buffp<4; buffp++)
+      INPUT_BYTE(b[buffp], return FALSE);
+    length -= 4;
+
+		if(b[0]=='E' && b[1]=='x' && b[2]=='i' && b[3]=='f') {
+			// gestire se si vuole
+			}
+		}
+/*{
+	char buf[64];
+wsprintf(buf,"len2=%u,b=%c%c%c%c",length,b[0],b[1],b[2],b[3]);
+AfxMessageBox(buf);
+}*/
+
+	while(length--) {
+		//esaurisco cmq i dati, per non finire nello "skip" sotto (che darebbe warning)
+    INPUT_BYTE(b[0], return FALSE);
+		}
+
+/*  if(length >= EXIF_LEN) {
+    for(int buffp=0; buffp < EXIF_LEN; buffp++)
       INPUT_BYTE(b[buffp], return FALSE);
     length -= EXIF_LEN;
 
 		if(b[0]=='E' && b[1]=='x' && b[2]=='i' && b[2]=='f') {
 			}
-		}
+		}*/
 
+  INPUT_SYNC();
   if(length > 0)		/* skip any remaining data -- could be lots */
     (src->skipInputData) ((long)length);
   return TRUE;
 	}
 
-BOOL CMarkerReader::getApp14()
+BOOL CMarkerReader::getApp14() {
 /* Process an APP14 marker */
-{
 #define ADOBE_LEN 12
   INT32 length;
   UINT8 b[ADOBE_LEN];
@@ -16273,7 +16322,7 @@ void CJpeg::setSource(BYTE *d,DWORD n) {
  */
 
 int CJpeg::writeJPEGFile(JSAMPLE *imageBuffer,int imageWidth,int imageHeight,const char *filename, 
-												 int quality, const char *note) {
+												 int quality, const char *note,const char *autore) {
 
   /* This struct represents a JPEG error handler.  It is declared separately
    * because applications often want to supply a specialized error handler
@@ -16295,7 +16344,7 @@ int CJpeg::writeJPEGFile(JSAMPLE *imageBuffer,int imageWidth,int imageHeight,con
    * address which we place into the link field in cinfo.
    */
   // Now we can initialize the JPEG compression object.
-  createCompress();
+  createCompress(note);
 
   /* Step 2: specify data destination (eg, a file) */
   /* Note: steps 2 and 3 can be done in either order. */
@@ -16366,8 +16415,96 @@ int CJpeg::writeJPEGFile(JSAMPLE *imageBuffer,int imageWidth,int imageHeight,con
 	return 1;
 	}
 
+void CJpeg::flipBitmap(BYTE *p,const BITMAPINFOHEADER *bmi) {
+	int y2=bmi->biHeight/2;
+	DWORD w=(bmi->biWidth*bmi->biBitCount*bmi->biPlanes)/8;
+	w=(w+3) & 0xfffffffc;
+	BYTE *myBuf=new BYTE[w],*p1,*p2;
+	register int y;
+
+	for(y=0,p1=p,p2=p+w*(bmi->biHeight-1); y<y2; y++,p1+=w,p2-=w) {
+		// se la larghezza e' dispari, la bitmap risultante potrebbe essere distorta... (fare PAD prima! o dopo? ossia solo se serve com BMP x windows??)
+		memcpy(myBuf,p1,w);
+		memcpy(p1,p2,w);
+		memcpy(p2,myBuf,w);
+		}
+	delete myBuf;
+	}
+
+BYTE *CJpeg::padBitmapDWord(BYTE *p,const BITMAPINFOHEADER *bmi) {
+	DWORD w=(bmi->biWidth*bmi->biBitCount*bmi->biPlanes)/8;
+
+	if(!(w & 3))
+		return p;
+
+	BYTE *d;
+	DWORD w2=(w+3) & 0xfffffffc;
+	BYTE *p1,*p2;
+	register int y;
+
+	d=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,w2*bmi->biHeight);
+
+	p1=p;
+	p2=d;
+	for(y=0; y<bmi->biHeight; y++) {		// 
+		memcpy(p2,p1,w);
+		memset(p2+w,0,w2-w);
+		p1+=w;
+		p2+=w2;
+		}
+
+	HeapFree(GetProcessHeap(),0,p);
+	return d;
+	}
+
+void CJpeg::removeBitmapPad(BYTE *p,const BITMAPINFOHEADER *bmi) {
+	DWORD w=(bmi->biWidth*bmi->biBitCount*bmi->biPlanes)/8;
+
+	if(!(w & 3))
+		return;
+
+	BYTE *d;
+	DWORD w2=(w+3) & 0xfffffffc;
+	BYTE *p1,*p2;
+	register int y;
+
+				/*char buffer[256];
+				    wsprintf(buffer,"w=%u w2=%u",w,w2);    
+		        AfxMessageBox(buffer);*/
+
+	p1=p;
+	p2=p;
+	for(y=0; y<bmi->biHeight; y++) {		// 
+		memcpy(p1,p2,w);
+		p1+=w;
+		p2+=w2;
+		}
+
+	}
+
+void CJpeg::removeAlphaChannel(BYTE *p,const BITMAPINFOHEADER *bmi) {
+	int x,y,n;
+	BYTE *p1,*p2;
+	DWORD w=(bmi->biWidth*bmi->biBitCount*bmi->biPlanes)/8;
+	w=(w+3) & 0xfffffffc;
+
+	p1=p2=p;
+	for(y=0; y<bmi->biHeight; y++) {
+		n=0;
+		for(x=0; x<bmi->biWidth; x++) {
+			*(DWORD *)p1=*(DWORD *)p2;
+			n+=3; p1+=3; p2+=4;
+			}
+
+// fa ANCHE il re-pad :)
+		if(n & 3)
+			p1+= 4 - (n & 3);				// dovrebbe essere DWORD-aligned..
+
+		}
+	}
+
 int CJpeg::writeJPEGFile(const char *infile, const char *outfile, int quality, 
-												 BOOL reverseV, const char *note) {
+												 BOOL reverseV, const char *note, const char *autore) {
 	int retVal=0;
 	BYTE *p;
 	CFile mf;
@@ -16379,26 +16516,16 @@ int CJpeg::writeJPEGFile(const char *infile, const char *outfile, int quality,
 		mf.Read(&bmi,sizeof(BITMAPINFOHEADER));
 		if(bmi.biBitCount != 24)
 			goto fine;
-		p=new BYTE[mf.GetLength()];
+		p=new BYTE[mf.GetLength() /*bmi.biSizeImage opp bmf.bfSize */];
 		mf.Read(p,bmi.biSizeImage);
 
+		removeBitmapPad(p,&bmi);		// bisogna togliere i pad per jpeg...
+
 		if(reverseV) {
-			int y2=bmi.biHeight/2;
-			DWORD w=bmi.biWidth*bmi.biBitCount*bmi.biPlanes/8;
-			BYTE *myBuf=new BYTE[w],*p1,*p2;
-			register int y;
-
-			for(y=0,p1=p,p2=p+w*(bmi.biHeight-1); y<y2; y++,p1+=w,p2-=w) {
-				// se la larghezza e' dispari, la bitmap risultante potrebbe essere distorta...
-				memcpy(myBuf,p1,w);
-				memcpy(p1,p2,w);
-				memcpy(p2,myBuf,w);
-				}
-
-			delete myBuf;
+			flipBitmap(p,&bmi);
 			}
 
-		retVal=writeJPEGFile(p,bmi.biWidth,bmi.biHeight,outfile,quality);
+		retVal=writeJPEGFile(p,bmi.biWidth,bmi.biHeight,outfile,quality,note);
 		delete p;
 fine:
 		mf.Close();
@@ -16406,7 +16533,7 @@ fine:
 	return retVal;
 	}
 
-BYTE *CJpeg::buildJPEG(CBitmap *bmp, DWORD *len, BOOL reverseV, int quality, const char *note,int ratio169) {
+BYTE *CJpeg::buildJPEG(const CBitmap *bmp, DWORD *len, BOOL reverseV, int quality, const char *note, int ratio169, const char *autore) {
 	register int i;
   BYTE *d=NULL,*s;
 	DWORD l;
@@ -16421,97 +16548,97 @@ BYTE *CJpeg::buildJPEG(CBitmap *bmp, DWORD *len, BOOL reverseV, int quality, con
 		destroyCompress();
 		if(len)
 			*len=0;
-		GlobalFree(d);
-		GlobalFree(b.bmBits);
-		GlobalFree(bi);
+		HeapFree(GetProcessHeap(),0,d);
+		HeapFree(GetProcessHeap(),0,b.bmBits);
+		HeapFree(GetProcessHeap(),0,bi);
 		return 0;
 		}
 
-  if(createCompress(note)) {
+  if(createCompress(note,autore)) {
 
-		bi=(BITMAPINFO *)GlobalAlloc(GMEM_FIXED,sizeof(BITMAPINFOHEADER)+256*sizeof(RGBQUAD));
+		bi=(BITMAPINFO *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,sizeof(BITMAPINFOHEADER)+256*sizeof(RGBQUAD));
 		if(bi) {
-		bmp->GetBitmap(&b);
-		if(d=(BYTE *)GlobalAlloc(GMEM_FIXED,b.bmWidth*b.bmHeight*3+5000)) {	// occupazione MAX del jpg (stimata!)
+			((CBitmap *)bmp)->GetBitmap(&b);
+			if(d=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,b.bmWidth*b.bmHeight*3+5000)) {	// occupazione MAX del jpg (stimata!)
 
-		l=b.bmWidth*b.bmHeight*3;
-		b.bmBits=(char *)GlobalAlloc(GMEM_FIXED,l);
-		if(b.bmBitsPixel == 24) {
-			bmp->GetBitmapBits(b.bmWidth*b.bmHeight*3,b.bmBits);
-			}
-		else {
-			dc=GetDC(GetDesktopWindow());
-			ZeroMemory(bi,sizeof(BITMAPINFOHEADER));
-			bi->bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-			i=GetDIBits(dc,(HBITMAP)*bmp,0,0,NULL,bi,DIB_RGB_COLORS);
-			bi->bmiHeader.biBitCount=24;
-			bi->bmiHeader.biCompression=0;
-			bi->bmiHeader.biHeight=-bi->bmiHeader.biHeight;
-		//	bi->bmiHeader.biPlanes=1;
-			i=GetDIBits(dc,(HBITMAP)*bmp,0,abs(bi->bmiHeader.biHeight),b.bmBits,bi,DIB_RGB_COLORS);
-			ReleaseDC(GetDesktopWindow(),dc);
-			}
-
-		s=(BYTE *)b.bmBits;
-
-		setDest(d,b.bmWidth*b.bmHeight*3+5000);
-
-		co->imageWidth=b.bmWidth;
-		co->imageHeight=b.bmHeight;
-		co->inputComponents=3;
-		co->inColorSpace=JCS_RGB;
-		co->imageRatio=ratio169;			// rapporto 16:9, 2016!
-
-		co->setDefaults();
-
-		co->setQuality(quality,TRUE);
-
-		co->startCompress(TRUE);
-
-		rowStride = co->imageWidth * 3;
-
-		if(reverseV) {
-			while(co->nextScanline < co->imageHeight) {
-				rowPointer[0]= &s[(co->imageHeight-co->nextScanline-1)*rowStride];
-				co->writeScanlines(rowPointer, 1);
+			l=b.bmWidth*b.bmHeight*3;
+			b.bmBits=(char *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,l);
+			if(b.bmBitsPixel == 24) {
+				bmp->GetBitmapBits(b.bmWidth*b.bmHeight*3,b.bmBits);
 				}
-			}
-		else {
-			while(co->nextScanline < co->imageHeight) {
-				rowPointer[0]= &s[co->nextScanline*rowStride];
-				co->writeScanlines(rowPointer, 1);
+			else {
+				dc=GetDC(GetDesktopWindow());
+				ZeroMemory(bi,sizeof(BITMAPINFOHEADER));
+				bi->bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+				i=GetDIBits(dc,(HBITMAP)*bmp,0,0,NULL,bi,DIB_RGB_COLORS);
+				bi->bmiHeader.biBitCount=24;
+				bi->bmiHeader.biCompression=0;
+				bi->bmiHeader.biHeight=-bi->bmiHeader.biHeight;
+			//	bi->bmiHeader.biPlanes=1;
+				i=GetDIBits(dc,(HBITMAP)*bmp,0,abs(bi->bmiHeader.biHeight),b.bmBits,bi,DIB_RGB_COLORS);
+				ReleaseDC(GetDesktopWindow(),dc);
 				}
-			}
 
-		co->finishCompress();
-		if(len)
-			*len=co->dest->dataCount;
-		destroyCompress();
-		GlobalFree(b.bmBits);
+			s=(BYTE *)b.bmBits;
+
+			setDest(d,b.bmWidth*b.bmHeight*3+5000);
+
+			co->imageWidth=b.bmWidth;
+			co->imageHeight=b.bmHeight;
+			co->inputComponents=3;
+			co->inColorSpace=JCS_RGB;
+			co->imageRatio=ratio169;			// rapporto 16:9, 2016!
+
+			co->setDefaults();
+
+			co->setQuality(quality,TRUE);
+
+			co->startCompress(TRUE);
+
+			rowStride = co->imageWidth * 3;
+
+			if(reverseV) {
+				while(co->nextScanline < co->imageHeight) {
+					rowPointer[0]= &s[(co->imageHeight-co->nextScanline-1)*rowStride];
+					co->writeScanlines(rowPointer, 1);
+					}
+				}
+			else {
+				while(co->nextScanline < co->imageHeight) {
+					rowPointer[0]= &s[co->nextScanline*rowStride];
+					co->writeScanlines(rowPointer, 1);
+					}
+				}
+
+			co->finishCompress();
+			if(len)
+				*len=co->dest->dataCount;
+			destroyCompress();
+			HeapFree(GetProcessHeap(),0,b.bmBits);
 			}
-		GlobalFree(bi);
+		HeapFree(GetProcessHeap(),0,bi);
 		}
 		}
 
 	return d;
 	}
 
-BYTE *CJpeg::buildJPEG(int bmpResource, DWORD *len, int quality, const char *note) {
+BYTE *CJpeg::buildJPEG(int bmpResource, DWORD *len, int quality, const char *note, const char *autore) {
 	CBitmap b;
 
 	b.LoadBitmap(bmpResource);
-	return buildJPEG(&b,len,FALSE,quality,note);
+	return buildJPEG(&b,len,FALSE,quality,note,0,autore);
 	}
 
 
-BYTE *CJpeg::buildJPEG(BITMAPINFO *bi, BYTE *pBuffer, DWORD *len, BOOL reverseV, int quality, const char *note, int ratio169) {
+BYTE *CJpeg::buildJPEG(BITMAPINFO *bi, BYTE *pBuffer, DWORD *len, BOOL reverseV, int quality, const char *note, int ratio169, const char *autore) {
 	CBitmap b;
 
 	if(!bi->bmiHeader.biSizeImage)			// per sicurezza...
 		bi->bmiHeader.biSizeImage = (bi->bmiHeader.biWidth * bi->bmiHeader.biHeight * bi->bmiHeader.biBitCount * bi->bmiHeader.biPlanes) /8;
 	b.CreateBitmap(bi->bmiHeader.biWidth,bi->bmiHeader.biHeight,bi->bmiHeader.biPlanes,bi->bmiHeader.biBitCount,NULL);
 	b.SetBitmapBits(bi->bmiHeader.biSizeImage,pBuffer);
-	return buildJPEG(&b,len,reverseV,quality,note,ratio169);
+	return buildJPEG(&b,len,reverseV,quality,note,ratio169,autore);
 	}
 
 
@@ -16592,7 +16719,7 @@ BYTE *CJpeg::readJPEGFile(CFile *f, BITMAPINFOHEADER *bmp, BYTE *theBytes,
 	i=setjmp(exitEnv);
 	if(i==EXIT_FAILURE) {
 		destroyDecompress();
-		GlobalFree(theBytes);
+		HeapFree(GetProcessHeap(),0,theBytes);
 		return 0;
 		}
 
@@ -16664,11 +16791,11 @@ BYTE *CJpeg::readJPEGFile(CFile *f, BITMAPINFOHEADER *bmp, BYTE *theBytes,
 	bmp->biXPelsPerMeter=bmp->biYPelsPerMeter=0;
 
   if(theBytes) {
-		GlobalFree(theBytes);
-		theBytes=(BYTE *)GlobalAlloc(GPTR,bmp->biSizeImage);
+		HeapFree(GetProcessHeap(),0,theBytes);
+		theBytes=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,bmp->biSizeImage);
 		}
 	else
-		theBytes=(BYTE *)GlobalAlloc(GPTR,bmp->biSizeImage);
+		theBytes=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,bmp->biSizeImage);
 
 	if(reverseV)
 		p=theBytes+bmp->biSizeImage-rowStrideTrue;
@@ -16676,7 +16803,7 @@ BYTE *CJpeg::readJPEGFile(CFile *f, BITMAPINFOHEADER *bmp, BYTE *theBytes,
 		p=theBytes;
 
   /* Make a one-row-high sample array that will go away when done with image */
-  myBuf=(BYTE *)GlobalAlloc(GPTR,rowStride);
+  myBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,rowStride);
 	rowPointer[0]=myBuf;
 
   /* Step 6: while (scan lines remain to be read) */
@@ -16701,7 +16828,7 @@ BYTE *CJpeg::readJPEGFile(CFile *f, BITMAPINFOHEADER *bmp, BYTE *theBytes,
 			p+=rowStrideTrue;
 		}
 
-	GlobalFree(myBuf);
+	HeapFree(GetProcessHeap(),0,myBuf);
 
   /* Step 7: Finish decompression */
 

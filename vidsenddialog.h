@@ -333,11 +333,13 @@ public:
 	DWORD enumCompressorV(CComboBox *,DWORD);
 	DWORD enumCompressorA(CComboBox *,DWORD);
 //	BOOL ACMFORMATENUMCB acmFormatEnumCallback(HACMDRIVERID, LPACMFORMATDETAILS, DWORD, DWORD);
+	static BOOL CALLBACK /*ACMDRIVERENUMCB*/ acmEnumCallback(HACMDRIVERID hadid, DWORD dwInstance, DWORD fdwSupport);
 
 public:
 	int isInitialized;
 
 // Dialog Data
+	DWORD m_FormatV;
 	DWORD m_CompressorV;
 	DWORD m_CompressorA;
 	struct QUALITY_MODEL_V m_QV;
@@ -353,16 +355,21 @@ public:
 	CComboBox	m_ComboCompressorA;
 	CComboBox	m_ComboImageSize;
 	CComboBox	m_ComboFps;
-	CComboBox m_Formato;
+	CComboBox m_ComboFormatoV;
+	CComboBox m_ComboTipoAudio;
 	int m_IPAddress;
 	BOOL	m_ServerAudio;
 	CString	m_Bandwidth;
 	UINT	m_PortaV;
 	UINT	m_PortaA;
+	UINT	m_PortaVBAN;
+	UINT	m_PortaMP3;
 	BOOL	m_ServerStream;
 	BOOL	m_ServerVideo;
 	int		m_TipoVideo;
 	int		m_QualityV;
+	int		m_VBAN;
+	int		m_MP3;
 	//}}AFX_DATA
 
 
@@ -380,6 +387,7 @@ protected:
 	virtual BOOL OnInitDialog();
 	afx_msg void OnCheck1();
 	afx_msg void OnSelchangeCombo4();
+	afx_msg void OnSelchangeCombo3();
 	afx_msg void OnSelchangeCombo1();
 	afx_msg void OnSelchangeCombo2();
 	afx_msg void OnSelchangeCombo6();
@@ -457,6 +465,93 @@ protected:
 	CVidsendDoc2 *myParent;
 
 	};
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc2PropPage0 dialog
+
+class CVidsendDoc2PropPage00 : public CPropertyPage {
+	DECLARE_DYNCREATE(CVidsendDoc2PropPage00)
+
+// Construction
+public:
+	CVidsendDoc2PropPage00(CVidsendDoc22 *myParent=NULL,struct QUALITY_MODEL_A *a=NULL);	// NON deve essere NULL, ma un costruttore di default ci vuole!
+	~CVidsendDoc2PropPage00();
+	DWORD enumCompressorA(CComboBox *,DWORD);
+//	BOOL ACMFORMATENUMCB acmFormatEnumCallback(HACMDRIVERID, LPACMFORMATDETAILS, DWORD, DWORD);
+	static BOOL CALLBACK DSEnumCallback(LPGUID lpGuid,LPCSTR lpcstrDescription,
+         LPCSTR lpcstrModule,LPVOID lpContext);
+	DWORD enumSchedeAudio(CComboBox *,DWORD);
+
+public:
+	int isInitialized;
+
+// Dialog Data
+	DWORD m_CompressorA;
+	struct QUALITY_MODEL_A m_QA;
+	WORD m_SchedaAudio1,m_SchedaAudio2,m_SchedaAudio0;
+
+	//{{AFX_DATA(CVidsendDoc2PropPage0)
+#ifdef _LINGUA_INGLESE
+	enum { IDD = IDD_CONF2_PAGE00_ENG };
+#else
+	enum { IDD = IDD_CONF2_PAGE00 };
+#endif
+	CComboBox	m_ComboCompressorA;
+	CComboBox m_ComboTipoAudio;
+	CComboBox m_ComboTipoMP3;
+	int m_IPAddress;
+	BOOL	m_ServerAudio;
+	CString	m_Bandwidth;
+	UINT	m_PortaA;
+	UINT	m_PortaVBAN;
+	UINT	m_PortaMP3;
+	int m_VBAN;
+	int m_MP3;
+	BOOL	m_ServerStream;
+	BOOL	m_OutputStream;
+	BOOL  m_Attiva1;
+	BOOL  m_Attiva2;
+	BOOL  m_Attiva0;
+	BOOL  m_PreascoltoMono;
+	CComboBox	m_ComboSchedaAudio1;
+	CComboBox	m_ComboSchedaAudio2;
+	CComboBox	m_ComboSchedaAudio0;
+	//}}AFX_DATA
+
+
+// Overrides
+	// ClassWizard generate virtual function overrides
+	//{{AFX_VIRTUAL(CVidsendDoc2PropPage0)
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+	// Generated message map functions
+	//{{AFX_MSG(CVidsendDoc2PropPage0)
+	virtual BOOL OnInitDialog();
+	afx_msg void OnCheck1();
+	afx_msg void OnSelchangeCombo4();
+	afx_msg void OnSelchangeCombo1();
+	afx_msg void OnSelchangeCombo2();
+	afx_msg void OnSelchangeCombo6();
+	afx_msg void OnSelchangeCombo5();
+	afx_msg void OnSelchangeCombo14();
+	afx_msg void OnCheck4();
+	afx_msg void OnCheck14();
+	afx_msg void OnCheck3();
+	afx_msg void OnRadio1();
+	afx_msg void OnButton7();
+	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+	void updateDaCheck();
+	void updateBWH();
+	CVidsendDoc22 *myParent;
+
+	};
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -565,13 +660,18 @@ protected:
 // CVidsendDoc2PropPage2 dialog
 
 class CVidsendDoc2PropPage2 : public CPropertyPage {
-	DECLARE_DYNCREATE(CVidsendDoc2PropPage2)
 
 // Construction
 public:
-	CVidsendDoc2PropPage2(CVidsendDoc2 *myParent=NULL);
+	DECLARE_DYNCREATE(CVidsendDoc2PropPage2)
+	CVidsendDoc2PropPage2(CVidsendDoc2 *myParent);
+	CVidsendDoc2PropPage2(CVidsendDoc22 *myParent);
 	~CVidsendDoc2PropPage2();
 	void updateDaCheck();
+
+private:
+//https://learn.microsoft.com/en-us/cpp/mfc/reference/run-time-object-model-services?view=msvc-170#implement_dyncreate
+	CVidsendDoc2PropPage2() {}
 
 public:
 	int isInitialized;
@@ -623,6 +723,7 @@ protected:
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 	CVidsendDoc2 *myParent;
+	CVidsendDoc22 *myParent2;
 	CVidsendSet2_ *mySet;
 
 	};
@@ -733,13 +834,17 @@ protected:
 
 class CVidsendDoc2PropPage3 : public CPropertyPage
 {
-	DECLARE_DYNCREATE(CVidsendDoc2PropPage3)
 
 // Construction
 public:
-	CVidsendDoc2PropPage3(CVidsendDoc2 *myParent=NULL);
+	DECLARE_DYNCREATE(CVidsendDoc2PropPage3)
+	CVidsendDoc2PropPage3(CVidsendDoc2 *myParent);
+	CVidsendDoc2PropPage3(CVidsendDoc22 *myParent);
 	~CVidsendDoc2PropPage3();
 	void updateDaCheck();
+
+private:
+	CVidsendDoc2PropPage3() {}
 
 public:
 	int isInitialized;
@@ -760,6 +865,7 @@ public:
 	CString	m_OpenWWW;
 	CTime	m_TimedConn;
 	CString	m_StreamTitle;
+	CString	m_Messaggio;
 	BOOL  m_ActivateIf;
 	BOOL m_ActivateWaitConfirm;
 	BOOL m_DialUp;
@@ -783,8 +889,9 @@ protected:
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 	CVidsendDoc2 *myParent;
-
+	CVidsendDoc22 *myParent2;
 };
+
 /////////////////////////////////////////////////////////////////////////////
 // CSalvaVideoDlg dialog
 
@@ -872,6 +979,47 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// CApriAudioDlg dialog
+
+class CApriAudioDlg : public CDialog
+{
+// Construction
+public:
+	CApriAudioDlg(CVidsendDoc22 *pParent = NULL);   // standard constructor
+
+// Dialog Data
+	//{{AFX_DATA(CApriAudioDlg)
+#ifdef _LINGUA_INGLESE
+	enum { IDD = IDD_OPEN_VIDEO_ENG };
+#else
+	enum { IDD = IDD_OPEN_VIDEO };
+#endif
+	BOOL	m_Loop;
+	CString	m_NomeFile;
+	int		m_TipoVideo;
+	//}}AFX_DATA
+
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CApriAudioDlg)
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+
+	// Generated message map functions
+	//{{AFX_MSG(CApriAudioDlg)
+	afx_msg void OnButton1();
+	virtual BOOL OnInitDialog();
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+	CVidsendDoc22 *myParent;
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // CConfirmExhibDlg dialog
 
 class CConfirmExhibDlg : public CDialog
@@ -953,6 +1101,7 @@ public:
 	BOOL	m_DDEenable;
 	UINT	m_ServerWWWPort;
 	BOOL	m_RiapriV;
+	BOOL	m_RiapriA;
 	BOOL	m_RiapriC;
 	BOOL  m_TCP_UDP;
 	BOOL  m_NamedPipes;
@@ -1007,6 +1156,7 @@ public:
 	CString	m_Email;
 	CString	m_SuonoFine;
 	CString	m_SuonoInizio;
+	CString	m_Sfondo;
 	BOOL	m_SaveLayout;
 	BOOL	m_PasswordProtect;
 	//}}AFX_DATA
@@ -1432,6 +1582,7 @@ public:
 	UINT	m_MaxHTMLconn;
 	BOOL	m_AncheDirSrv;
 	BOOL	m_FiltraIP;
+	BOOL m_IPlookup;
 	//}}AFX_DATA
 
 
@@ -1525,6 +1676,8 @@ public:
 	CComboBox	m_URL;
 	CString	m_URLstring;
 	BOOL m_One2One;
+	BOOL m_Video;
+	BOOL m_Audio;
 	//}}AFX_DATA
 
 
@@ -1555,6 +1708,7 @@ class CPaginaTestDlg : public CDialog {
 // Construction
 public:
 	CPaginaTestDlg(CVidsendDoc2 *pParent = NULL);   // standard constructor
+	CPaginaTestDlg(CVidsendDoc22 *pParent = NULL);   // alternate constructor
 
 // Dialog Data
 	//{{AFX_DATA(CPaginaTestDlg)
@@ -1586,6 +1740,7 @@ protected:
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 	CVidsendDoc2 *myParent;
+	CVidsendDoc22 *myParent2;
 };
 
 
@@ -1611,9 +1766,11 @@ public:
 	enum { IDD = IDD_VIDEO_SRC };
 #endif
 	int		m_VideoSource;
+	int		m_VideoSource2;
 	BOOL	m_AlternaSource;
 	int		m_Overlay;
 	int		m_Schede;
+	CString m_RTSPAddress;
 	//}}AFX_DATA
 
 
@@ -1634,6 +1791,7 @@ protected:
 	afx_msg void OnButton3();
 	afx_msg void OnButton4();
 	afx_msg void OnSelendokCombo1();
+	afx_msg void OnRadio1();
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 	CVidsendDoc2 *myParent;
@@ -2023,4 +2181,106 @@ protected:
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 };
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg2 dialog
+
+class CImpostaEffettiSonoriDlg;
+
+class CImpostaEffettiSonoriDlg2 : public CDialog {
+public:
+	CImpostaEffettiSonoriDlg *m_Parent;
+// Construction
+public:
+	CImpostaEffettiSonoriDlg2(CWnd* pParent);   // standard constructor
+	void updateFields();
+	void readFields();
+
+// Dialog Data
+	//{{AFX_DATA(CImpostaEffettiSonoriDlg2)
+	enum { IDD = IDD_IMPOSTA_EFFETTISONORI2 };
+	CString	m_Wav1;
+	CString	m_Wav2;
+	CString	m_Wav3;
+	CString	m_Wav4;
+	CString	m_Wav5;
+	CString	m_Wav6;
+	CString	m_Wav7;
+	CString	m_Wav8;
+	CString	m_Wav9;
+	CString	m_Wav10;
+	CString	m_Wav11;
+	CString	m_Wav12;
+	//}}AFX_DATA
+
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CImpostaEffettiSonoriDlg2)
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+	virtual void OnOK();
+	virtual void OnCancel();
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+
+	// Generated message map functions
+	//{{AFX_MSG(CImpostaEffettiSonoriDlg2)
+	afx_msg void OnButtonSfoglia(UINT);
+	afx_msg void OnButtonPlay(UINT);
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+};
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg dialog
+
+class CImpostaEffettiSonoriDlg : public CDialog {
+// Construction
+public:
+	CImpostaEffettiSonoriDlg2 *myDlg;
+	CString m_Wavs[3][12];
+	CVidsendView22 *m_Parent;
+
+public:
+	CImpostaEffettiSonoriDlg(CWnd* pParent = NULL);   // standard constructor
+
+// Dialog Data
+	//{{AFX_DATA(CImpostaEffettiSonoriDlg)
+	enum { IDD = IDD_IMPOSTA_EFFETTISONORI };
+	CTabCtrl	m_Tab;
+	//}}AFX_DATA
+
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CImpostaEffettiSonoriDlg)
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+	//}}AFX_VIRTUAL
+
+public:
+	virtual void OnOK();
+	virtual void OnCancel();
+
+// Implementation
+protected:
+
+	// Generated message map functions
+	//{{AFX_MSG(CImpostaEffettiSonoriDlg)
+	afx_msg void OnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnSelchangingTab1(NMHDR* pNMHDR, LRESULT* pResult);
+	virtual BOOL OnInitDialog();
+	afx_msg void OnDestroy();
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+};
+
+//{{AFX_INSERT_LOCATION}}
+// Microsoft Visual C++ will insert additional declarations immediately before the previous line.
+
 

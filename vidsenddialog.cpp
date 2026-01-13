@@ -5,6 +5,7 @@
 #include "vidsend.h"
 //#include "vidsendView.h"
 #include "vidsendDoc.h"
+#include "vidsendView.h"
 #include "vidsendDialog.h"
 
 #include "ras.h"
@@ -14,6 +15,8 @@
 #undef THIS_FILE
 static char THIS_FILE[] = __FILE__;
 #endif
+
+// boh per datetimepicker win 7.. #pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 /////////////////////////////////////////////////////////////////////////////
 // CAboutDlg dialog used for App About
@@ -309,7 +312,7 @@ HRESULT CAboutDlg::InitGeometry() {
 		pVertices[5].tu = 1.0;
 		pVertices[5].tv = 0.0;
 
-		/*pVertices[6].position = D3DXVECTOR3(  1.0	,-1.0	,0.0);
+		pVertices[6].position = D3DXVECTOR3(  1.0	,-1.0	,0.0);
 		pVertices[6].color = 0xffffff00;
 		pVertices[6].tu = 0.0;
 		pVertices[6].tv = 0.0;
@@ -443,7 +446,7 @@ HRESULT CAboutDlg::InitGeometry() {
 		pVertices[32].position = D3DXVECTOR3( 0.5f	,zp + -0.5f	,0.5f - zp);
 		pVertices[32].color = 0xff0055dd;
 		pVertices[32].tu = 1.0;
-		pVertices[32].tv = 1.0;*/
+		pVertices[32].tv = 1.0;
 
 
 		if(zp < 1.5)
@@ -479,12 +482,12 @@ HRESULT CAboutDlg::InitGeometry() {
 
 	m_blnGeom = TRUE;
     return S_OK;
-}
+	}
+
 //*******************************************************************
-void CAboutDlg::Cleanup()
-{
-	try
-	{
+void CAboutDlg::Cleanup() {
+
+	try	{
 		if( g_pTexture != NULL )
 			g_pTexture->Release();
 
@@ -510,12 +513,12 @@ void CAboutDlg::Cleanup()
 	{
 		AfxMessageBox("Unhandled Error ");
 	}
-}
+	}
+
 //*******************************************************************
 void CAboutDlg::SetupMatrices() {
 
-	try
-	{
+	try	{
 		static float zz = 0.0f;
 		if(!m_blnGeom)
 			if(FAILED(InitGeometry()))
@@ -570,12 +573,12 @@ void CAboutDlg::SetupMatrices() {
 	{
 		AfxMessageBox("Unhandled Error ");
 	}
-}
+	}
+
 //*******************************************************************
 BOOL CAboutDlg::Render() {
 
-    try
-	{
+  try	{
 		HRESULT dhr;
 		// Clear the backbuffer and the zbuffer
 		g_pd3dDevice->Clear( 0, NULL, D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,
@@ -592,36 +595,31 @@ BOOL CAboutDlg::Render() {
 		// textures) and lighting information. In this case, we are modulating
 		// (blending) our texture with the diffuse color of the vertices.
 		dhr = g_pd3dDevice->SetTexture( 0, g_pTexture );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTexture( 0, g_pTexture )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_COLOROP,   D3DTOP_MODULATE );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  g_pd3dDevice->SetTextureStageState( 0, D3DTSS_COLOROP,   D3DTOP_MODULATE )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_COLORARG1, D3DTA_TEXTURE );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTextureStageState( 0, D3DTSS_COLORARG1, D3DTA_TEXTURE )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_COLORARG2, D3DTA_DIFFUSE );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTextureStageState( 0, D3DTSS_COLORARG2, D3DTA_DIFFUSE )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_ALPHAOP,   D3DTOP_DISABLE );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTextureStageState( 0, D3DTSS_ALPHAOP,   D3DTOP_DISABLE )",DXGetErrorDescription8(  dhr));
 			throw emsg;
@@ -647,22 +645,19 @@ BOOL CAboutDlg::Render() {
 		mat._41 = 0.50f; mat._42 = 0.50f; mat._43 = 0.00f; mat._44 = 1.00f;
 
 		dhr = g_pd3dDevice->SetTransform( D3DTS_TEXTURE0, &mat );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTransform( D3DTS_TEXTURE0, &mat )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2 );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTextureStageState( 0, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTTFF_COUNT2 )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetTextureStageState( 0, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEPOSITION );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetTextureStageState( 0, D3DTSS_TEXCOORDINDEX, D3DTSS_TCI_CAMERASPACEPOSITION )",DXGetErrorDescription8(  dhr));
 			throw emsg;
@@ -671,22 +666,19 @@ BOOL CAboutDlg::Render() {
 
 		// Render the vertex buffer contents
 		dhr = g_pd3dDevice->SetStreamSource( 0, g_pVB, sizeof(CUSTOMVERTEX) );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction:  SetStreamSource( 0, g_pVB, sizeof(CUSTOMVERTEX) )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->SetVertexShader( D3DFVF_CUSTOMVERTEX );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction: SetVertexShader( D3DFVF_CUSTOMVERTEX )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		dhr = g_pd3dDevice->DrawPrimitive( D3DPT_TRIANGLELIST, 0, 2 );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			if(dhr == D3DERR_DEVICELOST)
 				AfxMessageBox("lost device");
@@ -699,15 +691,13 @@ BOOL CAboutDlg::Render() {
 
 		// Present the backbuffer contents to the display
 		dhr = g_pd3dDevice->Present( NULL, NULL, NULL, NULL );
-		if(FAILED(dhr))
-		{
+		if(FAILED(dhr))		{
 			char emsg[512];
 			sprintf(emsg,"Error Description: %s \nFunction: Present( NULL, NULL, NULL, NULL )",DXGetErrorDescription8(  dhr));
 			throw emsg;
 		}
 		
-		if(!m_nTimer)
-		{
+		if(!m_nTimer)		{
 			m_nTimer = SetTimer(1,10,0);
 			m_nTimer2 = SetTimer(2,15000,0);
 			m_nTimer3 = SetTimer(3,5000,0);
@@ -744,7 +734,8 @@ BOOL CAboutDlg::Render() {
 		return FALSE;
 	}
 	
-}
+	}
+
 //*******************************************************************
 void CAboutDlg::OnTimer(UINT nIDEvent) {
 
@@ -780,7 +771,7 @@ void CAboutDlg::OnTimer(UINT nIDEvent) {
 	}
 	
 	CDialog::OnTimer(nIDEvent);
-}
+	}
 //*******************************************************************
 void CAboutDlg::OnDestroy() {
 
@@ -801,7 +792,7 @@ BOOL CAboutDlg::OnNotify(WPARAM wParam, LPARAM lParam, LRESULT* pResult) {
 	// TODO: Add your specialized code here and/or call the base class
 	
 	return CDialog::OnNotify(wParam, lParam, pResult);
-}
+	}
 //*******************************************************************
 void CAboutDlg::OnRButtonDown(UINT nFlags, CPoint point) {
 
@@ -809,7 +800,7 @@ void CAboutDlg::OnRButtonDown(UINT nFlags, CPoint point) {
 	if(m_fProj > 2.0f)
 		m_fProj -= 0.1f;
 	CDialog::OnRButtonDown(nFlags, point);
-}
+	}
 //*******************************************************************
 void CAboutDlg::OnLButtonDown(UINT nFlags, CPoint point) {
 
@@ -817,13 +808,13 @@ void CAboutDlg::OnLButtonDown(UINT nFlags, CPoint point) {
 	if(m_fProj < 5.0f)
 		m_fProj += 0.1f;
 	CDialog::OnLButtonDown(nFlags, point);
-}
+	}
 //*******************************************************************
 void CAboutDlg::OnOK() {
 	// TODO: Add extra validation here
 	
 	CDialog::OnOK();
-}
+	}
 //*******************************************************************
 
 
@@ -937,11 +928,11 @@ BOOL CSplashScreenEx::SetBitmap(UINT nBitmapID,COLORREF transparency) {
 	m_nBitmapHeight=bm.bmHeight;
 	m_rcText.SetRect(0,0,bm.bmWidth,bm.bmHeight);
 	
-	if(m_dwStyle & CSS_CENTERSCREEN)	{
+	if(m_dwStyle & CSS_CENTERSCREEN) {
 		m_nxPos=(GetSystemMetrics(SM_CXFULLSCREEN)-bm.bmWidth)/2;
 		m_nyPos=(GetSystemMetrics(SM_CYFULLSCREEN)-bm.bmHeight)/2;
 		}
-	else if(m_dwStyle & CSS_CENTERAPP)	{
+	else if(m_dwStyle & CSS_CENTERAPP) {
 		CRect rcParentWindow;
 		ASSERT(m_pWndParent != NULL);
 		m_pWndParent->GetWindowRect(&rcParentWindow);
@@ -949,9 +940,9 @@ BOOL CSplashScreenEx::SetBitmap(UINT nBitmapID,COLORREF transparency) {
 		m_nyPos=rcParentWindow.top+(rcParentWindow.bottom-rcParentWindow.top-bm.bmHeight)/2;
 		}
 
-	if(transparency != -1)	{
+	if(transparency != -1) {
 		m_hRegion=CreateRgnFromBitmap((HBITMAP)m_bitmap.GetSafeHandle(),transparency);
-		SetWindowRgn(m_hRegion, TRUE);
+		SetWindowRgn(m_hRegion,TRUE);
 //		DeleteObject(m_hRegion);
 		}
 
@@ -1430,6 +1421,10 @@ CVidsendDoc2PropPage0::CVidsendDoc2PropPage0(CVidsendDoc2 *p,struct QUALITY_MODE
 	m_ServerVideo = FALSE;
 	m_TipoVideo = -1;
 	m_QualityV = 0;
+	m_VBAN = 0;
+	m_PortaVBAN = 0;
+	m_MP3 = 0;
+	m_PortaMP3 = 0;
 	//}}AFX_DATA_INIT
 	myParent=p;
 	if(qv)
@@ -1455,7 +1450,7 @@ void CVidsendDoc2PropPage0::DoDataExchange(CDataExchange* pDX) {
 	DDX_Control(pDX, IDC_COMBO6, m_ComboCompressorA);
 	DDX_Control(pDX, IDC_COMBO2, m_ComboImageSize);
 	DDX_Control(pDX, IDC_COMBO1, m_ComboFps);
-	DDX_Control(pDX, IDC_COMBO3, m_Formato);
+	DDX_Control(pDX, IDC_COMBO3, m_ComboFormatoV);
 	DDX_CBIndex(pDX, IDC_COMBO12, m_IPAddress);
 	DDX_Check(pDX, IDC_CHECK4, m_ServerAudio);
 	DDX_Text(pDX, IDC_EDIT4, m_Bandwidth);
@@ -1463,10 +1458,17 @@ void CVidsendDoc2PropPage0::DoDataExchange(CDataExchange* pDX) {
 	DDV_MinMaxUInt(pDX, m_PortaV, 1, 65535);
 	DDX_Text(pDX, IDC_EDIT3, m_PortaA);
 	DDV_MinMaxUInt(pDX, m_PortaA, 1, 65535);
+	DDX_Text(pDX, IDC_EDIT5, m_PortaVBAN);
+	DDV_MinMaxUInt(pDX, m_PortaVBAN, 1, 65535);
+	DDX_Text(pDX, IDC_EDIT12, m_PortaMP3);
+	DDV_MinMaxUInt(pDX, m_PortaVBAN, 1, 65535);
 	DDX_Check(pDX, IDC_CHECK1, m_ServerStream);
 	DDX_Check(pDX, IDC_CHECK8, m_ServerVideo);
 	DDX_Radio(pDX, IDC_RADIO1, m_TipoVideo);
 	DDX_Slider(pDX, IDC_SLIDER3, m_QualityV);
+	DDX_Check(pDX, IDC_CHECK9, m_VBAN);
+	DDX_Check(pDX, IDC_CHECK10, m_MP3);
+	DDX_Control(pDX, IDC_COMBO5, m_ComboTipoAudio);
 	//}}AFX_DATA_MAP
 }
 
@@ -1475,6 +1477,7 @@ BEGIN_MESSAGE_MAP(CVidsendDoc2PropPage0, CPropertyPage)
 	//{{AFX_MSG_MAP(CVidsendDoc2PropPage0)
 	ON_BN_CLICKED(IDC_CHECK1, OnCheck1)
 	ON_CBN_SELCHANGE(IDC_COMBO4, OnSelchangeCombo4)
+	ON_CBN_SELCHANGE(IDC_COMBO3, OnSelchangeCombo3)
 	ON_CBN_SELCHANGE(IDC_COMBO1, OnSelchangeCombo1)
 	ON_CBN_SELCHANGE(IDC_COMBO2, OnSelchangeCombo2)
 	ON_CBN_SELCHANGE(IDC_COMBO6, OnSelchangeCombo6)
@@ -1525,6 +1528,8 @@ BOOL CVidsendDoc2PropPage0::OnInitDialog() {
 		}
 	m_PortaV=VIDEO_SOCKET;
 	m_PortaA=AUDIO_SOCKET;
+	m_PortaVBAN=VBAN_DEFAULT_PORT;
+	m_PortaMP3=MP3_STREAM_SOCKET;
 	n=enumCompressorV(&m_ComboCompressorV,m_CompressorV);
 	m_ComboCompressorV.SetCurSel(HIWORD(n));
 //	m_QV=myParent->myQV;
@@ -1533,20 +1538,39 @@ BOOL CVidsendDoc2PropPage0::OnInitDialog() {
 	((CSliderCtrl *)GetDlgItem(IDC_SLIDER3))->SetRange(0,10000,TRUE);
 	((CSliderCtrl *)GetDlgItem(IDC_SLIDER3))->SetTicFreq(1000);
 	m_QualityV=m_QV.quality;
-	S.Format("%ux%u",m_QV.imageSize.right,m_QV.imageSize.bottom);
+	S.Format("%ux%u",m_QV.imageSize.cx,m_QV.imageSize.cy);
 //	AfxMessageBox(S);		// spesso il debugger non ti mostra imageSize...!!@#!@
 	m_ComboImageSize.SelectString(-1,S);
-	if(myParent && myParent->theTV->biRawBitmap.biCompression != 0)
-		*(DWORD *)myBuf=myParent ? myParent->theTV->biRawBitmap.biCompression : 0;
-	else
-		*(DWORD *)myBuf=mmioFOURCC('R','G','B',0);
-	myBuf[4]=0;
-	m_Formato.AddString(myBuf);			// per ora ne metto solo 1 (non so come enumerarli!)
-	m_Formato.SetCurSel(0);
+
+	i=-1;
+	for(int j=0; j<6 /* non gli piace £$%@# sizeof(CTV::acceptedCompressionType)/sizeof(struct COMPRESSION_TYPES)*/; j++) {
+		// dovrebbe essere reso visibile l'array... bah vabbe'
+		if(CTV::acceptedCompressionType[j].fourCC)
+			*(DWORD *)myBuf=CTV::acceptedCompressionType[j].fourCC;
+		else {
+			*(DWORD *)myBuf=mmioFOURCC('R','G','B',0);
+			if(i==-1)
+				i=j;
+			}
+		myBuf[4]=0;
+		m_ComboFormatoV.AddString(myBuf);			// [per ora ne metto solo 1 (non so come enumerarli!)]
+
+		// MANCA la possibilità di sceglierne uno preferenziale - CTV userà il primo disponibile in ordine di enumerazione...
+		if(myParent && myParent->theTV->biRawBitmap.biCompression == CTV::acceptedCompressionType[j].fourCC)
+			i=j;
+		}
+	m_ComboFormatoV.SetCurSel(i);
 	
-//	m_QA=myParent->myQA;
+	m_QA=myParent->myQA;
+	m_ComboTipoAudio.SetCurSel(0);		// FINIRE
+	 
+
+
 	n=enumCompressorA(&m_ComboCompressorA,m_CompressorA);
 	m_ComboCompressorA.SetCurSel(HIWORD(n));
+
+	m_VBAN=myParent->Opzioni & CVidsendDoc2::usaVBAN ? 1 : 0;
+	m_MP3=1   /* FARE! myParent->Opzioni & CVidsendDoc2::   ? 1 : 0*/;
 
 	UpdateData(FALSE);
 	updateDaCheck();
@@ -1597,7 +1621,7 @@ BOOL CALLBACK FormatEnumProc(HACMDRIVERID hadid, LPACMFORMATDETAILS pafd, DWORD 
 	}
 
 
-BOOL CALLBACK /*ACMDRIVERENUMCB*/ acmEnumCallback(
+BOOL CALLBACK /*ACMDRIVERENUMCB*/ CVidsendDoc2PropPage0::acmEnumCallback(
   HACMDRIVERID hadid, DWORD dwInstance, DWORD fdwSupport) {
   HACMDRIVER had = NULL;
 	ACMDRIVERDETAILS acm;
@@ -1659,6 +1683,15 @@ void CVidsendDoc2PropPage0::OnSelchangeCombo4() {
 	updateBWH();
 	}
 
+void CVidsendDoc2PropPage0::OnSelchangeCombo3() {
+	char myBuf[8];
+	int i=m_ComboFormatoV.GetCurSel();
+	if(i != CB_ERR) {
+		m_ComboFormatoV.GetLBText(i,myBuf);
+		m_FormatV=*(DWORD *)myBuf=*(DWORD *)myBuf;
+		}
+	updateBWH();
+	}
 
 void CVidsendDoc2PropPage0::OnSelchangeCombo1() {
 	char myBuf[32];
@@ -1675,14 +1708,15 @@ void CVidsendDoc2PropPage0::OnSelchangeCombo2() {
 	CString S;
 	
 	m_ComboImageSize.GetLBText(i,S);
-	m_QV.imageSize.right=atoi((LPCTSTR)S);
-	m_QV.imageSize.bottom=atoi((LPCTSTR)S.Mid(S.Find('x'))+1);
+	m_QV.imageSize.cx=atoi((LPCTSTR)S);
+	m_QV.imageSize.cy=atoi((LPCTSTR)S.Mid(S.Find('x'))+1);
 	updateBWH();
 	}
 
 
 void CVidsendDoc2PropPage0::OnSelchangeCombo6() {
 	int i=m_ComboCompressorA.GetCurSel();
+
 	if(i != CB_ERR)
 		m_CompressorA=m_ComboCompressorA.GetItemData(i);
 	updateBWH();
@@ -1751,6 +1785,294 @@ void CVidsendDoc2PropPage0::updateBWH() {
 	m_Bandwidth.Format("%uKbps",i/128);			//*8 e /1K
 	UpdateData(FALSE);
 	}	
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc2PropPage00 property page
+
+IMPLEMENT_DYNCREATE(CVidsendDoc2PropPage00, CPropertyPage)
+
+CVidsendDoc2PropPage00::CVidsendDoc2PropPage00(CVidsendDoc22 *p,struct QUALITY_MODEL_A *qa) : CPropertyPage(CVidsendDoc2PropPage00::IDD) {
+	//{{AFX_DATA_INIT(CVidsendDoc2PropPage00)
+	m_IPAddress = 0;
+	m_OutputStream=FALSE;
+	m_Attiva0=FALSE;
+	m_Attiva1=FALSE;
+	m_Attiva2=FALSE;
+	m_PreascoltoMono=FALSE;
+	m_ServerAudio = FALSE;
+	m_Bandwidth = _T("");
+	m_PortaA = 0;
+	m_VBAN = 0;
+	m_PortaVBAN = 0;
+	m_MP3 = 0;
+	m_PortaMP3 = 0;
+	//}}AFX_DATA_INIT
+	myParent=p;
+	if(qa)
+		memcpy(&m_QA,qa,sizeof(struct QUALITY_MODEL_A));
+	else
+		ZeroMemory(&m_QA,sizeof(struct QUALITY_MODEL_A));
+	isInitialized=FALSE;
+	m_CompressorA=m_QA.compressor;
+	m_SchedaAudio1=0;
+	m_SchedaAudio2=0;
+	}
+
+CVidsendDoc2PropPage00::~CVidsendDoc2PropPage00() {
+	}
+
+void CVidsendDoc2PropPage00::DoDataExchange(CDataExchange* pDX) {
+	CPropertyPage::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CVidsendDoc2PropPage00)
+	DDX_Control(pDX, IDC_COMBO6, m_ComboCompressorA);
+	DDX_CBIndex(pDX, IDC_COMBO12, m_IPAddress);
+	DDX_Check(pDX, IDC_CHECK1, m_ServerStream);
+	DDX_Check(pDX, IDC_CHECK4, m_ServerAudio);
+	DDX_Text(pDX, IDC_EDIT4, m_Bandwidth);
+	DDX_Text(pDX, IDC_EDIT3, m_PortaA);
+	DDV_MinMaxUInt(pDX, m_PortaA, 1, 65535);
+	DDX_Text(pDX, IDC_EDIT5, m_PortaVBAN);
+	DDV_MinMaxUInt(pDX, m_PortaVBAN, 1, 65535);
+	DDX_Text(pDX, IDC_EDIT12, m_PortaMP3);
+	DDV_MinMaxUInt(pDX, m_PortaVBAN, 1, 65535);
+	DDX_Check(pDX, IDC_CHECK9, m_VBAN);
+	DDX_Check(pDX, IDC_CHECK10, m_MP3);
+	DDX_Check(pDX, IDC_CHECK11, m_OutputStream);
+	DDX_Check(pDX, IDC_CHECK6, m_Attiva1);
+	DDX_Check(pDX, IDC_CHECK7, m_Attiva2);
+	DDX_Check(pDX, IDC_CHECK13, m_Attiva0);
+	DDX_Check(pDX, IDC_CHECK14, m_PreascoltoMono);
+	DDX_Control(pDX, IDC_COMBO5, m_ComboTipoAudio);
+	DDX_Control(pDX, IDC_COMBO14, m_ComboTipoMP3);
+	DDX_Control(pDX, IDC_COMBO10, m_ComboSchedaAudio1);
+	DDX_Control(pDX, IDC_COMBO11, m_ComboSchedaAudio2);
+	DDX_Control(pDX, IDC_COMBO13, m_ComboSchedaAudio0);
+	//}}AFX_DATA_MAP
+}
+
+
+BEGIN_MESSAGE_MAP(CVidsendDoc2PropPage00, CPropertyPage)
+	//{{AFX_MSG_MAP(CVidsendDoc2PropPage00)
+	ON_BN_CLICKED(IDC_CHECK1, OnCheck1)
+	ON_CBN_SELCHANGE(IDC_COMBO6, OnSelchangeCombo6)
+	ON_CBN_SELCHANGE(IDC_COMBO5, OnSelchangeCombo5)
+	ON_CBN_SELCHANGE(IDC_COMBO14, OnSelchangeCombo14)
+	ON_BN_CLICKED(IDC_CHECK4, OnCheck4)
+	ON_BN_CLICKED(IDC_CHECK14, OnCheck14)
+	ON_BN_CLICKED(IDC_CHECK3, OnCheck3)
+	ON_BN_CLICKED(IDC_BUTTON7, OnButton7)
+	ON_WM_HSCROLL()
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc2PropPage00 message handlers
+
+BOOL CVidsendDoc2PropPage00::OnInitDialog() {
+	char myBuf[128];
+	DWORD n;
+	int i;
+	CString S;
+
+	CPropertyPage::OnInitDialog();
+	
+	if(!CWebSrvSocket2_base::getMyIPAddress(myBuf))
+		((CComboBox *)GetDlgItem(IDC_COMBO12))->AddString("<non disponibile>");
+	else {
+		for(i=0; i<=9; i++) {
+		if(CWebSrvSocket2_base::getMyIPAddress(myBuf,i)) {
+			S=myBuf;
+			((CComboBox *)GetDlgItem(IDC_COMBO12))->AddString(S);
+			}
+		else
+			break;
+			}
+		}
+	
+	m_IPAddress=0;
+
+	if(myParent) {
+		m_ServerAudio=myParent->Opzioni & CVidsendDoc2::maySendAudio ? 1 : 0;
+		}
+
+	m_PortaA=AUDIO_SOCKET;
+	m_PortaVBAN=VBAN_DEFAULT_PORT;
+	m_PortaMP3=MP3_STREAM_SOCKET;
+	
+	m_QA=myParent->myQA;
+	m_ComboTipoAudio.SetCurSel(0);		// FINIRE
+	 
+	S.Format("%u",m_QA.mp3bitrate);
+	i=m_ComboTipoMP3.FindString(-1,S);		// 
+	m_ComboTipoMP3.SetCurSel(i);
+
+
+	n=enumCompressorA(&m_ComboCompressorA,m_CompressorA);
+	m_ComboCompressorA.SetCurSel(HIWORD(n));
+
+	m_VBAN=myParent->Opzioni & CVidsendDoc2::usaVBAN ? 1 : 0;
+	m_MP3=myParent->Opzioni & CVidsendDoc22::sendAudioMP3 ? 1 : 0;
+
+	m_OutputStream=TRUE;
+	n=enumSchedeAudio(&m_ComboSchedaAudio1,m_SchedaAudio1);
+	m_ComboSchedaAudio1.SetCurSel(1 /*HIWORD(n)*/);
+	n=enumSchedeAudio(&m_ComboSchedaAudio2,m_SchedaAudio2);
+	m_ComboSchedaAudio2.SetCurSel(2 /*HIWORD(n)*/);
+// finire!
+	n=enumSchedeAudio(&m_ComboSchedaAudio0,m_SchedaAudio0);
+	m_ComboSchedaAudio0.SetCurSel(0 /*HIWORD(n)*/);
+
+	m_Attiva0= myParent->Opzioni2 & CVidsendDoc22::attivaSchedaAudio0 ? 1 : 0;
+	m_Attiva1= myParent->Opzioni2 & CVidsendDoc22::attivaSchedaAudio1 ? 1 : 0;
+	m_Attiva2= myParent->Opzioni2 & CVidsendDoc22::attivaSchedaAudio2 ? 1 : 0;
+	m_PreascoltoMono= myParent->Opzioni2 & CVidsendDoc22::preascoltoMono ? 1 : 0;
+
+
+
+
+	UpdateData(FALSE);
+	updateDaCheck();
+	updateBWH();
+
+	isInitialized=TRUE;
+	return TRUE;  // return TRUE unless you set the focus to a control
+	              // EXCEPTION: OCX Property Pages should return FALSE
+	}
+
+ 
+DWORD CVidsendDoc2PropPage00::enumCompressorA(CComboBox *c,DWORD v) {
+	int i,j,n=0;
+
+	c->AddString("<nessuna>");
+	c->SetItemData(0,0);
+	acmDriverEnum((ACMDRIVERENUMCB)CVidsendDoc2PropPage0::acmEnumCallback,(DWORD)c,0);
+	j=c->GetCount();
+	for(i=0; i<j; i++) {
+		if(c->GetItemData(i) == v) {
+			n=i;
+			break;
+			}
+		}
+	return MAKELONG(j,n);
+	}
+
+BOOL CALLBACK CVidsendDoc2PropPage00::DSEnumCallback(
+         LPGUID lpGuid,
+         LPCSTR lpcstrDescription,
+         LPCSTR lpcstrModule,
+         LPVOID lpContext) {
+	CString S;
+
+	S=lpcstrDescription;
+	((CComboBox *)lpContext)->AddString(S);
+//	dsd->guid=lpGuid;
+	
+	return 1;
+	}
+
+DWORD CVidsendDoc2PropPage00::enumSchedeAudio(CComboBox *c,DWORD v) {
+	int i,j,n=0;
+
+	DirectSoundEnumerate(DSEnumCallback,(LPVOID)c);
+	// la prima sarà default ossia SoundMapper
+	j=c->GetCount();
+	for(i=0; i<j; i++) {
+		if(c->GetItemData(i) == v) {
+			n=i;
+			break;
+			}
+		}
+	return MAKELONG(j,n);
+	}
+
+void CVidsendDoc2PropPage00::OnSelchangeCombo6() {
+	int i=m_ComboCompressorA.GetCurSel();
+
+	if(i != CB_ERR)
+		m_CompressorA=m_ComboCompressorA.GetItemData(i);
+	updateBWH();
+	}
+
+void CVidsendDoc2PropPage00::OnSelchangeCombo5() {
+	int i=m_ComboTipoAudio.GetCurSel();
+
+//	if(i != CB_ERR)
+//		m_CompressorA=m_ComboCompressorA.GetItemData(i);
+	updateBWH();
+	}
+
+void CVidsendDoc2PropPage00::OnSelchangeCombo14() {
+	int i=m_ComboTipoMP3.GetCurSel();
+	char myBuf[64];
+
+	if(i != CB_ERR) {
+		m_ComboTipoMP3.GetLBText(i,myBuf);
+		m_QA.mp3bitrate=atoi(myBuf);
+		}
+	updateBWH();
+	}
+
+void CVidsendDoc2PropPage00::updateDaCheck() {
+	
+	UpdateData();
+	GetDlgItem(IDC_EDIT3)->EnableWindow(m_ServerAudio);
+	GetDlgItem(IDC_COMBO6)->EnableWindow(m_ServerAudio);
+	GetDlgItem(IDC_COMBO11)->EnableWindow(m_PreascoltoMono ? FALSE : TRUE);
+	}
+
+void CVidsendDoc2PropPage00::OnCheck1() {
+	// stream
+	updateDaCheck();
+	}
+
+void CVidsendDoc2PropPage00::OnCheck4() {
+	// audio
+	updateDaCheck();
+	updateBWH();
+	}
+
+void CVidsendDoc2PropPage00::OnCheck14() {
+	// mono
+	updateDaCheck();
+	updateBWH();
+	}
+
+void CVidsendDoc2PropPage00::OnCheck3() {
+	updateDaCheck();
+	}
+
+void CVidsendDoc2PropPage00::OnButton7() {
+
+	if(AfxMessageBox("Ripristinare le impostazioni originarie?",MB_YESNO | MB_ICONQUESTION) == IDYES) {
+		m_QA.compressor=0;
+		m_ComboCompressorA.SetCurSel(m_QA.compressor);
+		m_ComboTipoAudio.SetCurSel(6);		// FINIRE
+		UpdateData(FALSE);
+		updateBWH();
+		}
+	}
+
+
+void CVidsendDoc2PropPage00::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar) {
+	
+	if(nSBCode == SB_THUMBPOSITION || nSBCode == SB_PAGERIGHT || nSBCode == SB_PAGELEFT || nSBCode == SB_LINERIGHT || nSBCode == SB_LINELEFT || nSBCode == SB_LEFT || nSBCode == SB_RIGHT) {
+//	if(nSBCode == SB_THUMBPOSITION) {
+		updateBWH();
+		UpdateData();
+		}
+	CPropertyPage::OnHScroll(nSBCode, nPos, pScrollBar);
+	}
+
+void CVidsendDoc2PropPage00::updateBWH() {
+	int i;
+
+	UpdateData();
+	i=theApp.theServer2->calcBandWidth(m_ServerAudio,m_QA.samplesPerSec,m_QA.bitsPerSample,m_QA.channels,m_CompressorA,m_QA.quality);
+	m_Bandwidth.Format("%uKbps",i/128);			//*8 e /1K
+	UpdateData(FALSE);
+	}	
+
 
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendDoc2PropPage0Bis property page
@@ -1844,6 +2166,7 @@ BOOL CVidsendDoc2PropPage0Bis::OnInitDialog() {
 		else
 			break;
 		}
+	((CComboBox *)GetDlgItem(IDC_COMBO1))->AddString("RTSP");
 	maxSchede=i+1;
 	m_Schede=myParent->theTV->theCapture+1;
 	
@@ -2103,10 +2426,10 @@ void CVidsendDoc2PropPage1::updateDaCheck() {
 
 void CVidsendDoc2PropPage1::OnButton1() {		// 
 	RECT myrc;
-	myrc.top=(myParent->qualityBox.top * 300) / myParent->myQV.imageSize.bottom;
-	myrc.left=(myParent->qualityBox.left * 400) / myParent->myQV.imageSize.right;
-	myrc.bottom=(myParent->qualityBox.bottom * 300) / myParent->myQV.imageSize.bottom;		// le coord dialog sono a caso...
-	myrc.right=(myParent->qualityBox.right * 400) / myParent->myQV.imageSize.right;
+	myrc.top=(myParent->qualityBox.top * 300) / myParent->myQV.imageSize.cy;
+	myrc.left=(myParent->qualityBox.left * 400) / myParent->myQV.imageSize.cx;
+	myrc.bottom=(myParent->qualityBox.bottom * 300) / myParent->myQV.imageSize.cy;		// le coord dialog sono a caso...
+	myrc.right=(myParent->qualityBox.right * 400) / myParent->myQV.imageSize.cx;
 	myrc.top+=20;
 	myrc.left+=20;
 	myrc.bottom+=20;
@@ -2114,10 +2437,10 @@ void CVidsendDoc2PropPage1::OnButton1() {		//
 	CQualityBoxDlg myDlg(&myrc);
 
 	if(myDlg.DoModal() == IDOK) {
-		myDlg.SelectedRect.top=(myDlg.SelectedRect.top * myParent->myQV.imageSize.bottom) /300;
-		myDlg.SelectedRect.left=(myDlg.SelectedRect.left * myParent->myQV.imageSize.right) /400;
-		myDlg.SelectedRect.bottom=(myDlg.SelectedRect.bottom * myParent->myQV.imageSize.bottom) /300;		// le coord dialog sono a caso...
-		myDlg.SelectedRect.right=(myDlg.SelectedRect.right * myParent->myQV.imageSize.right) /400;
+		myDlg.SelectedRect.top=(myDlg.SelectedRect.top * myParent->myQV.imageSize.cy) /300;
+		myDlg.SelectedRect.left=(myDlg.SelectedRect.left * myParent->myQV.imageSize.cx) /400;
+		myDlg.SelectedRect.bottom=(myDlg.SelectedRect.bottom * myParent->myQV.imageSize.cy) /300;		// le coord dialog sono a caso...
+		myDlg.SelectedRect.right=(myDlg.SelectedRect.right * myParent->myQV.imageSize.cx) /400;
 		myParent->qualityBox=myDlg.SelectedRect;
 
 		}
@@ -2210,6 +2533,25 @@ CVidsendDoc2PropPage2::CVidsendDoc2PropPage2(CVidsendDoc2 *p) : CPropertyPage(CV
 	isInitialized=FALSE;
 	mySet=NULL;
 	myParent=p;
+	myParent2=NULL;
+	}
+
+CVidsendDoc2PropPage2::CVidsendDoc2PropPage2(CVidsendDoc22 *p) : CPropertyPage(CVidsendDoc2PropPage2::IDD)
+{
+	//{{AFX_DATA_INIT(CVidsendDoc2PropPage22)
+	m_MaxConn = 0;
+	m_AuthWWW = _T("");
+	m_bDirectoryServer = FALSE;
+	m_bNeedAuthenticate = FALSE;
+	m_DirectoryServer = _T("");
+	m_NomePerServer = _T("");
+	m_TipoAutorizzazione = -1;
+	m_ID = _T("");
+	//}}AFX_DATA_INIT
+	isInitialized=FALSE;
+	mySet=NULL;
+	myParent=NULL;
+	myParent2=p;
 	}
 
 CVidsendDoc2PropPage2::~CVidsendDoc2PropPage2()
@@ -2263,20 +2605,38 @@ BOOL CVidsendDoc2PropPage2::OnInitDialog() {
 	int i;
 
 	CPropertyPage::OnInitDialog();
-	
-	m_MaxConn=myParent->maxConn;
-	m_MaxConnSpin.SetRange(0,100);
-	m_AuthWWW=myParent->authenticationWWW;
-	m_TipoAutorizzazione=(myParent->Opzioni & CVidsendDoc2::needAuthenticate) >> 29;
-	m_bDirectoryServer = myParent->Opzioni & CVidsendDoc2::registerServer ? 1 : 0;
-	m_bNeedAuthenticate= myParent->Opzioni & CVidsendDoc2::needAuthenticateServer ? 1 : 0;
-	m_DirectoryServer=myParent->directoryWWW;
-	m_ID.Format("%u",myParent->myID);
-	m_NomePerServer=myParent->directoryWWWLogin;
-	if(m_NomePerServer.IsEmpty()) {
-		gethostname(myBuf,127);
-		m_NomePerServer=myBuf;
+
+	if(myParent) {
+		m_MaxConn=myParent->maxConn;
+		m_MaxConnSpin.SetRange(0,100);
+		m_AuthWWW=myParent->authenticationWWW;
+		m_TipoAutorizzazione=(myParent->Opzioni & CVidsendDoc2::needAuthenticate) >> 29;
+		m_bDirectoryServer = myParent->Opzioni & CVidsendDoc2::registerServer ? 1 : 0;
+		m_bNeedAuthenticate= myParent->Opzioni & CVidsendDoc2::needAuthenticateServer ? 1 : 0;
+		m_DirectoryServer=myParent->directoryWWW;
+		m_ID.Format("%u",myParent->myID);
+		m_NomePerServer=myParent->directoryWWWLogin;
+		if(m_NomePerServer.IsEmpty()) {
+			gethostname(myBuf,127);
+			m_NomePerServer=myBuf;
+			}
 		}
+	else {
+		m_MaxConn=myParent2->maxConn;
+		m_MaxConnSpin.SetRange(0,100);
+		m_AuthWWW=myParent2->authenticationWWW;
+		m_TipoAutorizzazione=(myParent2->Opzioni & CVidsendDoc22::needAuthenticate) >> 29;
+		m_bDirectoryServer = myParent2->Opzioni & CVidsendDoc22::registerServer ? 1 : 0;
+		m_bNeedAuthenticate= myParent2->Opzioni & CVidsendDoc22::needAuthenticateServer ? 1 : 0;
+		m_DirectoryServer=myParent2->directoryWWW;
+		m_ID.Format("%u",myParent2->myID);
+		m_NomePerServer=myParent2->directoryWWWLogin;
+		if(m_NomePerServer.IsEmpty()) {
+			gethostname(myBuf,127);
+			m_NomePerServer=myBuf;
+			}
+		}
+
 
 	UpdateData(FALSE);
 	updateDaCheck();
@@ -2490,6 +2850,7 @@ void CConf2Page2Utenti::DoDataExchange(CDataExchange* pDX) {
 
 	CDialog::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CConf2Page2Utenti)
+// non va... in debug 2023 win 7...		
 	DDX_DateTimeCtrl(pDX, IDC_DATETIMEPICKER1, m_TimedConn);
 	DDX_Check(pDX, IDC_CHECK2, m_bTimedConn);
 	DDX_Text(pDX, IDC_EDIT7, m_User);
@@ -2685,36 +3046,61 @@ CVidsendDoc2PropPage3::CVidsendDoc2PropPage3(CVidsendDoc2 *p) : CPropertyPage(CV
 	m_DialUp = 0;
 	m_ActivateIf = 0;
 	m_ActivateWaitConfirm=0;
+	m_Messaggio= _T("");
 	//}}AFX_DATA_INIT
 	isInitialized=FALSE;
 	myParent=p;
+	myParent2=NULL;
+	}
+
+CVidsendDoc2PropPage3::CVidsendDoc2PropPage3(CVidsendDoc22 *p) : CPropertyPage(CVidsendDoc2PropPage3::IDD)
+{
+	//{{AFX_DATA_INIT(CVidsendDoc2PropPage3)
+	m_bOpenWWW = FALSE;
+	m_DontSave = FALSE;
+	m_bTimedConn = FALSE;
+	m_SuonoIn = _T("");
+	m_SuonoOut = _T("");
+	m_OpenWWW = _T("");
+	m_StreamTitle = _T("");
+	m_TimedConn = 0;
+	m_DialUp = 0;
+	m_ActivateIf = 0;
+	m_ActivateWaitConfirm=0;
+	m_Messaggio= _T("");
+	//}}AFX_DATA_INIT
+	isInitialized=FALSE;
+	myParent=NULL;
+	myParent2=p;
 	}
 
 CVidsendDoc2PropPage3::~CVidsendDoc2PropPage3()
 {
 }
 
-void CVidsendDoc2PropPage3::DoDataExchange(CDataExchange* pDX)
-{
+void CVidsendDoc2PropPage3::DoDataExchange(CDataExchange* pDX) {
 	CPropertyPage::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CVidsendDoc2PropPage3)
-	DDX_Check(pDX, IDC_CHECK3, m_bOpenWWW);
-	DDX_Check(pDX, IDC_CHECK4, m_DontSave);
+	DDX_Text(pDX, IDC_EDIT10, m_Messaggio);
+	DDV_MaxChars(pDX, m_Messaggio, 127);
 	DDX_Check(pDX, IDC_CHECK7, m_bTimedConn);
+// non va... in debug 2023 win 7...	
+	DDX_DateTimeCtrl(pDX, IDC_DATETIMEPICKER2, m_TimedConn);
+	DDX_Check(pDX, IDC_CHECK9, m_ActivateIf);
+	DDX_Check(pDX, IDC_CHECK4, m_DontSave);
+	DDX_Check(pDX, IDC_CHECK3, m_bOpenWWW);
+	DDX_Text(pDX, IDC_EDIT2, m_OpenWWW);
+	DDV_MaxChars(pDX, m_OpenWWW, 127);
+	DDX_Check(pDX, IDC_CHECK11, m_DialUp);
+	DDX_CBString(pDX, IDC_COMBO4, m_DialUpNome);
+	DDV_MaxChars(pDX, m_DialUpNome, 127);
+	DDX_Text(pDX, IDC_EDIT14, m_StreamTitle);
+	DDV_MaxChars(pDX, m_StreamTitle, 127);
+	DDX_Check(pDX, IDC_CHECK10, m_ActivateWaitConfirm);
 	DDX_CBString(pDX, IDC_COMBO3, m_SuonoIn);
 	DDV_MaxChars(pDX, m_SuonoIn, 127);
 	DDX_CBString(pDX, IDC_COMBO9, m_SuonoOut);
 	DDV_MaxChars(pDX, m_SuonoOut, 127);
-	DDX_CBString(pDX, IDC_COMBO4, m_DialUpNome);
-	DDV_MaxChars(pDX, m_DialUpNome, 127);
-	DDX_Text(pDX, IDC_EDIT2, m_OpenWWW);
-	DDV_MaxChars(pDX, m_OpenWWW, 127);
-	DDX_DateTimeCtrl(pDX, IDC_DATETIMEPICKER2, m_TimedConn);
-	DDX_Text(pDX, IDC_EDIT9, m_StreamTitle);
-	DDV_MaxChars(pDX, m_StreamTitle, 127);
-	DDX_Check(pDX, IDC_CHECK6, m_ActivateIf);
-	DDX_Check(pDX, IDC_CHECK10, m_ActivateWaitConfirm);
-	DDX_Check(pDX, IDC_CHECK11, m_DialUp);
 	//}}AFX_DATA_MAP
 }
 
@@ -2736,23 +3122,44 @@ BOOL CVidsendDoc2PropPage3::OnInitDialog() {
 
 	CPropertyPage::OnInitDialog();
 	
-	m_OpenWWW=myParent->forceOpenWWW;
-	m_bOpenWWW=myParent->Opzioni & CVidsendDoc2::openWWW ? 1 : 0;
-	m_DontSave=myParent->Opzioni & CVidsendDoc2::dontSave ? 1 : 0;
-	m_ActivateIf=myParent->Opzioni & CVidsendDoc2::openVideoOnConnect ? 1 : 0;
-	m_ActivateWaitConfirm=myParent->Opzioni & CVidsendDoc2::askOnConnect ? 1 : 0;
-	m_bTimedConn=myParent->Opzioni & CVidsendDoc2::timedConnection ? 1 : 0;
-	((CDateTimeCtrl *)GetDlgItem(IDC_DATETIMEPICKER2))->SetFormat("hh:mm");
-	{ CTime myT(2000,1,1,myParent->timedConnLenght.GetTotalHours(),myParent->timedConnLenght.GetMinutes(),0);
-		m_TimedConn=myT;
-	}
-	m_DialUp=myParent->Opzioni & CVidsendDoc2::doDialUp ? 1 : 0;
-	
-	((CComboBox *)GetDlgItem(IDC_COMBO3))->Dir(0,"*.wav");
-	m_SuonoIn=myParent->suonoIn;
-	((CComboBox *)GetDlgItem(IDC_COMBO9))->Dir(0,"*.wav");
-	m_SuonoOut=myParent->suonoOut;
-	m_StreamTitle=myParent->streamTitle;
+	if(myParent) {
+		m_OpenWWW=myParent->forceOpenWWW;
+		m_bOpenWWW=myParent->Opzioni & CVidsendDoc2::openWWW ? 1 : 0;
+		m_DontSave=myParent->Opzioni & CVidsendDoc2::dontSave ? 1 : 0;
+		m_ActivateIf=myParent->Opzioni & CVidsendDoc2::openVideoOnConnect ? 1 : 0;
+		m_ActivateWaitConfirm=myParent->Opzioni & CVidsendDoc2::askOnConnect ? 1 : 0;
+		m_bTimedConn=myParent->Opzioni & CVidsendDoc2::timedConnection ? 1 : 0;
+		((CDateTimeCtrl *)GetDlgItem(IDC_DATETIMEPICKER2))->SetFormat("hh:mm");
+		{ CTime myT(2000,1,1,myParent->timedConnLenght.GetTotalHours(),myParent->timedConnLenght.GetMinutes(),0);
+			m_TimedConn=myT;
+		}
+		m_DialUp=myParent->Opzioni & CVidsendDoc2::doDialUp ? 1 : 0;
+		
+		((CComboBox *)GetDlgItem(IDC_COMBO3))->Dir(0,"*.wav");
+		m_SuonoIn=myParent->suonoIn;
+		((CComboBox *)GetDlgItem(IDC_COMBO9))->Dir(0,"*.wav");
+		m_SuonoOut=myParent->suonoOut;
+		m_StreamTitle=myParent->streamTitle;
+		}
+	else {
+		m_OpenWWW=myParent2->forceOpenWWW;
+		m_bOpenWWW=myParent2->Opzioni & CVidsendDoc22::openWWW ? 1 : 0;
+		m_DontSave=myParent2->Opzioni & CVidsendDoc22::dontSave ? 1 : 0;
+		m_ActivateWaitConfirm=myParent2->Opzioni & CVidsendDoc22::askOnConnect ? 1 : 0;
+		m_bTimedConn=myParent2->Opzioni & CVidsendDoc22::timedConnection ? 1 : 0;
+		CDateTimeCtrl *dt=((CDateTimeCtrl *)GetDlgItem(IDC_DATETIMEPICKER2));
+		((CDateTimeCtrl *)GetDlgItem(IDC_DATETIMEPICKER2))->SetFormat("hh:mm");
+		{ CTime myT(2000,1,1,myParent2->timedConnLenght.GetTotalHours(),myParent2->timedConnLenght.GetMinutes(),0);
+			m_TimedConn=myT;
+		}
+		m_DialUp=myParent2->Opzioni & CVidsendDoc22::doDialUp ? 1 : 0;
+		
+		((CComboBox *)GetDlgItem(IDC_COMBO3))->Dir(0,"*.wav");
+		m_SuonoIn=myParent2->suonoIn;
+		((CComboBox *)GetDlgItem(IDC_COMBO9))->Dir(0,"*.wav");
+		m_SuonoOut=myParent2->suonoOut;
+		m_StreamTitle=myParent2->streamTitle;
+		}
 
 	n1=sizeof(ren);
 	ren[0].dwSize=sizeof(RASENTRYNAME);
@@ -2819,6 +3226,7 @@ CVidsendPropPage0::CVidsendPropPage0() : CPropertyPage(CVidsendPropPage0::IDD)
 	m_DDEenable = FALSE;
 	m_ServerWWWPort = 0;
 	m_RiapriV = FALSE;
+	m_RiapriA = FALSE;
 	m_RiapriC = FALSE;
 	m_TCP_UDP=0;
 	m_NamedPipes=0;
@@ -2846,6 +3254,7 @@ void CVidsendPropPage0::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT1, m_ServerWWWPort);
 	DDV_MinMaxUInt(pDX, m_ServerWWWPort, 0, 65534);
 	DDX_Check(pDX, IDC_CHECK4, m_RiapriV);
+	DDX_Check(pDX, IDC_CHECK14, m_RiapriA);
 	DDX_Check(pDX, IDC_CHECK9, m_RiapriC);
 	DDX_Radio(pDX, IDC_RADIO1, m_TCP_UDP);
 	DDX_Check(pDX, IDC_CHECK8, m_NamedPipes);
@@ -2896,6 +3305,7 @@ BOOL CVidsendPropPage0::OnInitDialog() {
 	m_RiconnettiV=theApp.Opzioni & CVidsendApp::openClientVideo ? 1 : 0;
 	m_RiconnettiC=theApp.Opzioni & CVidsendApp::openClientChat ? 1 : 0;
 	m_RiapriV=theApp.Opzioni & CVidsendApp::openServerVideo ? 1 : 0;
+	m_RiapriA=theApp.Opzioni & CVidsendApp::openServerAudio ? 1 : 0;
 	m_RiapriC=theApp.Opzioni & CVidsendApp::openServerChat ? 1 : 0;
 	m_DDEenable=theApp.Opzioni & CVidsendApp::DDEenabled ? 1 : 0;
 	m_TCP_UDP=theApp.Opzioni & CVidsendApp::TCP_UDP ? 1 : 0;
@@ -2943,6 +3353,7 @@ CVidsendPropPage1::CVidsendPropPage1() : CPropertyPage(CVidsendPropPage1::IDD)
 	m_Email = _T("");
 	m_SuonoFine = _T("");
 	m_SuonoInizio = _T("");
+	m_Sfondo = _T("");
 	m_SaveLayout = FALSE;
 	m_PasswordProtect = FALSE;
 	//}}AFX_DATA_INIT
@@ -2973,6 +3384,8 @@ void CVidsendPropPage1::DoDataExchange(CDataExchange* pDX)
 	DDV_MaxChars(pDX, m_SuonoFine, 127);
 	DDX_CBString(pDX, IDC_COMBO1, m_SuonoInizio);
 	DDV_MaxChars(pDX, m_SuonoInizio, 127);
+	DDX_CBString(pDX, IDC_COMBO9, m_Sfondo);
+	DDV_MaxChars(pDX, m_Sfondo, 127);
 	DDX_Check(pDX, IDC_CHECK1, m_SaveLayout);
 	DDX_Check(pDX, IDC_CHECK2, m_PasswordProtect);
 	//}}AFX_DATA_MAP
@@ -3003,6 +3416,9 @@ BOOL CVidsendPropPage1::OnInitDialog() {
 	m_SuonoInizio=theApp.suonoInizio;
 	((CComboBox *)GetDlgItem(IDC_COMBO6))->Dir(0,"*.wav");
 	m_SuonoFine=theApp.suonoFine;
+	((CComboBox *)GetDlgItem(IDC_COMBO9))->Dir(0,"*.bmp");
+	((CComboBox *)GetDlgItem(IDC_COMBO9))->Dir(0,"*.jpg");
+	m_Sfondo=theApp.sfondo;
 	UpdateData(FALSE);
 
 	isInitialized=TRUE;
@@ -3218,6 +3634,7 @@ void CVidsendDoc4PropPage1::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT6, m_AuthWWW);
 	DDV_MaxChars(pDX, m_AuthWWW, 127);
 	DDX_Check(pDX, IDC_CHECK7, m_bTimedConn);
+// non va... in debug 2023 win 7...		
 	DDX_DateTimeCtrl(pDX, IDC_DATETIMEPICKER2, m_TimedConn);
 	DDX_Check(pDX, IDC_CHECK10, m_Mostra_E_U);
 	DDX_Check(pDX, IDC_CHECK17, m_bUsaSuoni);
@@ -3897,6 +4314,7 @@ CVidsendDoc6PropPage0::CVidsendDoc6PropPage0(CVidsendDoc6 *p) : CPropertyPage(CV
 	m_MaxHTMLconn = 0;
 	m_AncheDirSrv = FALSE;
 	m_FiltraIP = FALSE;
+	m_IPlookup=FALSE;
 	//}}AFX_DATA_INIT
 	myParent=p;
 	isInitialized=FALSE;
@@ -3916,9 +4334,9 @@ void CVidsendDoc6PropPage0::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT3, m_MaxHTMLconn);
 	DDX_Check(pDX, IDC_CHECK3, m_AncheDirSrv);
 	DDX_Check(pDX, IDC_CHECK1, m_FiltraIP);
+	DDX_Check(pDX, IDC_CHECK4, m_IPlookup);
 	//}}AFX_DATA_MAP
 }
-
 
 BEGIN_MESSAGE_MAP(CVidsendDoc6PropPage0, CPropertyPage)
 	//{{AFX_MSG_MAP(CVidsendDoc6PropPage0)
@@ -3937,10 +4355,16 @@ BOOL CVidsendDoc6PropPage0::OnInitDialog() {
 		GetDlgItem(IDC_EDIT1)->EnableWindow(TRUE);
 		GetDlgItem(IDC_SPIN1)->EnableWindow(TRUE);
 		}
+	if(theApp.theServer2) {		// bah finire :)
+		m_Maxconn=theApp.theServer2->maxConn;
+		GetDlgItem(IDC_EDIT1)->EnableWindow(TRUE);
+		GetDlgItem(IDC_SPIN1)->EnableWindow(TRUE);
+		}
 	m_MaxHTMLconn=theApp.maxHTMLconn;
 	m_MaxconnSpin.SetRange(0,100);
 	m_MaxHTMLconnSpin.SetRange(0,100);
 	m_AncheDirSrv =myParent->Opzioni & CVidsendDoc6::mostraAncheDirSrv ? 1 : 0;
+	m_IPlookup=myParent->Opzioni & CVidsendDoc6::visualizzaIpLookup ? 1 : 0;
 	UpdateData(FALSE);
 	
 	isInitialized=TRUE;
@@ -4012,23 +4436,25 @@ BOOL CVidsendDoc7PropPage0::OnInitDialog() {
 
 
 CDlgEnterURL::CDlgEnterURL(BOOL m,CDocument *pParent /*=NULL*/)
-	: CDialog(CDlgEnterURL::IDD /*, pParent*/)
-{
+	: CDialog(CDlgEnterURL::IDD /*, pParent*/) {
 	//{{AFX_DATA_INIT(CDlgEnterURL)
 	m_URLstring = _T("");
 	m_One2One=FALSE;
+	m_Video=TRUE;
+	m_Audio=TRUE;
 	//}}AFX_DATA_INIT
 	Mode=m;
 	}
 
 
-void CDlgEnterURL::DoDataExchange(CDataExchange* pDX)
-{
+void CDlgEnterURL::DoDataExchange(CDataExchange* pDX) {
 	CDialog::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CDlgEnterURL)
 	DDX_Control(pDX, IDC_COMBO1, m_URL);
 	DDX_CBString(pDX, IDC_COMBO1, m_URLstring);
 	DDX_Check(pDX, IDC_CHECK1, m_One2One);
+	DDX_Check(pDX, IDC_CHECK2, m_Video);
+	DDX_Check(pDX, IDC_CHECK3, m_Audio);
 	//}}AFX_DATA_MAP
 }
 
@@ -4073,13 +4499,12 @@ int CDlgEnterURL::DoModal(CString *S,int tot) {
 	return CDialog::DoModal();
 	}
 
+
 /////////////////////////////////////////////////////////////////////////////
 // CPaginaTestDlg dialog
 
-
 CPaginaTestDlg::CPaginaTestDlg(CVidsendDoc2 * pParent /*=NULL*/)
-	: CDialog(CPaginaTestDlg::IDD/*, pParent*/)
-{
+	: CDialog(CPaginaTestDlg::IDD/*, pParent*/) {
 	//{{AFX_DATA_INIT(CPaginaTestDlg)
 	m_VideoImmagine = -1;
 	m_AudioFrequenza = -1;
@@ -4087,6 +4512,19 @@ CPaginaTestDlg::CPaginaTestDlg(CVidsendDoc2 * pParent /*=NULL*/)
 	m_AudioIntervallato = FALSE;
 	//}}AFX_DATA_INIT
 	myParent=pParent;
+	myParent2=NULL;
+}
+
+CPaginaTestDlg::CPaginaTestDlg(CVidsendDoc22 *pParent /*=NULL*/)
+	: CDialog(CPaginaTestDlg::IDD/*, pParent*/) {
+	//{{AFX_DATA_INIT(CPaginaTestDlg)
+	m_VideoImmagine = -1;
+	m_AudioFrequenza = -1;
+	m_AudioSweep = FALSE;
+	m_AudioIntervallato = FALSE;
+	//}}AFX_DATA_INIT
+	myParent=NULL;
+	myParent2=pParent;
 }
 
 
@@ -4112,10 +4550,18 @@ END_MESSAGE_MAP()
 BOOL CPaginaTestDlg::OnInitDialog() {
 	CDialog::OnInitDialog();
 	
-	m_VideoImmagine=myParent->pagProva.tipoVideo;
-	m_AudioFrequenza=myParent->pagProva.tipoAudio;
-	m_AudioIntervallato=myParent->pagProva.audioOpzioni & 1 ? 1 : 0;
-	m_AudioSweep=myParent->pagProva.audioOpzioni & 2 ? 1 : 0;
+	if(myParent) {
+		m_VideoImmagine=myParent->pagProva.tipoVideo;
+		m_AudioFrequenza=myParent->pagProva.tipoAudio;
+		m_AudioIntervallato=myParent->pagProva.audioOpzioni & 1 ? 1 : 0;
+		m_AudioSweep=myParent->pagProva.audioOpzioni & 2 ? 1 : 0;
+		}
+	else {
+		GetDlgItem(IDC_COMBO1)->ShowWindow(SW_HIDE);
+		m_AudioFrequenza=myParent2->pagProva.tipoAudio;
+		m_AudioIntervallato=myParent2->pagProva.audioOpzioni & 1 ? 1 : 0;
+		m_AudioSweep=myParent2->pagProva.audioOpzioni & 2 ? 1 : 0;
+		}
 	UpdateData(FALSE);		
 	
 	return TRUE;  // return TRUE unless you set the focus to a control
@@ -4130,8 +4576,7 @@ BOOL CPaginaTestDlg::OnInitDialog() {
 
 IMPLEMENT_DYNCREATE(CVideoSrcDialog, CDialog)
 
-CVideoSrcDialog::CVideoSrcDialog(CVidsendDoc2 *p) : CDialog(CVideoSrcDialog::IDD)
-{
+CVideoSrcDialog::CVideoSrcDialog(CVidsendDoc2 *p) : CDialog(CVideoSrcDialog::IDD) {
 	//{{AFX_DATA_INIT(CVideoSrcDialog)
 	m_VideoSource = -1;
 	m_AlternaSource = FALSE;
@@ -4145,14 +4590,15 @@ CVideoSrcDialog::~CVideoSrcDialog()
 {
 }
 
-void CVideoSrcDialog::DoDataExchange(CDataExchange* pDX)
-{
+void CVideoSrcDialog::DoDataExchange(CDataExchange* pDX) {
 	CDialog::DoDataExchange(pDX);
 	//{{AFX_DATA_MAP(CVideoSrcDialog)
-	DDX_Radio(pDX, IDC_RADIO4, m_VideoSource);
+	DDX_Radio(pDX, IDC_RADIO5, m_VideoSource);
 	DDX_Check(pDX, IDC_CHECK2, m_AlternaSource);
-	DDX_Radio(pDX, IDC_RADIO14, m_Overlay);
+	DDX_Radio(pDX, IDC_RADIO3, m_Overlay);
+	DDX_Radio(pDX, IDC_RADIO1, m_VideoSource2);
 	DDX_CBIndex(pDX, IDC_COMBO1, m_Schede);
+	DDX_Text(pDX, IDC_EDIT1, m_RTSPAddress);
 	//}}AFX_DATA_MAP
 }
 
@@ -4163,6 +4609,8 @@ BEGIN_MESSAGE_MAP(CVideoSrcDialog, CDialog)
 	ON_BN_CLICKED(IDC_BUTTON2, OnButton2)
 	ON_BN_CLICKED(IDC_BUTTON3, OnButton3)
 	ON_BN_CLICKED(IDC_BUTTON4, OnButton4)
+	ON_BN_CLICKED(IDC_RADIO1, OnRadio1)
+	ON_BN_CLICKED(IDC_RADIO2, OnRadio1)
 	ON_CBN_SELENDOK(IDC_COMBO1, OnSelendokCombo1)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
@@ -4190,11 +4638,16 @@ BOOL CVideoSrcDialog::OnInitDialog() {
 	maxSchede=i+1;
 	m_Schede=myParent->theTV->theCapture+1;
 	m_VideoSource=myParent->videoSource;
+	m_VideoSource2=myParent->Opzioni & CVidsendDoc2::usaRTSP ? 1 : 0;
+//	m_VideoSource2=myParent->videoSourceRTSP;
 	m_AlternaSource=myParent->alternaSource;
 	m_Overlay=myParent->OpzioniSorgenteVideo & CVidsendDoc2::useOverlay ? 1 : 0;
+//	((CComboBox *)GetDlgItem(IDC_COMBO1))->AddString("RTSP");
+
+	m_RTSPAddress=myParent->RTSPaddress;
 
 	UpdateData(FALSE);
-	updateDaCheck();	
+	updateDaCheck();
 
 	return TRUE;  // return TRUE unless you set the focus to a control
 	              // EXCEPTION: OCX Property Pages should return FALSE
@@ -4351,21 +4804,27 @@ void CVideoSrcDialog::OnButton4() {
 	}
 
 
+void CVideoSrcDialog::OnRadio1() {
+
+	UpdateData(TRUE);
+	updateDaCheck();	
+	}
+
 void CVideoSrcDialog::OnSelendokCombo1() {
 	
-	updateDaCheck();	
+	updateDaCheck();
 	}
 
 void CVideoSrcDialog::updateDaCheck() {
 
 	UpdateData();
-	GetDlgItem(IDC_RADIO14)->EnableWindow(m_Schede>0);
-	GetDlgItem(IDC_RADIO15)->EnableWindow(m_Schede>0);
+	GetDlgItem(IDC_RADIO3)->EnableWindow(m_Schede>0);
+	GetDlgItem(IDC_RADIO4)->EnableWindow(m_Schede>0);
 	if(myParent->theTV) {		// gestire + schede, quando lo si fara'...
 #ifndef USA_DIRECTX
 		if(!myParent->theTV->hasOverlay()) {
 #endif
-			GetDlgItem(IDC_RADIO15)->EnableWindow(FALSE);
+			GetDlgItem(IDC_RADIO4)->EnableWindow(FALSE);
 			m_Overlay=0;
 #ifndef USA_DIRECTX
 			}
@@ -4381,12 +4840,18 @@ void CVideoSrcDialog::updateDaCheck() {
 	GetDlgItem(IDC_BUTTON2)->EnableWindow(myParent->theTV->GetHwnd() != NULL);
 #endif
 
-	GetDlgItem(IDC_RADIO4)->EnableWindow(m_Schede > 0);
-	GetDlgItem(IDC_RADIO9)->EnableWindow(m_Schede > 1);
-	GetDlgItem(IDC_RADIO10)->EnableWindow(m_Schede > 2);
-	GetDlgItem(IDC_RADIO12)->EnableWindow(m_Schede > 3);
+	GetDlgItem(IDC_RADIO5)->EnableWindow(m_Schede > 0 || m_VideoSource2 != 0);
+	GetDlgItem(IDC_RADIO6)->EnableWindow(m_Schede > 1 || m_VideoSource2 != 0);
+	GetDlgItem(IDC_RADIO7)->EnableWindow(m_Schede > 2 || m_VideoSource2 != 0);
+	GetDlgItem(IDC_RADIO8)->EnableWindow(m_Schede > 3 || m_VideoSource2 != 0);
 //??	GetDlgItem(IDC_RADIO11)->EnableWindow(m_Schede > 0);
-	GetDlgItem(IDC_CHECK2)->EnableWindow(m_Schede > 0);
+	GetDlgItem(IDC_CHECK2)->EnableWindow(m_Schede > 0 || m_VideoSource2 != 0);
+
+	GetDlgItem(IDC_COMBO1)->EnableWindow(m_VideoSource2 == 0);
+	GetDlgItem(IDC_BUTTON5)->EnableWindow(m_VideoSource2 == 0);
+	GetDlgItem(IDC_BUTTON6)->EnableWindow(m_VideoSource2 == 0);
+	GetDlgItem(IDC_EDIT1)->EnableWindow(m_VideoSource2 != 0);
+	
 	}
 
 #endif
@@ -4730,6 +5195,65 @@ BOOL CApriVideoDlg::OnInitDialog() {
 	m_Loop=myParent->OpzioniSorgenteVideo & CVidsendDoc2::aviLoop ? 1 : 0;	
 	m_TipoVideo=myParent->OpzioniSorgenteVideo & CVidsendDoc2::aviMode ? 1 : 0;	
 	m_NomeFile=myParent->nomeAVI_PB;
+	UpdateData(FALSE);
+	return TRUE;  // return TRUE unless you set the focus to a control
+	              // EXCEPTION: OCX Property Pages should return FALSE
+	}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CApriAudioDlg dialog
+
+CApriAudioDlg::CApriAudioDlg(CVidsendDoc22* pParent /*=NULL*/)
+	: CDialog(CApriAudioDlg::IDD)
+{
+	//{{AFX_DATA_INIT(CApriAudioDlg)
+	m_Loop = FALSE;
+	m_NomeFile = _T("");
+	m_TipoVideo = -1;
+	//}}AFX_DATA_INIT
+	myParent=pParent;
+}
+
+
+void CApriAudioDlg::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CApriAudioDlg)
+	DDX_Check(pDX, IDC_CHECK2, m_Loop);
+	DDX_Text(pDX, IDC_EDIT1, m_NomeFile);
+	DDV_MaxChars(pDX, m_NomeFile, 127);
+	DDX_Radio(pDX, IDC_RADIO1, m_TipoVideo);
+	//}}AFX_DATA_MAP
+}
+
+
+BEGIN_MESSAGE_MAP(CApriAudioDlg, CDialog)
+	//{{AFX_MSG_MAP(CApriAudioDlg)
+	ON_BN_CLICKED(IDC_BUTTON1, OnButton1)
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CApriAudioDlg message handlers
+
+void CApriAudioDlg::OnButton1() {
+	CFileDialog myDlg(TRUE,"*.mp3",myParent->nomeMP3_PB,OFN_HIDEREADONLY,"File audio (*.mp3)|*.mp3|Playlist (*.m3u)|*.m3u|File audio (*.wav)|*.wav|Tutti i file (*.*)|*.*||",this);
+
+	if(myDlg.DoModal() == IDOK) {
+		m_NomeFile=myDlg.GetPathName();
+		UpdateData(FALSE);
+		}
+	}
+
+
+BOOL CApriAudioDlg::OnInitDialog() {
+	CDialog::OnInitDialog();
+	
+	m_NomeFile=myParent->nomeMP3_PB;
+	SetWindowText("Trasmissione audio");
+	GetDlgItem(IDC_RADIO1)->ShowWindow(SW_HIDE);
+	GetDlgItem(IDC_RADIO2)->ShowWindow(SW_HIDE);
 	UpdateData(FALSE);
 	return TRUE;  // return TRUE unless you set the focus to a control
 	              // EXCEPTION: OCX Property Pages should return FALSE
@@ -5305,7 +5829,7 @@ END_MESSAGE_MAP()
 
 BOOL CQualityBoxDlg::OnInitDialog() {
 	CDialog::OnInitDialog();
-	POINT pt;
+	POINT pt={0};
 
 //	g_MovingMainWnd = false;
 	bTrack = FALSE;
@@ -5569,5 +6093,243 @@ void CQualityBoxDlg::OnTimer(UINT nIDEvent) {
 //mettere un timer e sfornare frame...		theApp.renderBitmap(pDC,IDB_MONOSCOPIO,&r);
 	}
 
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg dialog
+
+CImpostaEffettiSonoriDlg::CImpostaEffettiSonoriDlg(CWnd* pParent /*=NULL*/)
+	: CDialog(CImpostaEffettiSonoriDlg::IDD, pParent) {
+
+	//{{AFX_DATA_INIT(CImpostaEffettiSonoriDlg)
+		// NOTE: the ClassWizard will add member initialization here
+	//}}AFX_DATA_INIT
+	m_Parent=(CVidsendView22*)pParent;
+}
+
+
+void CImpostaEffettiSonoriDlg::DoDataExchange(CDataExchange* pDX) {
+
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CImpostaEffettiSonoriDlg)
+	DDX_Control(pDX, IDC_TAB1, m_Tab);
+	//}}AFX_DATA_MAP
+}
+
+
+BEGIN_MESSAGE_MAP(CImpostaEffettiSonoriDlg, CDialog)
+	//{{AFX_MSG_MAP(CImpostaEffettiSonoriDlg)
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB1, OnSelchangeTab1)
+	ON_NOTIFY(TCN_SELCHANGING, IDC_TAB1, OnSelchangingTab1)
+	ON_WM_DESTROY()
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg message handlers
+
+BOOL CImpostaEffettiSonoriDlg::OnInitDialog() {
+	CRect rcClient,rcWindow;
+	int i,j;
+	CVidsendDoc22 *pDoc=((CVidsendView22*)m_Parent)->GetDocument();
+
+	CDialog::OnInitDialog();
+
+	m_Tab.InsertItem(0,"Banco 1");
+	myDlg=new CImpostaEffettiSonoriDlg2(this);
+	myDlg->Create(IDD_IMPOSTA_EFFETTISONORI2,this /*GetWindow(0)*/);
+	m_Tab.GetClientRect(&rcClient);   
+	m_Tab.AdjustRect(FALSE, &rcClient);
+	m_Tab.GetWindowRect(&rcWindow);   
+	ScreenToClient(rcWindow);
+	rcClient.OffsetRect(rcWindow.left, rcWindow.top);
+
+//	 m_Tab.GetWindowRect(&rcClient);
+//   m_Tab.AdjustRect(FALSE, &rcClient);
+
+	myDlg->MoveWindow(&rcClient);
+	myDlg->ShowWindow(SW_SHOW);
+
+	m_Tab.InsertItem(1,"Banco 2");
+	m_Tab.InsertItem(2,"Banco 3");
+
+  for(j=0; j<3; j++) {
+  	for(i=0; i<12; i++) {
+			m_Wavs[j][i]=pDoc->WAVFiles[j][i];
+			}
+		}
+
+	myDlg->updateFields();
+
+	myDlg->UpdateData(FALSE);
+	UpdateData(FALSE);
+	myDlg->GetDlgItem(IDC_EDIT21)->SetFocus();		// non va qua...
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+	}
+
+void CImpostaEffettiSonoriDlg::OnOK() {
+	
+	myDlg->UpdateData();
+	UpdateData();
+	myDlg->readFields();
+
+	CDialog::OnOK();
+	}
+
+void CImpostaEffettiSonoriDlg::OnCancel() {
+
+	CDialog::OnCancel();
+	}
+
+void CImpostaEffettiSonoriDlg::OnDestroy() {
+
+	delete myDlg;
+	CDialog::OnDestroy();
+	}
+
+void CImpostaEffettiSonoriDlg::OnSelchangingTab1(NMHDR* pNMHDR, LRESULT* pResult) {
+
+	myDlg->UpdateData();
+
+//	m_tabsTest.GetCurSel();
+	myDlg->readFields();
+
+	*pResult = 0;
+	}
+
+void CImpostaEffettiSonoriDlg::OnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult) {
+
+	myDlg->UpdateData();
+	UpdateData();
+
+	myDlg->updateFields();
+	myDlg->GetDlgItem(IDC_EDIT21)->SetFocus();
+
+	myDlg->UpdateData(FALSE);
+
+	*pResult = 0;
+	}
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg2 dialog
+
+CImpostaEffettiSonoriDlg2::CImpostaEffettiSonoriDlg2(CWnd* pParent /*=NULL*/)
+	: CDialog(CImpostaEffettiSonoriDlg2::IDD, pParent) {
+	//{{AFX_DATA_INIT(CImpostaEffettiSonoriDlg2)
+	m_Wav1 = _T("");
+	m_Wav2 = _T("");
+	m_Wav3 = _T("");
+	m_Wav4 = _T("");
+	m_Wav5 = _T("");
+	m_Wav6 = _T("");
+	m_Wav7 = _T("");
+	m_Wav8 = _T("");
+	m_Wav9 = _T("");
+	m_Wav10 = _T("");
+	m_Wav11 = _T("");
+	m_Wav12 = _T("");
+	//}}AFX_DATA_INIT
+
+	m_Parent=(CImpostaEffettiSonoriDlg*)pParent;
+}
+
+
+void CImpostaEffettiSonoriDlg2::DoDataExchange(CDataExchange* pDX) {
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CImpostaEffettiSonoriDlg2)
+	DDX_Text(pDX, IDC_EDIT21, m_Wav1);
+	DDX_Text(pDX, IDC_EDIT22, m_Wav2);
+	DDX_Text(pDX, IDC_EDIT23, m_Wav3);
+	DDX_Text(pDX, IDC_EDIT24, m_Wav4);
+	DDX_Text(pDX, IDC_EDIT25, m_Wav5);
+	DDX_Text(pDX, IDC_EDIT26, m_Wav6);
+	DDX_Text(pDX, IDC_EDIT27, m_Wav7);
+	DDX_Text(pDX, IDC_EDIT28, m_Wav8);
+	DDX_Text(pDX, IDC_EDIT29, m_Wav9);
+	DDX_Text(pDX, IDC_EDIT30, m_Wav10);
+	DDX_Text(pDX, IDC_EDIT31, m_Wav11);
+	DDX_Text(pDX, IDC_EDIT32, m_Wav12);
+	//}}AFX_DATA_MAP
+}
+
+
+BEGIN_MESSAGE_MAP(CImpostaEffettiSonoriDlg2, CDialog)
+	//{{AFX_MSG_MAP(CImpostaEffettiSonoriDlg2)
+	//}}AFX_MSG_MAP
+	ON_CONTROL_RANGE(BN_CLICKED, IDC_BUTTON31, IDC_BUTTON42, OnButtonSfoglia)
+	ON_CONTROL_RANGE(BN_CLICKED, IDC_BUTTON43, IDC_BUTTON54, OnButtonPlay)
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CImpostaEffettiSonoriDlg2 message handlers
+
+void CImpostaEffettiSonoriDlg2::OnOK() {
+
+	CDialog::OnOK();
+//	m_Parent->PostMessage(WM_CLOSE,0,0);
+	m_Parent->OnOK();
+	}
+
+void CImpostaEffettiSonoriDlg2::OnCancel() {
+
+	CDialog::OnCancel();
+	m_Parent->OnCancel();
+	}
+
+void CImpostaEffettiSonoriDlg2::updateFields() {
+
+	m_Wav1=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][0];
+	m_Wav2=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][1];
+	m_Wav3=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][2];
+	m_Wav4=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][3];
+	m_Wav5=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][4];
+	m_Wav6=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][5];
+	m_Wav7=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][6];
+	m_Wav8=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][7];
+	m_Wav9=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][8];
+	m_Wav10=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][9];
+	m_Wav11=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][10];
+	m_Wav12=m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][11];
+	}
+
+void CImpostaEffettiSonoriDlg2::readFields() {
+
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][0]=m_Wav1;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][1]=m_Wav2;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][2]=m_Wav3;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][3]=m_Wav4;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][4]=m_Wav5;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][5]=m_Wav6;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][6]=m_Wav7;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][7]=m_Wav8;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][8]=m_Wav9;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][9]=m_Wav10;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][10]=m_Wav11;
+	m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][11]=m_Wav12;
+	}
+
+void CImpostaEffettiSonoriDlg2::OnButtonSfoglia(UINT nID) {
+	CFileDialog myDlg(TRUE,"*.wav",NULL,OFN_HIDEREADONLY,"File audio (*.wav)|*.wav|Tutti i file (*.*)|*.*||",this);
+
+	nID-=IDC_BUTTON31;
+	if(myDlg.DoModal() == IDOK) {		
+		m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][nID]=myDlg.GetPathName();
+		updateFields();
+		UpdateData(FALSE);
+		}
+	}
+
+void CImpostaEffettiSonoriDlg2::OnButtonPlay(UINT nID) {
+
+	UpdateData();
+
+	readFields();
+
+	nID-=IDC_BUTTON43;
+	if(!((CVidsendView22*)m_Parent->m_Parent)->playSound(m_Parent->m_Wavs[m_Parent->m_Tab.GetCurSel()][nID],100))
+		MessageBox("Il file non esiste.","Errore",MB_ICONEXCLAMATION | MB_OK);
+	}
 
 

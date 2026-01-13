@@ -15,16 +15,17 @@ static CTV *m_TV;		// usata dalle callback...
 
 CTV::CTV(CWnd *pWnd) {
 
-	preConstruct(pWnd);			// non so come richiamare un constructor da un altro...
+	preConstruct(pWnd);			// non so come richiamare un constructor da un altro... C11
+//https://stackoverflow.com/questions/308276/can-i-call-a-constructor-from-another-constructor-do-constructor-chaining-in-c
 	}
 
-CTV::CTV(CWnd *pWnd, BOOL canOverlay,BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+CTV::CTV(CWnd *pWnd, BOOL canOverlay,const BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
 
 	preConstruct(pWnd);
 	initCapture(canOverlay, biRaw, fps, preferredDriver, kFrame, bAudio, preferredWf,bVerbose);
 	}
 
-CTV::CTV(CWnd *pWnd, BOOL canOverlay, RECT *bSize, WORD bpp, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+CTV::CTV(CWnd *pWnd, BOOL canOverlay, const SIZE *bSize, WORD bpp, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
 	BITMAPINFOHEADER bmi;
 
 	preConstruct(pWnd);
@@ -67,6 +68,7 @@ void CTV::preConstruct(CWnd *pWnd) {
 	m_hWnd=0;
 	vFrameNum=aFrameNum=vFrameNum4Save=aFrameNum4Save=saveWait4KeyFrame=0;
 	}
+
 
 int CTV::initCapture(BOOL canOverlay, BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, 
 										 DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
@@ -154,7 +156,7 @@ int CTV::initCapture(BOOL canOverlay, BITMAPINFOHEADER *biRaw, DWORD fps, DWORD 
 			captureParms.wNumVideoRequested=8;
 			captureParms.wNumAudioRequested=5;
 			captureParms.wStepCaptureAverageFrames=0;
-			captureParms.dwAudioBufferSize =wfex.nSamplesPerSec ;
+			captureParms.dwAudioBufferSize =wfex.nSamplesPerSec;
 			i=capCaptureSetSetup(hWnd,&captureParms,sizeof(CAPTUREPARMS)); 
 			biBaseRawBitmap=biRawBitmap;
 			i=setVideoFormat(&biRawBitmap);
@@ -225,7 +227,7 @@ rifo_check_video_format:
 				}
 			else {			// v. distruttore
 				if(theFrame && (int)theFrame != -1) 
-					GlobalFree(theFrame);	// usato dal JPEG dell'HTML
+					HeapFree(GetProcessHeap(),0,theFrame);	// usato dal JPEG dell'HTML
 				if(aviFile)
 					endSaveFile();
 				if(hWnd) {
@@ -355,6 +357,7 @@ parte nostra=0D*/
 	wfex.cbSize = 0;
 
 	if(preferredWf) {
+		memcpy(&wfd,preferredWf,sizeof(WAVEFORMATEX));
 		}
 	else {
 		GSM610WAVEFORMAT mywfx;
@@ -384,8 +387,12 @@ fine:
 
 CTV::~CTV() {
 
+	waveInReset(m_hWaveIn);
+	waveInStop(m_hWaveIn);
+	waveInClose(m_hWaveIn);
+
 	if(theFrame && (int)theFrame != -1) 
-		GlobalFree(theFrame);	// usato dal JPEG dell'HTML
+		HeapFree(GetProcessHeap(),0,theFrame);	// usato dal JPEG dell'HTML
 	if(aviFile)
 		endSaveFile();
 	if(hWnd) {
@@ -398,9 +405,12 @@ CTV::~CTV() {
 		driverDisconnect(); 
 		::DestroyWindow(hWnd);
 		}
-	if(hAcm)
-		acmStreamClose(hAcm,0);
-	hAcm=NULL;
+	if(m_hAcm)
+		acmStreamClose(m_hAcm,0);
+	m_hAcm=NULL;
+	delete []m_AudioBuffer1;		m_AudioBuffer1=NULL;
+	delete []m_AudioBuffer2;		m_AudioBuffer2=NULL;
+
 	if(hICCo) {
 		ICCompressEnd(hICCo);
 		ICClose(hICCo);
@@ -425,7 +435,7 @@ RECT *CTV::Resize(RECT *r, BOOL force) {
 		allowOverlay ? overlay(FALSE) : preview(FALSE);
 		if(force) {
 			biRawBitmap.biWidth=min(r->right-r->left,640);
-			biRawBitmap.biHeight=(biRawBitmap.biWidth*3)/4;
+			biRawBitmap.biHeight=(biRawBitmap.biWidth*biRawBitmap.biBitcount/8)/4;
 			}
 		r->right=biRawBitmap.biWidth;
 		r->bottom=biRawBitmap.biHeight;
@@ -572,7 +582,7 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 		b.CreateBitmap(biCompDef.bmiHeader.biWidth,biCompDef.bmiHeader.biHeight,1,biCompDef.bmiHeader.biBitCount,NULL);
 		b.GetBitmap(&bmp);
 		n=biCompDef.bmiHeader.biWidth*biCompDef.bmiHeader.biHeight*biCompDef.bmiHeader.biBitCount/8;
-		p=(BYTE *)GlobalAlloc(GMEM_FIXED,n+10 /* per DWORD! */);
+		p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,n+10 /* per DWORD! */);
 		bmp.bmBits=p;
 		for(i=0; i<n; i+=3) {
 			*(DWORD *)p=RGB(0,0,192);
@@ -581,13 +591,13 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 //		b.SetBitmapBits(n,bmp.bmBits);
 		// vorrei o un monoscopio con la data e l'ora, o almeno uno sfondo colorato con data e ora
 		superImposeDateTime(&biRawDef.bmiHeader,(BYTE *)bmp.bmBits);
-		p2=(BYTE *)GlobalAlloc(GMEM_FIXED,maxFrameSize+100);
+		p2=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,maxFrameSize+100);
 		t=l=0;
 		i=ICCompress(hICCo,ICCOMPRESS_KEYFRAME,
 			&biCompDef.bmiHeader,p2,&biRawDef.bmiHeader,bmp.bmBits,
 			&l,&t,0,0/*2500*/,theApp.theServer->myQV.quality,
 			NULL,NULL);
-		GlobalFree(bmp.bmBits);
+		HeapFree(GetProcessHeap(),0,bmp.bmBits);
 		if(i == ICERR_OK) {
 			vFrameNum4Save=AVIStreamLength(myps);
 			for(i=0; i<(opzioni & CVidsendDoc2::quantiFrame ? 1 : framesPerSec); i++) {		// sempre 1 sec.
@@ -601,7 +611,7 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 				vFrameNum4Save++;
 				}
 			}
-		GlobalFree(p2);
+		HeapFree(GetProcessHeap(),0,p2);
 		if(psText && imposeTime) {
 			n=AVIStreamLength(psText);
 			CString S;
@@ -1091,7 +1101,7 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 		case 24:
 			x=bi->biWidth;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x*3+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*3+3);
 			if(p) {
 				for(j=0; j<y; j++) {
 					p2=d+j*(x*3);
@@ -1106,14 +1116,14 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 						p2-=3;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		case 16:
 			//testare!
 			x=bi->biWidth;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x*2+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*2+2);
 			if(p) {
 				for(j=0; j<y; j++) {
 					p2=d+j*(x*2);
@@ -1127,7 +1137,7 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 						p2-=2;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		}
@@ -1144,7 +1154,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 		case 24:
 			x=bi->biWidth*3;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x+3);
 			if(p) {
 				ps=d;
 				pd=d+x*(y-1);
@@ -1156,7 +1166,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 					ps+=x;
 					pd-=x;
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		case 16:
@@ -1164,7 +1174,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 			//testare!
 			x=bi->biWidth*2;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x+2);
 			if(p) {
 				ps=d;
 				pd=d+x*(y-1);
@@ -1176,7 +1186,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 					ps+=x;
 					pd-=x;
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		}
@@ -1198,7 +1208,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 			y=bi->biHeight;
 			xRatio=x/rcDest->right;
 			yRatio=y/rcDest->bottom;
-			p=(BYTE *)GlobalAlloc(GPTR,x*3+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*3+3);
 			p3=d;
 			if(p) {
 				for(j=0; j<y; j+=yRatio) {
@@ -1208,12 +1218,12 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 					for(i=0; i<x; i+=xRatio) {
 						n=*(DWORD *)p1;
 						*(WORD *)p3=n;
-						*(p2+2)=LOBYTE(HIWORD(n));
+						*(p3+2)=LOBYTE(HIWORD(n));
 						p1+=xRatio*3;
 						p3+=3;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 
@@ -1223,7 +1233,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 			y=bi->biHeight;
 			xRatio=x/rcDest->right;
 			yRatio=y/rcDest->bottom;
-			p=(BYTE *)GlobalAlloc(GPTR,x*2+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*2+2);
 			p3=d;
 			if(p) {
 				for(j=0; j<y; j+=yRatio) {
@@ -1237,7 +1247,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 						p3+=2;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		}
@@ -1325,7 +1335,7 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 			if(theApp.theServer->Opzioni & CVidsendDoc2::sendVideo && !theApp.theServer->bPaused) {
 
 				if(theApp.theServer->Opzioni & CVidsendDoc2::videoType) {
-					pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+					pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 					pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;				// indirizzo del buffer DOPO la struct header!
 					avh=(struct AV_PACKET_HDR *)pSBuf;
 					avh->type=0;
@@ -1335,12 +1345,12 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 					avh->tag=MAKEFOURCC('G','D','2','0');
 #endif
 	//					avh.psec=1000 / m_TV->framesPerSec;
-					avh->info=0;
 					avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());	// anche lpVHdr->dwTimeCaptured
 					memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
 					memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
 					avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
-					avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
+					avh->info=(lpVHdr->dwFlags & VHDR_KEYFRAME) ? AV_PACKET_INFO_KEYFRAME : 0;
+					// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 
 					if(theApp.debugMode) {
 						char *p=(char *)GlobalAlloc(GPTR,1024);
@@ -1353,7 +1363,7 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 
 					if(m_TV->biRawBitmap.biCompression != 0) {
 						if(m_TV->hICDe) {
-							pInp=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
+							pInp=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitCount/8);
 							if(pInp) {
 								pInpAllocated=TRUE;
 								i=ICDecompress(m_TV->hICDe,0 /*ICDECOMPRESS_HURRYUP*/,
@@ -1371,8 +1381,9 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 						}
 
 					if(m_TV->theFrame == (BYTE *)-1) {		// se richiesto...
-						m_TV->theFrame=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
-						memcpy(m_TV->theFrame,pInp,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
+						l=m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitCount/8;
+						m_TV->theFrame=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,l);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
+						memcpy(m_TV->theFrame,pInp,l);
 						}
 
 					if(theApp.theServer->Opzioni & CVidsendDoc2::forceBN) {
@@ -1395,7 +1406,7 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 						}
 					if(theApp.theServer->myQV.compressor) {
 						l=t=0;
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+						pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
 						avh=(struct AV_PACKET_HDR *)pSBuf;
 						avh->type=0;
@@ -1426,7 +1437,9 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 							memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
 							avh->len=m_TV->biCompDef.bmiHeader.biSizeImage+sizeof(BITMAPINFOHEADER);
 	//							avh.psec=1000 / m_TV->framesPerSec;
-							avh->info=t;
+							avh->info=(t & AVIIF_KEYFRAME) ? AV_PACKET_INFO_KEYFRAME : 0;
+t;
+						// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 							avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
 
 							if(theApp.debugMode>1) {
@@ -1442,12 +1455,12 @@ LRESULT CALLBACK VideoCallbackProc(HWND hWnd, LPVIDEOHDR lpVHdr) {
 not_RGB:
 							MessageBeep(-1);
 							if(pSBuf) 
-								GlobalFree(pSBuf);
+								HeapFree(GetProcessHeap(),0,pSBuf);
 							goto fine;
 							}
 						}
 					else {
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+						pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;					// indirizzo del buffer DOPO la struct header!
 						avh=(struct AV_PACKET_HDR *)pSBuf;
 						avh->type=0;
@@ -1461,7 +1474,8 @@ not_RGB:
 						avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
 						memcpy(pSBuf2,&m_TV->biRawDef.bmiHeader,sizeof(BITMAPINFOHEADER));
 						memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
-						avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
+						avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AV_PACKET_INFO_KEYFRAME : 0;
+						// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 
 						if(theApp.debugMode) {
 							char *p=(char *)GlobalAlloc(GPTR,1024);
@@ -1478,7 +1492,7 @@ fine_ok:
 					if(m_TV->opzioniSave & CVidsendDoc2::quantiFrame)
 						m_TV->saveWait4KeyFrame=1;	// con questo trucco salvo solo i k-frame ossia 1 al secondo!
 					if(m_TV->saveWait4KeyFrame) {
-						if(avh->info & AVIIF_KEYFRAME)
+						if(avh->info & AV_PACKET_INFO_KEYFRAME)
 							m_TV->saveWait4KeyFrame=0;
 						else
 							goto skipSave;
@@ -1488,7 +1502,7 @@ fine_ok:
 						1,// number to write 
 						pSBuf2+sizeof(BITMAPINFOHEADER),
 						avh->len-sizeof(BITMAPINFOHEADER),	/*m_TV->biCompDef.bmiHeader.biSizeImage,*/
-						avh->info, // flags.... 
+						avh->info & AV_PACKET_INFO_KEYFRAME, // flags.... 
 						NULL, NULL);
 					if(i!=AVIERR_OK)
 						if(theApp.debugMode)
@@ -1501,7 +1515,7 @@ fine_ok:
 							1,// number to write 
 							(LPSTR)(LPCTSTR)S,
 							S.GetLength()+1,
-							avh->info, // flags.... 
+							avh->info & AV_PACKET_INFO_KEYFRAME, // flags.... 
 							NULL, NULL);
 						}
 					m_TV->vFrameNum4Save++;
@@ -1525,7 +1539,7 @@ fine: ;
 
 			}
 		if(pInpAllocated)
-			GlobalFree(pInp);
+			HeapFree(GetProcessHeap(),0,pInp);
 		bInSend=FALSE;
 		}
 	else {
@@ -1559,7 +1573,7 @@ LRESULT CALLBACK WaveCallbackProc(HWND hWnd, LPWAVEHDR lpWHdr) {
 			if(theApp.theServer->bAudio && !theApp.theServer->bPaused) {
 	//			l+=sizeof(WAVEFORMATEX);
 
-				pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxWaveoutSize);
+				pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxWaveoutSize);
 				pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;
 				avh=(struct AV_PACKET_HDR *)pSBuf;
 
@@ -1755,8 +1769,7 @@ double SampleGrabberCallback::round(double d,double n) {
 DShowVideoCapture::DShowVideoCapture(int deviceIndex,HWND hWnd)
 	: crossbar(0),analogVideo(0),videoAmp(0)
 	, sampleGrabberCB(0)
-	, isRunning(false)
-{
+	, isRunning(false) {
 	m_hWnd=hWnd/*NULL*/;
 	doPreview=TRUE;
 
@@ -2666,12 +2679,14 @@ BOOL DShowVideoCapture::GetDriverDescription(WORD wDriverIndex,
 
 
 #define INITGUID
+
 //#include <ddraw.h>
-#include <initguid.h>				// facendo così, NON va messa dxguid.lib nel Linker! (d'altronde, al contrario, non trovava alcune GUID...!)
+//#include <initguid.h>				// facendo così, NON va messa dxguid.lib nel Linker! (d'altronde, al contrario, non trovava alcune GUID...!)
 #include <dxdiag.h>
 #undef INITGUID
 #include <dinput.h>
 #include <dmusici.h>
+
 
 typedef HRESULT(WINAPI * DIRECTDRAWCREATE)( GUID*, LPDIRECTDRAW*, IUnknown* );
 typedef HRESULT(WINAPI * DIRECTDRAWCREATEEX)( GUID*, VOID**, REFIID, IUnknown* );
@@ -2712,6 +2727,7 @@ typedef HRESULT(WINAPI * DIRECTINPUTCREATE)( HINSTANCE, DWORD, LPDIRECTINPUT*,
 //            "if (dxVer < 0x5000000) return FALSE;" is MUCH BETTER.
 //          to ensure your app will run on future releases of DirectX.
 //-----------------------------------------------------------------------------
+
 void DShowVideoCapture::GetDXVersion(DWORD* pdwDXVersion, DWORD* pdwDXPlatform) {
   HRESULT              hr;
   HINSTANCE            DDHinst = 0;
@@ -3060,7 +3076,6 @@ void DShowVideoCapture::GetDXVersion(DWORD* pdwDXVersion, DWORD* pdwDXPlatform) 
   // Close open libraries and return
   FreeLibrary(DDHinst);
     
-  return;
 	}
 
 
@@ -3073,19 +3088,21 @@ CTV::CTV(CWnd *pWnd) {
 	preConstruct(pWnd);			// non so come richiamare un constructor da un altro...
 	}
 
-CTV::CTV(CWnd *pWnd, BOOL canOverlay,BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+CTV::CTV(CWnd *pWnd, BOOL canOverlay, const BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, const WAVEFORMATEX *preferredWf, BOOL bVerbose) {
 
 	preConstruct(pWnd);
 	initCapture(canOverlay, biRaw, fps, preferredDriver, kFrame, bAudio, preferredWf,bVerbose);
 	}
 
-CTV::CTV(CWnd *pWnd, BOOL canOverlay, RECT *bSize, WORD bpp, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+CTV::CTV(CWnd *pWnd, BOOL canOverlay, const SIZE *bSize, WORD bpp, DWORD fps, DWORD preferredFormat, DWORD preferredDriver, 
+				 DWORD kFrame, BOOL bAudio, const WAVEFORMATEX *preferredWf, BOOL bVerbose) {
 	BITMAPINFOHEADER bmi;
 
 	preConstruct(pWnd);
-	bmi.biWidth=bSize->right;
-	bmi.biHeight=bSize->bottom;
+	bmi.biWidth=bSize->cx;
+	bmi.biHeight=bSize->cy;
 	bmi.biBitCount=bpp;
+	bmi.biCompression=preferredFormat;
 
 	initCapture(canOverlay,&bmi, fps, preferredDriver, kFrame, bAudio, preferredWf, bVerbose);
 #ifdef _CAMPARTY_MODE				// per ora solo qua, ma potrebbe avere senso anche agli altri
@@ -3093,6 +3110,20 @@ CTV::CTV(CWnd *pWnd, BOOL canOverlay, RECT *bSize, WORD bpp, DWORD fps, DWORD pr
 	bSize.right=bmi.biWidth;
 #endif
 	}
+
+const COMPRESSION_TYPES CTV::acceptedCompressionType[]={
+	{	0, 24 },
+
+//	biRawBitmap.biCompression=mmioFOURCC('I','Y','U','V');			// YUV 420 Philips
+
+//		biRawBitmap.biBitCount=12;		// YUV 420	Philips
+//						biRawBitmap.biBitCount=16;		//la VB RT300
+	{	MAKEFOURCC('Y','U','Y','2'), 16 },
+	{ MAKEFOURCC('U','Y','V','Y'), 16 },
+	{	MAKEFOURCC('M','J','P','G'), 24	},
+	{	MAKEFOURCC('I','U','Y','V'), 12 },			// riaggiunto 2020... verificare se non dà problemi
+	{	MAKEFOURCC('I','4','2','0'), 12 /*boh?*/}			// 2023... idem
+	};
 
 void CTV::preConstruct(CWnd *pWnd) {
 
@@ -3121,14 +3152,21 @@ void CTV::preConstruct(CWnd *pWnd) {
 	vFrameNum=aFrameNum=vFrameNum4Save=aFrameNum4Save=saveWait4KeyFrame=0;
 	wInput=2 /*PhysConn_Video_Composite*/;
 	m_DShow=NULL;
+
+	m_hWaveIn=(HWAVEIN)-1;
+	ZeroMemory(&IWaveHdr1,sizeof(WAVEHDR));
+	ZeroMemory(&IWaveHdr2,sizeof(WAVEHDR));
+	m_AudioBuffer1=m_AudioBuffer2=NULL;
 	}
 
-int CTV::initCapture(BOOL canOverlay, BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+int CTV::initCapture(BOOL canOverlay, const BITMAPINFOHEADER *biRaw, DWORD fps, DWORD preferredDriver, DWORD kFrame, BOOL bAudio, 
+										 const WAVEFORMATEX *preferredWf, BOOL bVerbose) {
 	char myBuf[128];
-	int i,bWarning=0;
+	int i,j,bWarning=0;
 	int theInput;
 
-	compressor=preferredDriver ? preferredDriver : mmioFOURCC('I','V','5','0');
+//	compressor=preferredDriver ? preferredDriver : mmioFOURCC('I','V','5','0');
+	compressor=preferredDriver;		//2018, consentiamo tutto!
 	framesPerSec=fps ? fps : 5;
 	KFrame=kFrame;
 
@@ -3155,11 +3193,13 @@ int CTV::initCapture(BOOL canOverlay, BITMAPINFOHEADER *biRaw, DWORD fps, DWORD 
 		biRawBitmap.biWidth=biRaw->biWidth;
 		biRawBitmap.biHeight=biRaw->biHeight;
 		biRawBitmap.biBitCount=biRaw->biBitCount;
+		biRawBitmap.biCompression=biRaw->biCompression;
 		}
 	else {
 		biRawBitmap.biWidth=320;
 		biRawBitmap.biHeight=240;
 		biRawBitmap.biBitCount=24;
+		biRawBitmap.biCompression=0;
 		}
 
 	maxFrameSize=(biRawBitmap.biWidth*biRawBitmap.biHeight*biRawBitmap.biBitCount)/8;
@@ -3200,60 +3240,61 @@ int CTV::initCapture(BOOL canOverlay, BITMAPINFOHEADER *biRaw, DWORD fps, DWORD 
 		{	// if routing the crossbar or setting the format fail, we don't care
 			// we'll try to run the program anyways
 			std::string error = e.message + "\nTento di eseguire ugualmente il programma";
-			MessageBox (0, error.c_str(), "InitVideo: Warning RGB", MB_OK | MB_ICONWARNING);
+			MessageBox (0, error.c_str(), "InitVideo: Warning", MB_OK | MB_ICONWARNING);
 		}
 
-		try	{
-			i=1;
-			m_DShow->SetFormat(biRawBitmap.biWidth, biRawBitmap.biHeight, 24, framesPerSec);
-			}
-		catch (IVideoCapture::Exception& e)
-		{	// (idem)
-			i=0;
-			std::string error = e.message + "\n(RGB)Tento di eseguire ugualmente il programma";
-//			if(theApp.debugMode)
-			MessageBox (0, error.c_str(), "InitVideo: Warning RGB", MB_OK | MB_ICONWARNING);
-		}
 
-		if(!i) {
+		if(biRawBitmap.biCompression) {		// se != 0 allora provo preimpostato...
+			if(biRawBitmap.biCompression==mmioFOURCC('R','G','B',0))		// RGB  è 0
+				biRawBitmap.biCompression=0;
 			try	{
-				biRawBitmap.biCompression=MAKEFOURCC('Y','U','Y','2');
-				biRawBitmap.biBitCount=16;
-				i=1;
 				m_DShow->SetFormat(biRawBitmap.biWidth, biRawBitmap.biHeight, biRawBitmap.biBitCount, 
 					framesPerSec,0,biRawBitmap.biCompression);
+				i=1;
+				goto format_ok;
 				}
-			catch (IVideoCapture::Exception& e)
-			{	// (idem)
-				std::string error = e.message + "\n(YUY)Tento di eseguire ugualmente il programma";
-//			if(theApp.debugMode)
-				MessageBox (0, error.c_str(), "InitVideo: Warning YUY2", MB_OK | MB_ICONWARNING);
-			}
-			if(!i) {
-				try	{
-					biRawBitmap.biCompression=MAKEFOURCC('U','Y','V','Y');
-					biRawBitmap.biBitCount=16;
-					i=1;
-					m_DShow->SetFormat(biRawBitmap.biWidth, biRawBitmap.biHeight, biRawBitmap.biBitCount, 
-						framesPerSec,0,biRawBitmap.biCompression);
-					}
-				catch (IVideoCapture::Exception& e)
-				{	// if routing the crossbar or setting the format fail, we don't care
-					// we'll try to run the program anyways
-					i=0;
-					std::string error = e.message + "\nTrying to run the program anyways";
-	//				std::string error = e.message + "\nQuittin the program";
-//			if(theApp.debugMode)
-					MessageBox (0, error.c_str(), "InitVideo: Warning UYVY", MB_OK | MB_ICONWARNING);
-
-	//				delete vrp->m_DShow;		theDShow=vrp->m_DShow=NULL;
-	//				goto erroreApriVideoDX;
-
-					}
-
+			catch (IVideoCapture::Exception& e) {	// (idem)
+				CString SFmt;
+				SFmt.Format("%c%c%c%c",LOBYTE(LOWORD(biRawBitmap.biCompression)),
+					// RGB esce vuoto...
+					HIBYTE(LOWORD(biRawBitmap.biCompression)),
+					LOBYTE(HIWORD(biRawBitmap.biCompression)),
+					HIBYTE(HIWORD(biRawBitmap.biCompression)));
+				i=0;
+				std::string error = e.message + " (";
+				error += SFmt;
+				error += ")\nFormato indicato non accettato: ne cerco un altro";
+				MessageBox(0, error.c_str(), "VideoSetFormat: Warning", MB_OK | MB_ICONWARNING);
 				}
 			}
 
+		for(j=0; j<sizeof(acceptedCompressionType)/sizeof(COMPRESSION_TYPES); j++) {
+			try	{
+				biRawBitmap.biCompression=acceptedCompressionType[j].fourCC;
+				biRawBitmap.biBitCount=acceptedCompressionType[j].bitsPerPixel;
+				m_DShow->SetFormat(biRawBitmap.biWidth, biRawBitmap.biHeight, biRawBitmap.biBitCount, 
+					framesPerSec,0,biRawBitmap.biCompression);
+				i=1;
+				break;
+				}
+			catch (IVideoCapture::Exception& e) {	// (idem)
+				CString SFmt;
+				SFmt.Format("%c%c%c%c",LOBYTE(LOWORD(acceptedCompressionType[j].fourCC)),
+					// RGB esce vuoto...
+					HIBYTE(LOWORD(acceptedCompressionType[j].fourCC)),
+					LOBYTE(HIWORD(acceptedCompressionType[j].fourCC)),
+					HIBYTE(HIWORD(acceptedCompressionType[j].fourCC)));
+				i=0;
+				std::string error = e.message + " (";
+				error += SFmt;
+				error += ")\nTento di eseguire ugualmente il programma";
+//			if(theApp.debugMode)
+				// su 0 ossia RGB si potrebbe anche evitare message..
+				MessageBox(0, error.c_str(), "VideoSetFormat: Warning", MB_OK | MB_ICONWARNING);
+				}
+			}
+
+format_ok:
 		int width = m_DShow->GetWidth();
 		int height = m_DShow->GetHeight();
 
@@ -3346,10 +3387,14 @@ fine_hwnd:
 
 
 		// magari legare a (doc->Opzioni & videoType) ??
-//uff theServer non è ancora valido...	if(!(theApp.theServer->Opzioni & CVidsendDoc2::videoType)) {
+	if(!(theApp.theServer->Opzioni & CVidsendDoc2::videoType)) {
 		biRawDef.bmiHeader.biCompression=0; biRawDef.bmiHeader.biBitCount=24;
-//		}
+		}
 	//e questa è usata internamente, quindi direi sempre RGB pura (se serve, con decompressore di supporto
+	else {
+		biCompDef.bmiHeader.biCompression=biRawBitmap.biCompression;
+		biCompDef.bmiHeader.biBitCount=biRawBitmap.biBitCount;
+		}
 
 
 //	biRawBitmap.biWidth=100;		// per prove!
@@ -3384,7 +3429,7 @@ rifo_check_video_format:
 				}
 			else {			// v. distruttore
 				if(theFrame && (int)theFrame != -1) 
-					GlobalFree(theFrame);	// usato dal JPEG dell'HTML
+					HeapFree(GetProcessHeap(),0,theFrame);	// usato dal JPEG dell'HTML
 				if(aviFile)
 					endSaveFile();
 				if(hWnd) {
@@ -3488,8 +3533,10 @@ parte nostra=0D*/
 		i=ICCompressBegin(m_hICCo,&biBaseRawBitmap,&biCompDef);
 
 
-/*		i=ICGetDefaultKeyFrameRate(hICCo);
-		j=ICGetDefaultQuality(hICCo);
+		/* XVID lo mette a 300.. e se ne sbatte del flag in ICCompress! 
+		// forse usare ICSeq...
+		i=ICGetDefaultKeyFrameRate(m_hICCo);
+		int j=ICGetDefaultQuality(m_hICCo);
 		wsprintf(myBuf,"default key frame rate=%d, quality=%u",i,j);
 			if(theApp.debugMode)
 		AfxMessageBox(myBuf);*/
@@ -3507,6 +3554,62 @@ parte nostra=0D*/
 
 
 
+
+	if(bAudio) {		// qui serve esplicitamente l'apertura del WAVE...
+
+		if(preferredWf) {
+			memcpy(&wfex,preferredWf,sizeof(WAVEFORMATEX));
+			memcpy(&wfd,preferredWf,sizeof(WAVEFORMATEX));
+			}
+		else {
+			wfex.wFormatTag = WAVE_FORMAT_PCM;
+			wfex.nChannels = 1;
+			wfex.nSamplesPerSec = 8000 /*FREQUENCY*/;
+			wfex.nBlockAlign = 1;
+			wfex.wBitsPerSample = 8;
+			wfex.nAvgBytesPerSec = wfex.nSamplesPerSec*wfex.nChannels*(wfex.wBitsPerSample/8);
+			wfex.cbSize = 0;
+
+			// FINIRE con compressore scelto, 2021
+
+			GSM610WAVEFORMAT mywfx;
+			mywfx.wfx.wFormatTag = WAVE_FORMAT_GSM610;
+			mywfx.wfx.nChannels = 1;
+			mywfx.wfx.nSamplesPerSec = 8000 /*8000*/;
+			mywfx.wfx.nAvgBytesPerSec = 1625;
+			mywfx.wfx.nBlockAlign = 65;
+			mywfx.wfx.wBitsPerSample = 0;
+			mywfx.wfx.cbSize = 2;
+			mywfx.wSamplesPerBlock = 320;
+			memcpy(&wfd,&mywfx,sizeof(GSM610WAVEFORMAT));
+			}
+
+
+
+		m_AudioBuffer1=new BYTE[wfex.nAvgBytesPerSec];
+		m_AudioBuffer2=new BYTE[wfex.nAvgBytesPerSec];
+
+		i=waveInOpen(&m_hWaveIn,WAVE_MAPPER,&wfex,(DWORD)m_hWnd,(DWORD)this,CALLBACK_WINDOW);
+
+		if(i == MMSYSERR_NOERROR) {
+			theApp.theServer->Opzioni |= CVidsendDoc2::sendAudio;
+			}
+		else {
+#ifdef _DEBUG
+			AfxMessageBox("impossibile aprire audio");
+#endif
+			}
+
+
+		acmStreamOpen(&m_hAcm,NULL,&wfex,(WAVEFORMATEX *)&wfd,NULL,NULL,0 /*this*/,0);
+		if(m_hAcm)
+			acmStreamSize(m_hAcm,wfex.nAvgBytesPerSec,&maxWaveoutSize,ACM_STREAMSIZEF_SOURCE);
+
+
+		}
+
+
+#ifdef DARIO
 	wfex.wFormatTag = WAVE_FORMAT_PCM;
 	wfex.nChannels = 1;
 	wfex.nSamplesPerSec = 8000 /*FREQUENCY*/;
@@ -3516,6 +3619,7 @@ parte nostra=0D*/
 	wfex.cbSize = 0;
 
 	if(preferredWf) {
+		memcpy(&wfd,preferredWf,sizeof(WAVEFORMATEX));
 		}
 	else {
 		GSM610WAVEFORMAT mywfx;
@@ -3537,6 +3641,7 @@ parte nostra=0D*/
 	acmStreamOpen(&m_hAcm,NULL,&wfex,(WAVEFORMATEX *)&wfd,NULL,NULL,0 /*this*/,0);
 	if(m_hAcm)
 		acmStreamSize(m_hAcm,wfex.nAvgBytesPerSec,&maxWaveoutSize,ACM_STREAMSIZEF_SOURCE);
+#endif
 
 fine:
 	return m_hWnd ? (bWarning ? 2 : 1) : 0;
@@ -3544,8 +3649,17 @@ fine:
 
 CTV::~CTV() {
 
+	if(m_hWaveIn != (HWAVEIN)-1) {
+		waveInReset(m_hWaveIn);
+		waveInStop(m_hWaveIn);
+		waveInClose(m_hWaveIn);
+		}
+	m_hWaveIn=NULL;
+
 	if(theFrame && (int)theFrame != -1) 
-		GlobalFree(theFrame);	// usato dal JPEG dell'HTML
+		HeapFree(GetProcessHeap(),0,theFrame);	// usato dal JPEG dell'HTML
+	if(m_DShow)
+		m_DShow->SetWindow(NULL);
 	if(aviFile)
 		endSaveFile();
 	if(m_hWnd) {
@@ -3557,6 +3671,9 @@ CTV::~CTV() {
 	if(m_hAcm)
 		acmStreamClose(m_hAcm,0);
 	m_hAcm=NULL;
+	delete []m_AudioBuffer1;		m_AudioBuffer1=NULL;
+	delete []m_AudioBuffer2;		m_AudioBuffer2=NULL;
+
 	if(m_hICCo) {
 		ICCompressEnd(m_hICCo);
 		ICClose(m_hICCo);
@@ -3571,8 +3688,10 @@ CTV::~CTV() {
 
 	UnregisterClass(DIRECTSHOW_CAPTURE_CLASS,AfxGetInstanceHandle());
 
-	if(m_DShow)
+	if(m_DShow) {
+		m_DShow->SetWindow(NULL);
 		delete m_DShow;
+		}
 	m_DShow=NULL;
 	}
 
@@ -3586,7 +3705,7 @@ RECT *CTV::Resize(RECT *r, BOOL force) {
 			}
 		if(force) {
 			biRawBitmap.biWidth=min(r->right-r->left,640);
-			biRawBitmap.biHeight=(biRawBitmap.biWidth*3)/4;
+			biRawBitmap.biHeight=(biRawBitmap.biWidth*biRawBitmap.biBitCount/8)/4;
 			}
 		r->right=biRawBitmap.biWidth;
 		r->bottom=biRawBitmap.biHeight;
@@ -3732,6 +3851,8 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 
 	// http://lvcdn.net/gop/ stream analyzer
 
+	if(opzioni & CVidsendDoc2::videoType)		// non posso farlo in formato compresso nativo...
+		goto skippa_prologo;
 	if(1 /* solo quando accodo...*/)	{
 		long n;
 		DWORD t,l;
@@ -3742,7 +3863,7 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 		b.CreateBitmap(biCompDef.bmiHeader.biWidth,biCompDef.bmiHeader.biHeight,1,biCompDef.bmiHeader.biBitCount,NULL);
 		b.GetBitmap(&bmp);
 		n=biCompDef.bmiHeader.biWidth*biCompDef.bmiHeader.biHeight*biCompDef.bmiHeader.biBitCount/8;
-		p=(BYTE *)GlobalAlloc(GPTR,n);
+		p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,n);
 		bmp.bmBits=p;
 		for(i=0; i<n; i+=3) {
 			*(WORD *)p=0xc0;
@@ -3752,13 +3873,13 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 //		b.SetBitmapBits(n,bmp.bmBits);
 		// vorrei o un monoscopio con la data e l'ora, o almeno uno sfondo colorato con data e ora
 		superImposeDateTime(&biRawDef.bmiHeader,(BYTE *)bmp.bmBits,0xffffffff);
-		p2=(BYTE *)GlobalAlloc(GPTR,maxFrameSize+100);
+		p2=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,maxFrameSize+100);
 		t=l=0;
 		i=ICCompress(m_hICCo,ICCOMPRESS_KEYFRAME,
 			&biCompDef.bmiHeader,p2,&biRawDef.bmiHeader,bmp.bmBits,
 			&l,&t,0,0/*2500*/,theApp.theServer->myQV.quality,
 			NULL,NULL);
-		GlobalFree(bmp.bmBits);
+		HeapFree(GetProcessHeap(),0,bmp.bmBits);
 		if(i == ICERR_OK) {
 			vFrameNum4Save=AVIStreamLength(myps);
 			for(i=0; i<(opzioni & CVidsendDoc2::quantiFrame ? 1 : framesPerSec); i++) {		// sempre 1 sec.
@@ -3772,7 +3893,7 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 				vFrameNum4Save++;
 				}
 			}
-		GlobalFree(p2);
+		HeapFree(GetProcessHeap(),0,p2);
 		if(psText && imposeTime) {
 			n=AVIStreamLength(psText);
 			CString S;
@@ -3786,6 +3907,23 @@ int CTV::startSaveFile(CString nomefile,DWORD opzioni) {
 				NULL, NULL);
 			}
 		}
+
+skippa_prologo:
+
+	{
+	CRiffList crl;
+	CString S;
+	S="VideoSender";
+	crl.Add(MAKEFOURCC('I','S','F','T'),S);
+	crl.Add(MAKEFOURCC('I','A','R','T'),S);
+	S=nomefile;
+	i=S.ReverseFind('\\');
+	if(i)
+		S=S.Mid(i+1);
+	crl.Add(MAKEFOURCC('I','N','A','M'),S);
+	crl.Add(MAKEFOURCC('I','C','M','T'),S);
+	AVIFileWriteData(aviFile,mmioFOURCC('L', 'I', 'S', 'T'),crl.GetContent(),crl.GetContentLength());
+	}
 
 	aFrameNum4Save=0;
 	saveWait4KeyFrame=1;
@@ -3825,7 +3963,7 @@ int CTV::endSaveFile() {
 	return 1;
 	}
 
-int CTV::superImposeDateTime(LPBITMAPINFOHEADER bi,BYTE *d,COLORREF dColor) {
+int CTV::superImposeDateTime(const LPBITMAPINFOHEADER bi,BYTE *d,COLORREF dColor) {
 	static BYTE display[12] = { 0x3f, 0x6, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x7, 0x7f, 0x6f,0,0 };
 	// 1 bit x ogni segmento, LSB=A...b6=G
 	int xSize=bi->biWidth/28,ySize=bi->biHeight/16;
@@ -3837,34 +3975,38 @@ int CTV::superImposeDateTime(LPBITMAPINFOHEADER bi,BYTE *d,COLORREF dColor) {
 	CTime ct=CTime::GetCurrentTime();
 
 
-	i=imposeTime-1;
-	if(!(i & 4)) {
-		xSize=(xSize*2)/3;
-		ySize=(ySize*2)/3;
+	if(imposeTime) {
+		i=imposeTime-1;
+		if(!(i & 4)) {
+			xSize=(xSize*2)/3;
+			ySize=(ySize*2)/3;
+			}
+	//		xStep=(xSize/3)*3;
+	//		yStep=-bi->biWidth*3;
+		switch(i & 3) {
+			case 0:			// sinistra in alto
+				xStart=8;
+				yStart=bi->biHeight-bi->biHeight/11;
+				break;
+			case 1:			// destra in alto
+				xStart=(bi->biWidth-xSize*12);
+				yStart=bi->biHeight-bi->biHeight/11;
+				break;
+			case 2:			// destra in basso
+				xStart=(bi->biWidth-xSize*12);
+				yStart=(ySize*7)/2;
+				break;
+			case 3:			// sinistra in basso
+				xStart=8;
+				yStart=(ySize*7)/2;
+				break;
+			default:
+				return -1;
+				break;
+			}
 		}
-//		xStep=(xSize/3)*3;
-//		yStep=-bi->biWidth*3;
-	switch(i & 3) {
-		case 0:			// sinistra in alto
-			xStart=8;
-			yStart=bi->biHeight-bi->biHeight/11;
-			break;
-		case 1:			// destra in alto
-			xStart=(bi->biWidth-xSize*12);
-			yStart=bi->biHeight-bi->biHeight/11;
-			break;
-		case 2:			// destra in basso
-			xStart=(bi->biWidth-xSize*12);
-			yStart=(ySize*7)/2;
-			break;
-		case 3:			// sinistra in basso
-			xStart=8;
-			yStart=(ySize*7)/2;
-			break;
-		default:
-			return -1;
-			break;
-		}
+	else
+		return 0;
 
 	switch(bi->biBitCount) {
 		case 24:
@@ -4226,7 +4368,7 @@ rifo16:
 	return 1;
 	}
 
-int CTV::superImposeText(CBitmap *b,const char *s,COLORREF dColor,int flag) {
+int CTV::superImposeText(const CBitmap *b,const char *s,COLORREF dColor,int flag) {
 	int xSize,ySize;
 //	int x,y;
 	int i,n;
@@ -4239,7 +4381,7 @@ int CTV::superImposeText(CBitmap *b,const char *s,COLORREF dColor,int flag) {
 	RECT rc;
 	CBitmap *oldB;
 
-	b->GetBitmap(&bmp);
+	((CBitmap *)b)->GetBitmap(&bmp);
 	rc.top=rc.left=0;
 	rc.bottom=bmp.bmHeight;
 	rc.right=bmp.bmWidth;
@@ -4293,7 +4435,7 @@ int CTV::superImposeText(CBitmap *b,const char *s,COLORREF dColor,int flag) {
 	return 1;
 	}
 
-int CTV::superImposeText(LPBITMAPINFOHEADER bi,BYTE *d,const char *s,COLORREF dColor) {
+int CTV::superImposeText(const LPBITMAPINFOHEADER bi,BYTE *d,const char *s,COLORREF dColor) {
 	int xSize,ySize;
 	int x,y,xStart,yStart,xStep,yStep;
 	int i,n,n2,k;
@@ -4381,7 +4523,7 @@ int CTV::superImposeText(LPBITMAPINFOHEADER bi,BYTE *d,const char *s,COLORREF dC
 
 	superImposeText(&b,s,dColor,k & 4 ? 1 : 0);
 
-	p2=p=(BYTE *)GlobalAlloc(GMEM_FIXED,xSize*ySize+100);
+	p2=p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,xSize*ySize+100);
 
 	n2=b.GetBitmapBits(xSize*ySize,p2);			// 24bit fissi NO !
 	//o GetDIBits() ...
@@ -4510,7 +4652,7 @@ int CTV::superImposeText(LPBITMAPINFOHEADER bi,BYTE *d,const char *s,COLORREF dC
 			}
 		}
 
-	GlobalFree(p);
+	HeapFree(GetProcessHeap(),0,p);
 
 
 	return 1;
@@ -4619,20 +4761,23 @@ int CTV::superImposeBox(const LPBITMAPINFOHEADER bi,BYTE *d,const RECT *theRect,
 	return 1;
 	}
 
-#define QUALITYBOX_CHECK 8
-int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect) {
+
+int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect,
+												 LPDWORD retLuma,DWORD retChroma[],DWORD ***myOldCells) {
 	int xSize,ySize;
 	int x,y,xStart,yStart,x2,y2,xStep,yStep;
 	int i,n;
 	int qualityThreshold=(theRect->right-theRect->left)*(theRect->bottom-theRect->top)/8;			// circa 5000 @640x480
 	const BYTE *p,*p1;
 //	DWORD dValue,dRGB;		//diciamo che con 800x600 pixel, griglia 8x8, fanno 100x80 8000... quindi lavoro con RGB666!
-	//no, ovviamente era una fesseria ;) per ogni colore facciam la differenza, quindi maz 768xpixel
+	//no, ovviamente era una fesseria ;) per ogni colore facciam la differenza, quindi max 768xpixel
 	DWORD dRGBr,dRGBg,dRGBb;
-	int cnt;
+	int cnt0,cnt1,cnt2;
 	static DWORD newCells[QUALITYBOX_CHECK][QUALITYBOX_CHECK][3],oldCells[QUALITYBOX_CHECK][QUALITYBOX_CHECK][3];
 	int diffCells[QUALITYBOX_CHECK][QUALITYBOX_CHECK][3];
 
+	if(!qualityThreshold)
+		qualityThreshold=(theRect->right-theRect->left)*(theRect->bottom-theRect->top)/12;			// circa 5000 @640x480
 
 	xStart=theRect->left;
 	yStart=theRect->top;
@@ -4647,7 +4792,7 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 
 			for(y2=0; y2<QUALITYBOX_CHECK; y2++) {
 				for(x2=0; x2<QUALITYBOX_CHECK; x2++) {
-					dRGBr=dRGBg=dRGBb=cnt=0;
+					dRGBr=dRGBg=dRGBb=cnt0=0;
 					for(y=0; y<ySize/QUALITYBOX_CHECK; y++) {
 						p1=p-((y2*yStep+y)*bi->biWidth*3)+((xStart+x2*xStep)*3);
 						for(x=0; x<xSize/QUALITYBOX_CHECK; x++) {
@@ -4658,12 +4803,12 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 							dRGBr += *p1++;		// dell'ordine r-g-b non ci interessa!
 							dRGBg += *p1++;
 							dRGBb += *p1++;
-							cnt++;
+							cnt0++;
 							}
 						}
-					newCells[y2][x2][0]=dRGBr/cnt;
-					newCells[y2][x2][1]=dRGBg/cnt;
-					newCells[y2][x2][2]=dRGBb/cnt;
+					newCells[y2][x2][0]=dRGBr/cnt0;
+					newCells[y2][x2][1]=dRGBg/cnt0;
+					newCells[y2][x2][2]=dRGBb/cnt0;
 					}
 				}
 
@@ -4674,7 +4819,7 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 
 			for(y2=0; y2<QUALITYBOX_CHECK; y2++) {
 				for(x2=0; x2<QUALITYBOX_CHECK; x2++) {
-					dRGBr=dRGBg=dRGBb=cnt=0;
+					dRGBr=dRGBg=dRGBb=cnt0=0;
 					for(y=0; y<ySize; y++) {
 						p1=p-(y*bi->biWidth*2)+(xStart*2);
 						for(x=0; x<xSize; x++) {
@@ -4682,12 +4827,12 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 							dRGBr += c & 0x001f;
 							dRGBg += (c & 0x07e0) >> 5;
 							dRGBb += (c & 0xf800) >> 11;
-							cnt++;
+							cnt0++;
 							}
 						}
-					newCells[y2][x2][0]=dRGBr/cnt;
-					newCells[y2][x2][1]=dRGBg/cnt;
-					newCells[y2][x2][2]=dRGBb/cnt;
+					newCells[y2][x2][0]=dRGBr/cnt0;
+					newCells[y2][x2][1]=dRGBg/cnt0;
+					newCells[y2][x2][2]=dRGBb/cnt0;
 					}
 				}
 
@@ -4698,6 +4843,7 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 	avgDiff[0]=0; avgDiff[1]=0; avgDiff[2]=0;
 	for(y2=0; y2<QUALITYBOX_CHECK; y2++) {
 		for(x2=0; x2<QUALITYBOX_CHECK; x2++) {
+			// if(myOldCells   fare... per confrontare con una matrice prefissata...
 			diffCells[y2][x2][0]=newCells[y2][x2][0]-oldCells[y2][x2][0];
 			diffCells[y2][x2][1]=newCells[y2][x2][1]-oldCells[y2][x2][1];
 			diffCells[y2][x2][2]=newCells[y2][x2][2]-oldCells[y2][x2][2];
@@ -4713,30 +4859,38 @@ int CTV::checkQualityBox(const LPBITMAPINFOHEADER bi,const BYTE *d,RECT *theRect
 	avgDiff[1]/=(QUALITYBOX_CHECK*QUALITYBOX_CHECK);
 	avgDiff[2]/=(QUALITYBOX_CHECK*QUALITYBOX_CHECK);
 
-	cnt=0;
+	cnt0=cnt1=cnt2=0;
 	for(y2=0; y2<QUALITYBOX_CHECK; y2++) {
 		for(x2=0; x2<QUALITYBOX_CHECK; x2++) {
-			cnt+=abs(diffCells[y2][x2][0] - avgDiff[0]);
-			cnt+=abs(diffCells[y2][x2][1] - avgDiff[1]);
-			cnt+=abs(diffCells[y2][x2][2] - avgDiff[2]);
+			cnt0+=abs(diffCells[y2][x2][0] - avgDiff[0]);
+			cnt1+=abs(diffCells[y2][x2][1] - avgDiff[1]);
+			cnt2+=abs(diffCells[y2][x2][2] - avgDiff[2]);
 			}
 		}
 
 	if(theApp.debugMode) {
 		char p3[64];
-		wsprintf(p3,"qualityBox=%u, thrs=%u; %d %d %d",cnt,qualityThreshold,
+		wsprintf(p3,"qualityBox=%u %u %u, thrs=%u; %d %d %d",cnt0,cnt1,cnt2,qualityThreshold,
 			avgDiff[0],avgDiff[1],avgDiff[2]); 
 		theApp.m_pMainWnd->SetWindowText(p3);
 		}
 	else {
 		char *p3=(char *)GlobalAlloc(GPTR,1024);
-		wsprintf(p3,"qualityBox=%u, thrs=%u; %d %d %d",cnt,qualityThreshold,
+		wsprintf(p3,"qualityBox=%u, thrs=%u; %d %d %d",cnt0,qualityThreshold,
 			avgDiff[0],avgDiff[1],avgDiff[2]); 
 		theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p3);
 		}
 
+	if(retChroma) {
+		retChroma[0]=cnt0;			// VERIFICARE pos. R & B !  
+		retChroma[1]=cnt1;
+		retChroma[2]=cnt1;
+		}
+	cnt0=cnt0+cnt1+cnt2;
+	if(retLuma)
+		*retLuma=cnt0;
 
-	return cnt>qualityThreshold;
+	return cnt0>qualityThreshold;
 	}
 
 
@@ -4800,7 +4954,7 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 		case 24:
 			x=bi->biWidth;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x*3+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*3+3);
 			if(p) {
 				for(j=0; j<y; j++) {
 					p2=d+j*(x*3);
@@ -4816,14 +4970,14 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 						p2-=3;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		case 16:
 			//testare!
 			x=bi->biWidth;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x*2+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*2+2);
 			if(p) {
 				for(j=0; j<y; j++) {
 					p2=d+j*(x*2);
@@ -4837,7 +4991,7 @@ int CTV::mirrorBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 						p2-=2;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		default:
@@ -4857,7 +5011,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 		case 24:
 			x=bi->biWidth*3;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x+3);
 			if(p) {
 				ps=d;
 				pd=d+x*(y-1);
@@ -4869,7 +5023,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 					ps+=x;
 					pd-=x;
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		case 16:
@@ -4877,7 +5031,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 			//testare!
 			x=bi->biWidth*2;
 			y=bi->biHeight;
-			p=(BYTE *)GlobalAlloc(GPTR,x+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x+2);
 			if(p) {
 				ps=d;
 				pd=d+x*(y-1);
@@ -4889,7 +5043,7 @@ int CTV::flipBitmap(LPBITMAPINFOHEADER bi,BYTE *d) {
 					ps+=x;
 					pd-=x;
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		default:
@@ -4913,7 +5067,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 			y=bi->biHeight;
 			xRatio=x/rcDest->right;
 			yRatio=y/rcDest->bottom;
-			p=(BYTE *)GlobalAlloc(GPTR,x*3+3);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*3+3);
 			p3=d;
 			if(p) {
 				for(j=0; j<y; j+=yRatio) {
@@ -4924,12 +5078,12 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 						n=(*(WORD *)p1) | ((*(BYTE *)(p1+2)) << 16);		// cast a DWORD poteva fallire a fine buffer.. !
 		//				n=*(DWORD *)p1;
 						*(WORD *)p3=n;
-						*(p2+2)=LOBYTE(HIWORD(n));
+						*(p3+2)=LOBYTE(HIWORD(n));
 						p1+=xRatio*3;
 						p3+=3;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 
@@ -4939,7 +5093,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 			y=bi->biHeight;
 			xRatio=x/rcDest->right;
 			yRatio=y/rcDest->bottom;
-			p=(BYTE *)GlobalAlloc(GPTR,x*2+2);
+			p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,x*2+2);
 			p3=d;
 			if(p) {
 				for(j=0; j<y; j+=yRatio) {
@@ -4953,7 +5107,7 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 						p3+=2;
 						}
 					}
-				GlobalFree(p);
+				HeapFree(GetProcessHeap(),0,p);
 				}
 			break;
 		default:
@@ -4965,22 +5119,16 @@ int CTV::resampleBitmap(LPBITMAPINFOHEADER bi,BYTE *d,RECT *rcDest) {
 
 LRESULT CALLBACK VideoCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	CView *v;
-	BYTE *pInp,*pSBuf=NULL,*pSBuf2=NULL;
-	BOOL pInpAllocated=FALSE;
   int i,tFrame;
-	DWORD l,t;
   struct AV_PACKET_HDR *avh;
 	static BOOL bInSend=0;
 //	static int tFrameDiv=1,frameDiv=1;
 //	CTV *m_TV=(CTV *)capGetUserData(hWnd) /* non e' lpVHdr->dwUser !! */;  FA CAGARE!
-	static HDRAWDIB hdd;
-	static HDC hdc;
 	static BITMAPINFOHEADER bmih;
 
 
 	switch(uMsg) {
 		case WM_CREATE:
-			hdd = DrawDibOpen();
 
 			ZeroMemory(&bmih, sizeof(BITMAPINFOHEADER));
 			bmih.biSize = sizeof(BITMAPINFOHEADER);
@@ -4989,6 +5137,7 @@ LRESULT CALLBACK VideoCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 			bmih.biCompression = m_TV->m_DShow->GetFourCC();
 			bmih.biWidth = m_TV->m_DShow->GetWidth();
 			bmih.biHeight = m_TV->m_DShow->GetHeight();
+			bmih.biSizeImage=(bmih.biWidth*bmih.biHeight*bmih.biBitCount)/8;		// richiesto da MJPG 2019...
 		
 			break;
 		case WM_PAINT:
@@ -5000,251 +5149,205 @@ LRESULT CALLBACK VideoCallback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 //			lpVHdr.lpData= m_TV->m_DShow->GetCurrentFrame();
 //			lpVHdr.dwBytesUsed= m_TV->m_DShow->GetCurrentFrameSize();
 		case WM_GRABBED_BUFFER:
-			VIDEOHDR lpVHdr;
+			static VIDEOHDR lpVHdr;
 			lpVHdr.lpData= (BYTE *)lParam;
 			lpVHdr.dwBytesUsed=lpVHdr.dwBufferLength=wParam;
 			lpVHdr.dwFlags=lpVHdr.dwUser=0;
+//			if(lpVHdr->dwTimeCaptured < (m_TV->oldTimeCaptured+((1000-80)/m_TV->framesPerSec) ))	//correzioncina xche' il timing non e' precisissimo, ed è meglio anticipare un po'...
+//				return 0;		// PATCH per la merda di Logitech che ignora il setCaptureParms per quanto riguarda i frame per sec. (v. sopra)
+			m_TV->oldTimeCaptured=lpVHdr.dwTimeCaptured;
 			lpVHdr.dwTimeCaptured=timeGetTime();
+
 			if(lpVHdr.lpData) {
-				if(m_TV->m_DShow->doPreview) {
-					hdc = GetDC(hwnd);
-					i=DrawDibDraw(hdd, hdc, 0, 0, bmih.biWidth, bmih.biHeight, 
-						&bmih, lpVHdr.lpData, 0, 0, bmih.biWidth , bmih.biHeight, 0);	
-					ReleaseDC(hwnd, hdc);
-					}
 
+				if(!bInSend) {
+					bInSend=TRUE;
 
-
-	if(!bInSend) {
-		bInSend=TRUE;
-
-		pInp=lpVHdr.lpData;
-
-	  if(theApp.theServer) {
-			v=theApp.theServer->getView();
-			if(theApp.theServer->Opzioni & CVidsendDoc2::sendVideo && !theApp.theServer->bPaused) {
-
-				if(theApp.theServer->Opzioni & CVidsendDoc2::videoType) {
-					pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
-					pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;				// indirizzo del buffer DOPO la struct header!
-					avh=(struct AV_PACKET_HDR *)pSBuf;
-					avh->type=0;
-#ifdef _STANDALONE_MODE
-					avh->tag=MAKEFOURCC('D','G','2','0');
-#else
-					avh->tag=MAKEFOURCC('G','D','2','0');
-#endif
-	//					avh.psec=1000 / m_TV->framesPerSec;
-					avh->info=0;
-					avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());	// anche lpVHdr->dwTimeCaptured
-					memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
-					memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr.dwBytesUsed);
-					avh->len=lpVHdr.dwBytesUsed+sizeof(BITMAPINFOHEADER);
-					avh->info=lpVHdr.dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
-
-					if(theApp.debugMode) {
-						char *p=(char *)GlobalAlloc(GPTR,1024);
-						wsprintf(p,"VFrame (precomp)# %ld: lungo %ld (%ld)",m_TV->vFrameNum,lpVHdr.dwBufferLength,lpVHdr.dwBytesUsed); 
-						theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+					if(theApp.theServer) {
+						v=theApp.theServer->getView();
+						m_TV->compressAFrame(&lpVHdr,m_TV->m_DShow->doPreview,v,theApp.theServer->theHDD,&bmih);
 						}
-
+					bInSend=FALSE;
 					}
 				else {
-
-					if(m_TV->biRawBitmap.biCompression != 0) {
-						if(m_TV->m_hICDe) {
-							pInp=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
-							if(pInp) {
-								pInpAllocated=TRUE;
-								i=ICDecompress(m_TV->m_hICDe,0 /*ICDECOMPRESS_HURRYUP*/,
-									&m_TV->biRawBitmap,lpVHdr.lpData,&m_TV->biBaseRawBitmap,pInp);
-								if(i == 0 /* se metto HURRYUP restituisce 1, ossia DONTDRAW (vfw.h) ma NON decomprime! */) {
-									}
-								else
-									goto not_RGB;
-								}
-							else
-								goto not_RGB;
-							}
-						else
-							goto not_RGB;
-						}
-
-					if(m_TV->theFrame == (BYTE *)-1) {		// se richiesto...
-						m_TV->theFrame=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
-						memcpy(m_TV->theFrame,pInp,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
-						}
-
-					// quando arriviamo qua, siam SEMPRE a 24bit direi... (v. biRawDef)
-					if(theApp.theServer->Opzioni & CVidsendDoc2::forceBN) {
-						m_TV->convertColorBitmapToBN(&m_TV->biRawDef.bmiHeader,pInp);
-						}
-					if(theApp.theServer->Opzioni & CVidsendDoc2::doFlip) {
-						m_TV->flipBitmap(&m_TV->biRawDef.bmiHeader,pInp);
-						}
-					if(theApp.theServer->Opzioni & CVidsendDoc2::doMirror) {
-						m_TV->mirrorBitmap(&m_TV->biRawDef.bmiHeader,pInp);
-						}
-					if(m_TV->imposeTime) {
-						m_TV->superImposeDateTime(&m_TV->biRawDef.bmiHeader,pInp);
-						}
-					if(m_TV->imposeTextPos) {
-						m_TV->superImposeText(&m_TV->biRawDef.bmiHeader,pInp,m_TV->imposeText,RGB(200,200,0));
-						}
-					if(!IsRectEmpty(&theApp.theServer->qualityBox)) {
-						i=m_TV->checkQualityBox(&m_TV->biRawDef.bmiHeader,pInp,&theApp.theServer->qualityBox);
-						m_TV->superImposeBox(&m_TV->biRawDef.bmiHeader,pInp,&theApp.theServer->qualityBox,i ? RGB(255,0,0) : RGB(0,255,0));
-						}
-					if(theApp.theServer->myQV.compressor) {
-						l=t=0;
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
-						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
-						avh=(struct AV_PACKET_HDR *)pSBuf;
-						avh->type=0;
-#ifdef _STANDALONE_MODE
-						avh->tag=MAKEFOURCC('D','G','2','0');
-#else
-						avh->tag=MAKEFOURCC('G','D','2','0');
-#endif
-		//	ICSeqCompressFrameStart ???	ICSeqCompressFrame
-						if(m_TV->framesPerSec >1)		// usare KFrame...
-							tFrame=(m_TV->vFrameNum % m_TV->framesPerSec) ? 0 : ICCOMPRESS_KEYFRAME;
-						else
-							tFrame=(m_TV->vFrameNum & 1) ? ICCOMPRESS_KEYFRAME : 0;
-						i=ICCompress(m_TV->m_hICCo,tFrame,
-							&m_TV->biCompDef.bmiHeader,pSBuf2+sizeof(BITMAPINFOHEADER),&m_TV->biBaseRawBitmap,pInp,
-							&l,&t,m_TV->vFrameNum,0/*2500*/,theApp.theServer->myQV.quality,
-							NULL,NULL);
-						if(i == ICERR_OK) {
-//							CFile mf;
-
-	//						mf.Open("c:\\frame0.bmp",CFile::modeWrite | CFile::modeCreate);
-	//						mf.Write(pInp,lpVHdr->dwBytesUsed);
-	//						mf.Close();
-	//						mf.Open("c:\\frame.bmp",CFile::modeWrite | CFile::modeCreate);
-	//						mf.Write(pSBuf,l);
-	//						mf.Close();
-							memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
-							avh->len=m_TV->biCompDef.bmiHeader.biSizeImage+sizeof(BITMAPINFOHEADER);
-	//							avh.psec=1000 / m_TV->framesPerSec;
-							avh->info=t;
-							avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
-
-							if(theApp.debugMode) {
-								char *p=(char *)GlobalAlloc(GPTR,1024);
-	//						wsprintf(p,"VFrame# %u: lungo %u (%u)",m_TV->gdvFrameNum,lpVHdr->dwBytesUsed,l); 
-								wsprintf(p,"oldTime %u, time %u",m_TV->oldTimeCaptured,lpVHdr.dwTimeCaptured); 
-								theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
-								}
-	//						memcpy(avh.lpData,pSBuf,l+40);
-
-							}
-						else {
-not_RGB:
-							MessageBeep(-1);
-							if(pSBuf) 
-								GlobalFree(pSBuf);
-							goto fine;
-							}
-						}
-					else {
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
-						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;					// indirizzo del buffer DOPO la struct header!
-						avh=(struct AV_PACKET_HDR *)pSBuf;
-						avh->type=0;
-#ifdef _STANDALONE_MODE
-						avh->tag=MAKEFOURCC('D','G','2','0');
-#else
-						avh->tag=MAKEFOURCC('G','D','2','0');
-#endif
-	//						avh.psec=1000 / m_TV->framesPerSec;
-						avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
-						avh->len=lpVHdr.dwBytesUsed+sizeof(BITMAPINFOHEADER);
-						memcpy(pSBuf2,&m_TV->biRawDef.bmiHeader,sizeof(BITMAPINFOHEADER));
-						memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr.dwBytesUsed);
-						avh->info=lpVHdr.dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
-
-						if(theApp.debugMode) {
-							char *p=(char *)GlobalAlloc(GPTR,1024);
-							wsprintf(p,"VFrame (raw) # %ld: lungo %ld (%ld)",m_TV->vFrameNum,lpVHdr.dwBufferLength,lpVHdr.dwBytesUsed); 
-							theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
-							}
-
+					if(theApp.debugMode) {
+						char *p=(char *)GlobalAlloc(GPTR,1024);
+						wsprintf(p,"Rientrato!"); 
+						theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
 						}
 					}
-
-fine_ok:
-				m_TV->vFrameNum;
-				if(m_TV->aviFile && m_TV->psVideo) {
-					if(m_TV->opzioniSave & CVidsendDoc2::quantiFrame)
-						m_TV->saveWait4KeyFrame=1;	// con questo trucco salvo solo i k-frame ossia 1 al secondo!
-					if(m_TV->saveWait4KeyFrame) {
-						if(avh->info & AVIIF_KEYFRAME)
-							m_TV->saveWait4KeyFrame=0;
-						else
-							goto skipSave;
-						}
-					i= AVIStreamWrite(m_TV->psVideo,// stream pointer 
-						m_TV->vFrameNum4Save, // time of this frame 
-						1,// number to write 
-						pSBuf2+sizeof(BITMAPINFOHEADER),
-						avh->len-sizeof(BITMAPINFOHEADER),	/*m_TV->biCompDef.bmiHeader.biSizeImage,*/
-						avh->info, // flags.... 
-						NULL, NULL);
-					if(i!=AVIERR_OK)
-						if(theApp.debugMode)
-							if(theApp.FileSpool)
-								*theApp.FileSpool << "errore in stream video salva";
-					if(m_TV->psText && m_TV->imposeTime && !(m_TV->vFrameNum4Save % m_TV->framesPerSec)) {
-						CString S;
-						S=CTime::GetCurrentTime().Format("%d/%m/%Y %H:%M:%S");
-						i= AVIStreamWrite(m_TV->psText,// stream pointer 
-							m_TV->vFrameNum4Save/m_TV->framesPerSec, // time of this frame 
-							1,// number to write 
-							(LPSTR)(LPCTSTR)S,
-							S.GetLength()+1,
-							avh->info, // flags.... 
-							NULL, NULL);
-						}
-					m_TV->vFrameNum4Save++;
-skipSave:	;
-					}
-
-				if(v && pSBuf) {
-					avh->reserved1=avh->reserved2=0;
-					v->PostMessage(WM_VIDEOFRAME_READY,(WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
-					}
-
-fine: ;
-				}
-			else {
-				if(theApp.debugMode) {
-					char *p=(char *)GlobalAlloc(GPTR,1024);
-					wsprintf(p,"Non mando video!"); 
-					theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
-					}
-				}
-
-			}
-		if(pInpAllocated)
-			GlobalFree(pInp);
-		bInSend=FALSE;
-		}
-	else {
-		if(theApp.debugMode) {
-			char *p=(char *)GlobalAlloc(GPTR,1024);
-			wsprintf(p,"Rientrato!"); 
-			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
-			}
-		}
-
 
 
 				}
 			break;
-		case WM_CLOSE:
-			DrawDibClose(hdd);
 
+		case MM_WIM_OPEN:
+			{
+				DWORD ti;
+				m_TV->IWaveHdr1.lpData=(char *)m_TV->m_AudioBuffer1;
+				m_TV->IWaveHdr1.dwBufferLength=m_TV->wfex.nAvgBytesPerSec /*176400*/ /*8000*/ / AUDIO_BUFFER_DIVIDER;
+#pragma warning AUDIO dwBufferLength
+				m_TV->IWaveHdr1.dwBytesRecorded=0;
+				m_TV->IWaveHdr1.dwUser=(DWORD)m_TV;
+				m_TV->IWaveHdr1.dwFlags=0;
+				m_TV->IWaveHdr1.dwLoops=0;
+				m_TV->IWaveHdr1.lpNext=NULL;
+				m_TV->IWaveHdr1.reserved=0;
+			waveInPrepareHeader(m_TV->m_hWaveIn,&m_TV->IWaveHdr1,sizeof(WAVEHDR));
+			ti=timeGetTime()+500;
+			while(!(m_TV->IWaveHdr1.dwFlags & WHDR_PREPARED) && timeGetTime()<ti);
+				m_TV->IWaveHdr2.lpData=(char *)m_TV->m_AudioBuffer2;
+				m_TV->IWaveHdr2.dwBufferLength=m_TV->wfex.nAvgBytesPerSec /*176400*/ /*8000*/ / AUDIO_BUFFER_DIVIDER;
+				m_TV->IWaveHdr2.dwBytesRecorded=0;
+				m_TV->IWaveHdr2.dwUser=(DWORD)m_TV;
+				m_TV->IWaveHdr2.dwFlags=0;
+				m_TV->IWaveHdr2.dwLoops=0;
+				m_TV->IWaveHdr2.lpNext=NULL;
+				m_TV->IWaveHdr2.reserved=0;
+			waveInPrepareHeader(m_TV->m_hWaveIn,&m_TV->IWaveHdr2,sizeof(WAVEHDR));
+			ti=timeGetTime()+500;
+			while(!(m_TV->IWaveHdr2.dwFlags & WHDR_PREPARED) && timeGetTime()<ti);
+			waveInStart(m_TV->m_hWaveIn);
+			waveInAddBuffer(m_TV->m_hWaveIn,&m_TV->IWaveHdr1,sizeof(WAVEHDR));
+			waveInAddBuffer(m_TV->m_hWaveIn,&m_TV->IWaveHdr2,sizeof(WAVEHDR));
+//			AfxMessageBox("wave open");
+			}
+			break;
+		case MM_WIM_DATA:
+			{
+	char *p;
+  BYTE *pSBuf,*pSBuf2;
+  struct AV_PACKET_HDR *avh=NULL;
+//  struct AV_PACKET_HDR avh;
+	ACMSTREAMHEADER hhacm;
+	static BOOL bInSend;
+	int i;
+	LPWAVEHDR lpWHdr=(LPWAVEHDR)lParam;
+
+
+	waveInUnprepareHeader(m_TV->m_hWaveIn,lpWHdr,sizeof(WAVEHDR));
+
+  if(!bInSend) {
+		bInSend=TRUE;
+	  if(theApp.theServer) {
+//			v=theApp.theServer->getView();
+//			if(theApp.theServer->Opzioni & CVidsendApp::canSendAudio /*theApp.theServer->getAudio()*/ && !theApp.theServer->bPaused) {
+#pragma warning FINIRE canSendAudio
+			if(!theApp.theServer->bPaused) {
+	//			l+=sizeof(WAVEFORMATEX);
+
+
+//			goto fine_a;
+
+				pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxWaveoutSize+AV_PACKET_HDR_SIZE  +100);
+				pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;
+				avh=(struct AV_PACKET_HDR *)pSBuf;
+
+#ifdef _STANDALONE_MODE
+				avh->tag=MAKEFOURCC('D','G','2','0');
+#else
+				avh->tag=MAKEFOURCC('G','D','2','0');
+#endif
+				avh->type=AV_PACKET_TYPE_AUDIO;
+	//				avh.psec=1000;
+				avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+				avh->info=0;
+
+
+
+
+				v=theApp.theServer->getView();
+				v->SendMessage(WM_RAWAUDIOFRAME_READY,(WPARAM)lpWHdr->lpData,(LPARAM)lpWHdr->dwBytesRecorded);
+// OCCHIO! serve Send o il buffer viene cimito 
+
+
+
+//					wsprintf(myBuf,"WIM_pre_compress");
+//	theApp.FileSpool->print(1,myBuf);
+
+
+				if(m_TV->m_hAcm) {
+					hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
+					hhacm.fdwStatus=0;
+					hhacm.dwUser=(DWORD)0 /*this*/;
+					hhacm.pbSrc=(BYTE *)lpWHdr->lpData;
+					hhacm.cbSrcLength=lpWHdr->dwBytesRecorded;
+			//			hhacm.cbSrcLengthUsed=0;
+					hhacm.dwSrcUser=0;
+					hhacm.pbDst=pSBuf2;
+					hhacm.cbDstLength=m_TV->maxWaveoutSize;
+			//			hhacm.cbDstLengthUsed=0;
+					hhacm.dwDstUser=0;
+					if(!acmStreamPrepareHeader(m_TV->m_hAcm,&hhacm,0)) {
+						i=acmStreamConvert(m_TV->m_hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
+					//	wsprintf(myBuf,"convertito: %d, %d bytes",i,l);
+					//	AfxMessageBox(myBuf);
+						acmStreamUnprepareHeader(m_TV->m_hAcm,&hhacm,0);
+
+						avh->len=hhacm.cbDstLengthUsed;
+
+
+	//					wsprintf(myBuf,"WIM_Convert");
+	//	theApp.FileSpool->print(1,myBuf);
+
+
+						if(m_TV->aviFile && m_TV->psAudio) {
+							i= AVIStreamWrite(m_TV->psAudio,// stream pointer 
+								m_TV->aFrameNum, // time of this frame 
+								1,// number to write 
+								pSBuf2,
+								hhacm.cbDstLengthUsed,
+								avh->info, // flags.... 
+								NULL, NULL);
+							}
+
+
+
+		/*				p=(char *)GlobalAlloc(GPTR,1024);
+						wsprintf(p,"AFrameT# %ld: lungo %ld (%ld) %ld",m_TV->gdaFrameNum,hhacm.cbDstLengthUsed,lpWHdr->dwBytesRecorded,lpWHdr->dwBufferLength); 
+						theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);*/
+							avh->reserved1=avh->reserved2=0;
+	//						theApp.OnAudioFrameReady((WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+							v=theApp.theServer->getView();
+							v->PostMessage(WM_AUDIOFRAME_READY,(WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+	//					if(theApp.theServer->streamSocketA->Manda(&avh,pSBuf,hhacm.cbDstLengthUsed))
+	//						m_TV->aFrameNum;
+						}
+					}
+				else {
+					HeapFree(GetProcessHeap(),0,pSBuf);
+					}
+				}
+			}
+
+
+fine_a:
+
+		bInSend=FALSE;
+		}
+	lpWHdr->lpData= (char *)(lpWHdr == &m_TV->IWaveHdr1 ? m_TV->m_AudioBuffer1 : m_TV->m_AudioBuffer2);
+				lpWHdr->dwBufferLength=m_TV->wfex.nAvgBytesPerSec /*176400*/ /*8000*/ / AUDIO_BUFFER_DIVIDER;
+#pragma warning AUDIO dwBufferLength2
+				lpWHdr->dwBytesRecorded=0;
+				lpWHdr->dwUser=(DWORD)m_TV;
+				lpWHdr->dwFlags=0;
+				lpWHdr->dwLoops=0;
+				lpWHdr->lpNext=NULL;
+				lpWHdr->reserved=0;
+	waveInPrepareHeader(m_TV->m_hWaveIn,lpWHdr,sizeof(WAVEHDR));
+			DWORD ti=timeGetTime()+500;
+			while(!(lpWHdr->dwFlags & WHDR_PREPARED) && timeGetTime()<ti);
+	waveInAddBuffer(m_TV->m_hWaveIn,lpWHdr,sizeof(WAVEHDR));
+			}
+			break;
+		case MM_WIM_CLOSE:
+			waveInStop(m_TV->m_hWaveIn);
+			waveInReset(m_TV->m_hWaveIn);
+			waveInUnprepareHeader(m_TV->m_hWaveIn,&m_TV->IWaveHdr1,sizeof(WAVEHDR));
+			waveInUnprepareHeader(m_TV->m_hWaveIn,&m_TV->IWaveHdr2,sizeof(WAVEHDR));
+			break;
+
+		case WM_CLOSE:
 			PostQuitMessage(0);
 			break;
 		default:
@@ -5282,7 +5385,7 @@ fine: ;
 			if(theApp.theServer->Opzioni & CVidsendDoc2::sendVideo && !theApp.theServer->bPaused) {
 
 				if(theApp.theServer->Opzioni & CVidsendDoc2::videoType) {
-					pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+					pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 					pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;				// indirizzo del buffer DOPO la struct header!
 					avh=(struct AV_PACKET_HDR *)pSBuf;
 					avh->type=0;
@@ -5297,7 +5400,8 @@ fine: ;
 					memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
 					memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
 					avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
-					avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
+					avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AV_PACKET_INFO_KEYFRAME : 0;
+					// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 
 					if(theApp.debugMode) {
 						char *p=(char *)GlobalAlloc(GPTR,1024);
@@ -5310,7 +5414,7 @@ fine: ;
 
 					if(m_TV->biRawBitmap.biCompression != 0) {
 						if(m_TV->hICDe) {
-							pInp=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
+							pInp=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitcount/8);
 							if(pInp) {
 								pInpAllocated=TRUE;
 								i=ICDecompress(m_TV->hICDe,0 /*ICDECOMPRESS_HURRYUP*/,
@@ -5328,8 +5432,8 @@ fine: ;
 						}
 
 					if(m_TV->theFrame == (BYTE *)-1) {		// se richiesto...
-						m_TV->theFrame=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
-						memcpy(m_TV->theFrame,pInp,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*3);
+						m_TV->theFrame=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitcount/8);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
+						memcpy(m_TV->theFrame,pInp,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitcount/8);
 						}
 
 					if(theApp.theServer->Opzioni & CVidsendDoc2::forceBN) {
@@ -5349,7 +5453,7 @@ fine: ;
 						}
 					if(theApp.theServer->myQV.compressor) {
 						l=t=0;
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+						pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
 						avh=(struct AV_PACKET_HDR *)pSBuf;
 						avh->type=0;
@@ -5364,10 +5468,12 @@ fine: ;
 							tFrame=(m_TV->vFrameNum % m_TV->framesPerSec) ? 0 : ICCOMPRESS_KEYFRAME;
 						else
 							tFrame=(m_TV->vFrameNum & 1) ? ICCOMPRESS_KEYFRAME : 0;
+//						pSBuf=(BYTE *)ICSeqCompressFrame(&theApp.theServer->theTV->cv,0,lpVHdr->lpData,&t,&l);
 						i=ICCompress(m_TV->hICCo,tFrame,
 							&m_TV->biCompDef.bmiHeader,pSBuf2+sizeof(BITMAPINFOHEADER),&m_TV->biBaseRawBitmap,pInp,
 							&l,&t,m_TV->vFrameNum,0/*2500*/,theApp.theServer->myQV.quality,
 							NULL,NULL);
+//https://forum.videohelp.com/threads/371608-New-lossless-video-codec
 						if(i == ICERR_OK) {
 //							CFile mf;
 
@@ -5381,6 +5487,7 @@ fine: ;
 							avh->len=m_TV->biCompDef.bmiHeader.biSizeImage+sizeof(BITMAPINFOHEADER);
 	//							avh.psec=1000 / m_TV->framesPerSec;
 							avh->info=t;
+							// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 							avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
 
 							if(theApp.debugMode) {
@@ -5396,12 +5503,12 @@ fine: ;
 not_RGB:
 							MessageBeep(-1);
 							if(pSBuf) 
-								GlobalFree(pSBuf);
+								HeapFree(GetProcessHeap(),0,pSBuf);
 							goto fine;
 							}
 						}
 					else {
-						pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+						pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
 						pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;					// indirizzo del buffer DOPO la struct header!
 						avh=(struct AV_PACKET_HDR *)pSBuf;
 						avh->type=0;
@@ -5415,7 +5522,8 @@ not_RGB:
 						avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
 						memcpy(pSBuf2,&m_TV->biRawDef.bmiHeader,sizeof(BITMAPINFOHEADER));
 						memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
-						avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AVIIF_KEYFRAME : 0;
+						avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AV_PACKET_INFO_KEYFRAME : 0;
+						// in b8 ora c'è qbox AV_PACKET_INFO_QBOX
 
 						if(theApp.debugMode) {
 							char *p=(char *)GlobalAlloc(GPTR,1024);
@@ -5427,12 +5535,12 @@ not_RGB:
 					}
 
 fine_ok:
-				m_TV->vFrameNum;
+				//m_TV->vFrameNum++;			// messo in OnVideoFrameReady()
 				if(m_TV->aviFile && m_TV->psVideo) {
 					if(m_TV->opzioniSave & CVidsendDoc2::quantiFrame)
 						m_TV->saveWait4KeyFrame=1;	// con questo trucco salvo solo i k-frame ossia 1 al secondo!
 					if(m_TV->saveWait4KeyFrame) {
-						if(avh->info & AVIIF_KEYFRAME)
+						if(avh->info & AV_PACKET_INFO_KEYFRAME)
 							m_TV->saveWait4KeyFrame=0;
 						else
 							goto skipSave;
@@ -5442,7 +5550,7 @@ fine_ok:
 						1,// number to write 
 						pSBuf2+sizeof(BITMAPINFOHEADER),
 						avh->len-sizeof(BITMAPINFOHEADER),	/*m_TV->biCompDef.bmiHeader.biSizeImage,*/
-						avh->info, // flags.... 
+						avh->info & AV_PACKET_INFO_KEYFRAME, // flags.... 
 						NULL, NULL);
 					if(i!=AVIERR_OK)
 						if(theApp.debugMode)
@@ -5456,7 +5564,7 @@ fine_ok:
 							1,// number to write 
 							(LPSTR)(LPCTSTR)S,
 							S.GetLength()+1,
-							avh->info, // flags.... 
+							avh->info & AV_PACKET_INFO_KEYFRAME, // flags.... 
 							NULL, NULL);
 						}
 					m_TV->vFrameNum4Save++;
@@ -5480,7 +5588,7 @@ fine: ;
 
 			}
 		if(pInpAllocated)
-			GlobalFree(pInp);
+			HeapFree(GetProcessHeap(),0,pInp);
 		bInSend=FALSE;
 		}
 	else {
@@ -5494,9 +5602,13 @@ fine: ;
 //	wsprintf(p,"%ld",m_TV->gdvFrameNum++); 
 
 
+#endif //DARIO
+
   return (LRESULT)TRUE;
   }
 
+// OCX USA  la callback video!! v. sopra
+#ifdef DARIO
 LRESULT CALLBACK WaveCallbackProc(HWND hWnd, LPWAVEHDR lpWHdr) {
 	CView *v;
 	char *p;
@@ -5514,7 +5626,7 @@ LRESULT CALLBACK WaveCallbackProc(HWND hWnd, LPWAVEHDR lpWHdr) {
 			if(theApp.theServer->bAudio && !theApp.theServer->bPaused) {
 	//			l+=sizeof(WAVEFORMATEX);
 
-				pSBuf=(BYTE *)GlobalAlloc(GMEM_FIXED,m_TV->maxWaveoutSize);
+				pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxWaveoutSize);
 				pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;
 				avh=(struct AV_PACKET_HDR *)pSBuf;
 
@@ -5523,69 +5635,350 @@ LRESULT CALLBACK WaveCallbackProc(HWND hWnd, LPWAVEHDR lpWHdr) {
 #else
 				avh->tag=MAKEFOURCC('G','D','2','0');
 #endif
-				avh->type=1;
+				avh->type=AV_PACKET_TYPE_AUDIO;
 	//				avh.psec=1000;
 				avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
 				avh->info=0;
+// USARE						measureAudio((BYTE *)wh->lpData,wh->dwBufferLength); per PTT mode!
 
 
-				hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
-				hhacm.fdwStatus=0;
-				hhacm.dwUser=(DWORD)0 /*this*/;
-				hhacm.pbSrc=(BYTE *)lpWHdr->lpData;
-				hhacm.cbSrcLength=lpWHdr->dwBytesRecorded;
-		//			hhacm.cbSrcLengthUsed=0;
-				hhacm.dwSrcUser=0;
-				hhacm.pbDst=pSBuf2;
-				hhacm.cbDstLength=m_TV->maxWaveoutSize;
-		//			hhacm.cbDstLengthUsed=0;
-				hhacm.dwDstUser=0;
-				if(!acmStreamPrepareHeader(m_TV->hAcm,&hhacm,0)) {
-					i=acmStreamConvert(m_TV->hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
-					if(theApp.debugMode>3) {
-						wsprintf(myBuf,"convertito: %d, %d bytes",i,l);
-						AfxMessageBox(myBuf);
-						}
-					acmStreamUnprepareHeader(m_TV->hAcm,&hhacm,0);
+				if(m_TV->m_hAcm) {
+					hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
+					hhacm.fdwStatus=0;
+					hhacm.dwUser=(DWORD)0 /*this*/;
+					hhacm.pbSrc=(BYTE *)lpWHdr->lpData;
+					hhacm.cbSrcLength=lpWHdr->dwBytesRecorded;
+			//			hhacm.cbSrcLengthUsed=0;
+					hhacm.dwSrcUser=0;
+					hhacm.pbDst=pSBuf2;
+					hhacm.cbDstLength=m_TV->maxWaveoutSize;
+			//			hhacm.cbDstLengthUsed=0;
+					hhacm.dwDstUser=0;
+					if(!acmStreamPrepareHeader(m_TV->m_hAcm,&hhacm,0)) {
+						i=acmStreamConvert(m_TV->m_hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
+						if(theApp.debugMode>3) {
+							char myBuf[128];
+							wsprintf(myBuf,"convertito: %d, %d bytes",i,hhacm.cbDstLengthUsed);
+							AfxMessageBox(myBuf);
+							}
+						acmStreamUnprepareHeader(m_TV->m_hAcm,&hhacm,0);
 
-					avh->len=hhacm.cbDstLengthUsed;
+						avh->len=hhacm.cbDstLengthUsed;
 
-					if(m_TV->aviFile && m_TV->psAudio) {
-						i= AVIStreamWrite(m_TV->psAudio,// stream pointer 
-							m_TV->aFrameNum, // time of this frame 
-							1,// number to write 
-							pSBuf2,
-							hhacm.cbDstLengthUsed,
-							avh->info, // flags.... 
-							NULL, NULL);
-						}
+						if(m_TV->aviFile && m_TV->psAudio) {
+							i= AVIStreamWrite(m_TV->psAudio,// stream pointer 
+								m_TV->aFrameNum, // time of this frame 
+								1,// number to write 
+								pSBuf2,
+								hhacm.cbDstLengthUsed,
+								avh->info, // flags.... 
+								NULL, NULL);
+							}
 
 
-
-					if(theApp.debugMode) {
-						p=(char *)GlobalAlloc(GPTR,1024);
-						wsprintf(p,"AFrameT# %ld: lungo %ld (%ld) %ld",m_TV->gdaFrameNum,hhacm.cbDstLengthUsed,lpWHdr->dwBytesRecorded,lpWHdr->dwBufferLength); 
-						theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
-						}
-					if(v) {
-						avh->reserved1=avh->reserved2=0;
-						v->PostMessage(WM_AUDIOFRAME_READY,(WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
-//					if(theApp.theServer->streamSocketA->Manda(&avh,pSBuf,hhacm.cbDstLengthUsed))
-//						m_TV->aFrameNum;
+						if(theApp.debugMode) {
+							p=(char *)GlobalAlloc(GPTR,1024);
+							wsprintf(p,"AFrameT# %ld: lungo %ld (%ld) %ld",m_TV->aFrameNum,hhacm.cbDstLengthUsed,lpWHdr->dwBytesRecorded,lpWHdr->dwBufferLength); 
+							theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+							}
+						if(v) {
+							avh->reserved1=avh->reserved2=0;
+	// USARE						measureAudio((BYTE *)wh->lpData,wh->dwBufferLength); per PTT mode!
+							v->PostMessage(WM_AUDIOFRAME_READY,(WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+	//					if(theApp.theServer->streamSocketA->Manda(&avh,pSBuf,hhacm.cbDstLengthUsed))
+	//						m_TV->aFrameNum;
+							}
 						}
 					}
-				}
+				else {
+					HeapFree(GetProcessHeap(),0,pSBuf);
+					}
 			}
 		bInSend=FALSE;
 		}
   return (LRESULT)TRUE;
 
-
-#endif //DARIO
-
   }
+#endif
 
 
+int CTV::compressAFrame(LPVIDEOHDR lpVHdr,int doPreview,CWnd *v,HDRAWDIB hdd,LPBITMAPINFOHEADER bmih) {
+	BYTE *pInp,*pSBuf=NULL,*pSBuf2=NULL;
+	BOOL pInpAllocated=FALSE;
+  int i,q,tFrame;
+	DWORD l,t;
+  struct AV_PACKET_HDR *avh;
+	CDC *hdc;
+
+	pInp=lpVHdr->lpData;
+	q=0;
+
+	if(doPreview) {
+		hdc = v->GetDC();
+		i=DrawDibDraw(hdd, hdc->m_hDC, 0, 0, bmih->biWidth, bmih->biHeight, 
+			bmih, lpVHdr->lpData, 0, 0, bmih->biWidth , bmih->biHeight, 0 /*DDF_SAME_DRAW*/);	
+		v->ReleaseDC(hdc);
+
+#if 0
+		in O7AREA non andava (nella callback) e quindi facevamo così...
+
+					bmih.biCompression=0;	//hmmm, e quindi serve così
+//#define SERVE_PATCH_PINNACLE 1
+#ifdef SERVE_PATCH_PINNACLE
+					bmih.biBitCount=32;
+#else
+					bmih.biBitCount=24;
+#endif
+//ASSERT(0);
+					// qui, se è 16:9, non dobbiamo fare nulla perché è sufficiente stretchare la finestra madre! (2016)
+					PAINTSTRUCT ps;
+					BeginPaint(hwnd, &ps);
+	        SetStretchBltMode(hdc, COLORONCOLOR);
+					//xShowSize 2016?
+					i=StretchDIBits(hdc, 0, 0, /*xShowSize */rc.right, /*yShowSize*/rc.bottom, 
+						0, 0, bmih.biWidth , bmih.biHeight, pInp, (BITMAPINFO *)&bmih, DIB_RGB_COLORS, SRCCOPY );	
+	        EndPaint(hwnd, &ps);
+					ReleaseDC(hwnd, hdc);
+					}
+#endif
+
+/*	FILE *f;
+	if(f=fopen("c:\\myframe1.bmp","wb")) {
+		fwrite(pInp,lpVHdr->dwBytesUsed,1,f);
+		fclose(f);
+		}*/
+
+		}
+
+	if(theApp.theServer->Opzioni & CVidsendDoc2::sendVideo && !theApp.theServer->bPaused) {
+
+		if(theApp.theServer->Opzioni & CVidsendDoc2::videoType) {
+			static DWORD lastTimeKeyframe=0;
+			pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+			pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;				// indirizzo del buffer DOPO la struct header!
+			avh=(struct AV_PACKET_HDR *)pSBuf;
+			avh->type=AV_PACKET_TYPE_VIDEO;
+#ifdef _STANDALONE_MODE
+			avh->tag=MAKEFOURCC('D','G','2','0');
+#else
+			avh->tag=MAKEFOURCC('G','D','2','0');
+#endif
+//					avh.psec=1000 / m_TV->framesPerSec;
+			memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
+			memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
+			avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
+			avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());	// anche lpVHdr->dwTimeCaptured
+//			avh->info=lpVHdr->dwFlags & VHDR_KEYFRAME ? AV_PACKET_INFO_KEYFRAME : 0; qua non c'è, quindi lo simulo
+			if((timeGetTime()-lastTimeKeyframe) > 1000) {
+				avh->info=AV_PACKET_INFO_KEYFRAME;
+				lastTimeKeyframe=timeGetTime();
+				}
+			else
+				avh->info=0;
+			// in b8 ora c'è qbox...
+
+			if(theApp.debugMode) {
+				char *p=(char *)GlobalAlloc(GPTR,1024);
+				wsprintf(p,"VFrame (precomp)# %ld: lungo %ld (%ld)",m_TV->vFrameNum,lpVHdr->dwBufferLength,lpVHdr->dwBytesUsed); 
+				theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+				}
+
+			}
+		else {
+
+			if(m_TV->biRawBitmap.biCompression != 0) {
+				if(m_TV->m_hICDe) {
+					pInp=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitCount/8);
+					if(pInp) {
+						pInpAllocated=TRUE;
+						i=ICDecompress(m_TV->m_hICDe,0 /*ICDECOMPRESS_HURRYUP*/,
+							&m_TV->biRawBitmap,lpVHdr->lpData,&m_TV->biBaseRawBitmap,pInp);
+						if(i == 0 /* se metto HURRYUP restituisce 1, ossia DONTDRAW (vfw.h) ma NON decomprime! */) {
+							}
+						else
+							goto not_RGB;
+						}
+					else
+						goto not_RGB;
+					}
+				else
+					goto not_RGB;
+				}
+
+			if(m_TV->theFrame == (BYTE *)-1) {		// se richiesto...
+				l=m_TV->biBaseRawBitmap.biHeight*m_TV->biBaseRawBitmap.biWidth*m_TV->biBaseRawBitmap.biBitCount/8;
+				m_TV->theFrame=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,l);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
+				memcpy(m_TV->theFrame,pInp,l);
+				}
+
+			// quando arriviamo qua, siam SEMPRE a 24bit direi... (v. biRawDef)
+			if(theApp.theServer->Opzioni & CVidsendDoc2::forceBN) {
+				m_TV->convertColorBitmapToBN(&m_TV->biRawDef.bmiHeader,pInp);
+				}
+			if(theApp.theServer->Opzioni & CVidsendDoc2::doFlip) {
+				m_TV->flipBitmap(&m_TV->biRawDef.bmiHeader,pInp);
+				}
+			if(theApp.theServer->Opzioni & CVidsendDoc2::doMirror) {
+				m_TV->mirrorBitmap(&m_TV->biRawDef.bmiHeader,pInp);
+				}
+			if(m_TV->imposeTime) {
+				m_TV->superImposeDateTime(&m_TV->biRawDef.bmiHeader,pInp);
+				}
+			if(m_TV->imposeTextPos) {
+				m_TV->superImposeText(&m_TV->biRawDef.bmiHeader,pInp,m_TV->imposeText,RGB(200,200,0));
+				}
+			if(!IsRectEmpty(&theApp.theServer->qualityBox)) {
+				q=m_TV->checkQualityBox(&m_TV->biRawDef.bmiHeader,pInp,&theApp.theServer->qualityBox);
+				m_TV->superImposeBox(&m_TV->biRawDef.bmiHeader,pInp,&theApp.theServer->qualityBox,q ? RGB(255,0,0) : RGB(0,255,0));
+				}
+			if(theApp.theServer->myQV.compressor) {
+				l=t=0;
+				pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+				pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
+				avh=(struct AV_PACKET_HDR *)pSBuf;
+				avh->type=AV_PACKET_TYPE_VIDEO;
+#ifdef _STANDALONE_MODE
+				avh->tag=MAKEFOURCC('D','G','2','0');
+#else
+				avh->tag=MAKEFOURCC('G','D','2','0');
+#endif
+//	ICSeqCompressFrameStart ???	ICSeqCompressFrame
+				if(m_TV->framesPerSec >1)		// usare KFrame...
+					tFrame=(m_TV->vFrameNum % m_TV->framesPerSec) ? 0 : ICCOMPRESS_KEYFRAME;
+				else
+					tFrame=(m_TV->vFrameNum & 1) ? ICCOMPRESS_KEYFRAME : 0;
+				i=ICCompress(m_TV->m_hICCo,tFrame,
+					&m_TV->biCompDef.bmiHeader,pSBuf2+sizeof(BITMAPINFOHEADER),&m_TV->biBaseRawBitmap,pInp,
+					&l,&t,m_TV->vFrameNum,0/*2500*/,theApp.theServer->myQV.quality,
+					NULL,NULL);
+				if(i == ICERR_OK) {
+//							CFile mf;
+
+//						mf.Open("c:\\frame0.bmp",CFile::modeWrite | CFile::modeCreate);
+//						mf.Write(pInp,lpVHdr->dwBytesUsed);
+//						mf.Close();
+//						mf.Open("c:\\frame.bmp",CFile::modeWrite | CFile::modeCreate);
+//						mf.Write(pSBuf,l);
+//						mf.Close();
+					memcpy(pSBuf2,&m_TV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
+					avh->len=m_TV->biCompDef.bmiHeader.biSizeImage+sizeof(BITMAPINFOHEADER);
+//							avh.psec=1000 / m_TV->framesPerSec;
+					avh->info=((t & AVIIF_KEYFRAME) ? AV_PACKET_INFO_KEYFRAME : 0);
+					if(q)
+						avh->info |= AV_PACKET_INFO_QBOX;
+					if(m_TV->aviFile && m_TV->psVideo)
+						avh->info |= AV_PACKET_INFO_RECORDING;
+					if(theApp.theServer->Opzioni & (CVidsendDoc2::forceBN | CVidsendDoc2::doFlip | CVidsendDoc2::doMirror))
+						avh->info |= AV_PACKET_INFO_VIDEOEDIT;
+					
+					avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+
+					if(theApp.debugMode) {
+						char *p=(char *)GlobalAlloc(GPTR,1024);
+//						wsprintf(p,"VFrame# %u: lungo %u (%u)",m_TV->gdvFrameNum,lpVHdr->dwBytesUsed,l); 
+						wsprintf(p,"oldTime %u, time %u",m_TV->oldTimeCaptured,lpVHdr->dwTimeCaptured); 
+						theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+						}
+//						memcpy(avh.lpData,pSBuf,l+40);
+
+					}
+				else {
+not_RGB:
+					MessageBeep(-1);
+					if(pSBuf) 
+						HeapFree(GetProcessHeap(),0,pSBuf);
+					goto fine;
+					}
+				}
+			else {
+				pSBuf=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,m_TV->maxFrameSize+AV_PACKET_HDR_SIZE+100);
+				pSBuf2=pSBuf+AV_PACKET_HDR_SIZE;					// indirizzo del buffer DOPO la struct header!
+				avh=(struct AV_PACKET_HDR *)pSBuf;
+				avh->type=AV_PACKET_TYPE_VIDEO;
+#ifdef _STANDALONE_MODE
+				avh->tag=MAKEFOURCC('D','G','2','0');
+#else
+				avh->tag=MAKEFOURCC('G','D','2','0');
+#endif
+//						avh.psec=1000 / m_TV->framesPerSec;
+				avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+				avh->len=lpVHdr->dwBytesUsed+sizeof(BITMAPINFOHEADER);
+				memcpy(pSBuf2,&m_TV->biRawDef.bmiHeader,sizeof(BITMAPINFOHEADER));
+				memcpy(pSBuf2+sizeof(BITMAPINFOHEADER),pInp,lpVHdr->dwBytesUsed);
+				avh->info=(lpVHdr->dwFlags & VHDR_KEYFRAME) ? AV_PACKET_INFO_KEYFRAME : 0;
+// qua non si applica				if(q)
+//					avh->info |= AV_PACKET_INFO_QBOX;
+				if(m_TV->aviFile && m_TV->psVideo)
+					avh->info |= AV_PACKET_INFO_RECORDING;
+// qua non si applica				if(theApp.theServer->Opzioni & (CVidsendDoc2::forceBN | CVidsendDoc2::doFlip | CVidsendDoc2::doMirror))
+//					avh->info |= AV_PACKET_INFO_VIDEOEDIT;
+
+				if(theApp.debugMode) {
+					char *p=(char *)GlobalAlloc(GPTR,1024);
+					wsprintf(p,"VFrame (raw) # %ld: lungo %ld (%ld)",m_TV->vFrameNum,lpVHdr->dwBufferLength,lpVHdr->dwBytesUsed); 
+					theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+					}
+
+				}
+			}
+
+fine_ok:
+		m_TV->vFrameNum;
+		if(m_TV->aviFile && m_TV->psVideo) {
+			if(m_TV->opzioniSave & CVidsendDoc2::quantiFrame)
+				m_TV->saveWait4KeyFrame=1;	// con questo trucco salvo solo i k-frame ossia 1 al secondo!
+			if(m_TV->saveWait4KeyFrame) {
+				if(avh->info & AV_PACKET_INFO_KEYFRAME)
+					m_TV->saveWait4KeyFrame=0;
+				else
+					goto skipSave;
+				}
+			i= AVIStreamWrite(m_TV->psVideo,// stream pointer 
+				m_TV->vFrameNum4Save, // time of this frame 
+				1,// number to write 
+				pSBuf2+sizeof(BITMAPINFOHEADER),
+				avh->len-sizeof(BITMAPINFOHEADER),	/*m_TV->biCompDef.bmiHeader.biSizeImage,*/
+				avh->info, // flags.... 
+				NULL, NULL);
+			if(i!=AVIERR_OK)
+				if(theApp.debugMode)
+					if(theApp.FileSpool)
+						*theApp.FileSpool << "errore in stream video salva";
+			if(m_TV->psText && m_TV->imposeTime && !(m_TV->vFrameNum4Save % m_TV->framesPerSec)) {
+				CString S;
+				S=CTime::GetCurrentTime().Format("%d/%m/%Y %H:%M:%S");
+				i= AVIStreamWrite(m_TV->psText,// stream pointer 
+					m_TV->vFrameNum4Save/m_TV->framesPerSec, // time of this frame 
+					1,// number to write 
+					(LPSTR)(LPCTSTR)S,
+					S.GetLength()+1,
+					avh->info, // flags.... 
+					NULL, NULL);
+				}
+			m_TV->vFrameNum4Save++;
+skipSave:	;
+			}
+
+		if(v && pSBuf) {
+			avh->reserved1=avh->reserved2=0;
+// USARE						measureAudio((BYTE *)wh->lpData,wh->dwBufferLength); per PTT mode!
+			v->PostMessage(WM_VIDEOFRAME_READY,(WPARAM)pSBuf,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+			}
+
+fine: ;
+		}
+	else {
+		if(theApp.debugMode) {
+			char *p=(char *)GlobalAlloc(GPTR,1024);
+			wsprintf(p,"Non mando video!"); 
+			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+			}
+		}
+
+	if(pInpAllocated)
+		HeapFree(GetProcessHeap(),0,pInp);
+	return i;
+	}
 
 
 

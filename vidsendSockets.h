@@ -1,6 +1,7 @@
 #include <afxsock.h>
 #include "afxtempl.h"
 #include <vfw.h>
+#include <vban.h>
 
 
 #define AUDIO_SOCKET 7603		// in vidsend 1.0 erano 0xff2f e 0xff2e
@@ -10,22 +11,42 @@
 #define DIRECTORY_SOCKET 7604
 #define AUTHENTICATION_SOCKET 7605
 // la condivisione Internet di Win98SE accetta solo porte < 1024!
+// 7606 è usata da VidsendOCX per video "finto-streaming"
+#define MP3_STREAM_SOCKET 7613
 
 class CLineText;
 class CExDocument;
+class CStringEx;
 
+#pragma pack( push, before_avh )
+#pragma pack(1)
+enum AV_PACKET_TYPE {
+	AV_PACKET_TYPE_VIDEO=0,
+	AV_PACKET_TYPE_AUDIO=1
+	};
+enum AV_PACKET_INFO {
+	AV_PACKET_INFO_KEYFRAME=AVIIF_KEYFRAME,
+	AV_PACKET_INFO_QBOX=0x100,
+	AV_PACKET_INFO_MIC=0x200,
+	AV_PACKET_INFO_VIDEOEDIT=0x400,
+	AV_PACKET_INFO_RECORDING=0x800,
+	AV_PACKET_USED=0x80000000
+	};
 struct AV_PACKET_HDR {
 	DWORD tag;
-	WORD type;			// video=0,audio=1
+	enum AV_PACKET_TYPE type;			// video=0,audio=1
 //	WORD psec;			// mSec per frame
 	long len;
 	DWORD timestamp;
-	DWORD info;			// p.es. keyFrames=AVIIF_KEYFRAME=0x10
+// NOTARE CTime/Span diventa 64 bit nelle nuove versioni!!!
+// https://docs.microsoft.com/en-us/cpp/atl-mfc-shared/reference/ctime-class?view=vs-2017
+	DWORD info;			// p.es. keyFrames=AVIIF_KEYFRAME=0x10; b8 = 0x100 = qbox alert
 	WORD reserved1,reserved2;		// usati come cnt per buffer Asyncroni
 	void *lpData;		// a volte i byte seguono la struct, a volte sono puntati da qua!
   };
 
 #define AV_PACKET_HDR_SIZE (sizeof(struct AV_PACKET_HDR)-sizeof(BYTE *)) 
+#pragma pack( pop, before_avh )
 
 class CSocketEx : public CSocket {
 public:
@@ -34,7 +55,9 @@ public:
 	static int getMyIPAddress(SOCKADDR_IN *,int q=0);
 	static char *getMyOutmostIPAddress(char *,BOOL cached=TRUE);
 	static char *getMyMACAddress(char *,int q=0);
+	WORD getPort();
 	static int IsLocalAddress(const char *);
+	static int IsBroadcastAddress(const char *);
 	~CSocketEx();
 	};
 
@@ -148,12 +171,12 @@ public:
 	CString Write(DWORD);
 	CString Write(CTime);
 	static CString normalizeName(CString,BOOL alsoBlank=TRUE);
-	void Reset() { m_Stringa.Empty(); };
-	CString setHeader(CString title) { m_Title=title; };
-	CString getValue() const { return m_Stringa; };
-	CString getHeader() const { return m_Title; };
-	int getLength() const { return m_Stringa.GetLength(); };
-	void setFormatString(CString fs) { formatSpec=fs; };
+	void Reset() { m_Stringa.Empty(); }
+	CString setHeader(CString title) { m_Title=title; }
+	CString getValue() const { return m_Stringa; }
+	CString getHeader() const { return m_Title; }
+	int getLength() const { return m_Stringa.GetLength(); }
+	void setFormatString(CString fs) { formatSpec=fs; }
 	CXMLValue();
 	CXMLValue(CString formatString);
 	CXMLValue(CString title,CString formatString);
@@ -225,7 +248,8 @@ private:
 
 class CHTTPHeader {
 public:
-	enum {
+	enum HEADER_TAG {
+		TAG_NULL=0,
 		TAG_HTTP=1,
 		TAG_SERVER,
 		TAG_HOST,
@@ -237,9 +261,11 @@ public:
 		TAG_CONTENT_DISPOSITION,
 		TAG_CONTENT_LOCATION,
 		TAG_CONNECTION,
+		TAG_UPGRADE,
 		TAG_CACHE_CONTROL,
 		TAG_EXPIRES,
 		TAG_KEEPALIVE,
+		TAG_CLOSE,
 		TAG_ETAG,
 		TAG_LOCATION,
 		TAG_MODIFIED,
@@ -253,16 +279,18 @@ public:
 		TAG_ACCEPT_ENCODING,
 		TAG_ACCEPT_LANGUAGE,
 		TAG_ACCEPT_RANGES,
-		TAG_SET_COOKIE
+		TAG_SET_COOKIE,
+		TAG_DEPRECATED_WARNING
 		};
 protected:
 	CString m_Buffer;
 public:
 	static const TCHAR *tagHttp,*tagServer,*tagDate,*tagHost,*tagReferer,*tagUserAgent,
 		*tagContentType,*tagContentLength,*tagContentDisposition,*tagContentLocation,*tagAcceptLanguage,*tagAcceptEncoding,*tagAcceptCharset,
-		*tagConnection,*tagCacheControl,*tagExpires,*tagKeepAlive,*tagEtag,*tagLocation,*tagModified,*tagAuthenticate,*tagAccept,
+		*tagConnection,*tagCacheControl,*tagExpires,*tagKeepAlive,*tagClose,*tagEtag,*tagLocation,*tagModified,*tagAuthenticate,*tagAccept,
 		*tagAllow,*tagAuthorization,*tagAcceptRanges,*tagSetCookie,*tagTransferEncoding,*tagPragma,
-		*tagNoCache,*tagIfModifiedSince,*tagProxyConnection,*tagFileUpload;
+		*tagNoCache,*tagIfModifiedSince,*tagProxyConnection,*tagFileUpload,*tagUpgrade,
+		*tagDeprecatedWarning;
 public:
 	void Reset() { m_Buffer.Empty(); 	m_Buffer.GetBufferSetLength(1024); m_Buffer.ReleaseBuffer();
 		m_Buffer="0123456789012345678901234567890123456789";
@@ -275,9 +303,14 @@ public:
 	m_Buffer+="0123456789012345678901234567890123456789x";
 
 	m_Buffer.Empty();
-}
+	}
 	void Finalize();
-	const char *AddToken(int,const char *,const char *s2=NULL,CTime t1=NULL,DWORD n1=0);
+//	const char *AddToken(enum HEADER_TAG,const char *,const char *s2=NULL,CTime t1=NULL,DWORD n1=0);
+	const char *AddToken(enum HEADER_TAG,const char *s1,const char *s2=NULL);
+	const char *AddToken(const char *);
+	const char *AddToken(enum HEADER_TAG,CTime);
+	const char *AddToken(enum HEADER_TAG,DWORD);
+	const char *getTagString(enum HEADER_TAG t);
 	CString GetBuffer() const { return m_Buffer; }
 	operator LPCTSTR() const { return m_Buffer; }		// occhio a usarlo su Puntatore-a...
 	DWORD GetLength() const { return m_Buffer.GetLength(); }
@@ -287,10 +320,18 @@ public:
 
 class CHTTPBody : public CMemFile {
 public:
+	BOOL isInFile;
+	DWORD forcedLength;
+	CString fileName;
+	static const char *CRLF;
+public:
+	CHTTPBody();
 	void WriteString(LPCTSTR s) { Write(s,_tcslen(s)); }
+	void WriteString(TCHAR ch) { Write(&ch,1); }
+	void WriteChunk(LPCTSTR s) { int i; char buf[16]; i=strlen(s); sprintf(buf,"%x\r\n",i); Write(buf,_tcslen(buf)); Write(s,_tcslen(s)); Write(CRLF,_tcslen(CRLF)); }
 //	void WriteBodyString() { boh? }
 //	void fprintf(LPCTSTR s) { Write(s,_tcslen(s)); }
-	void Reset() { SetLength(0); }
+	void Reset() { SetLength(0); isInFile=0; forcedLength=0; }
 //	CHTTPBody(int setDefault=1) { if(setDefault) WriteString(Html4String); }
 	int dumpToFile(LPCTSTR nomefile);
 	};
@@ -310,12 +351,12 @@ public:
 
 public:
 	struct MSG_HEADER Msg;
-	static const TCHAR *copyString;
-	static const TCHAR *okString;
-	static const TCHAR *Html4String,*HtmlContent,*XmlString;
-	static const TCHAR *WAPcopyString,*WAPBackString,*WAP1String,*WAPHeaderString;
-	static const TCHAR *passwordString,*yesNoString,*passwordL1,*passwordL2;
-	static const TCHAR *CRLF,*CRLF2;
+	static const char *copyString;
+	static const char *okString;
+	static const char *Html4String,*HtmlContent,*XmlString;
+	static const char *WAPcopyString,*WAPHeaderString,*WAPBackString,*WAP1String;
+	static const char *passwordString,*yesNoString,*passwordL1,*passwordL2;
+	static const char *CRLF,*CRLF2;
 	char bodyString[256];
 private:
 
@@ -333,12 +374,14 @@ protected:
 public:
 	virtual char *getBodyString(DWORD color=0x000000,const char *extraStr=NULL);
 	CWebSrvSocket *getParent() const { return m_Parent; }
-//	void setAttributi(CJoshuaUtentiSet *,BOOL doSynch=FALSE);
+#ifdef USA_AUTENTICAZIONE 
+	void setAttributi(CJoshuaUtentiSet *,BOOL doSynch=FALSE);
+#endif
 	int IsLocalPeer() const;
 	DWORD getProprieta() { return proprieta; }
 	CString getSessionUser() { return sessionUser; }
 	BOOL getPeer() { UINT P; return GetPeerName(m_Peer,P); }
-	static int setMimeType(const char *);
+	static enum mimeTypes setMimeType(const char *);
 	static char *getMimeTypeDescr(int );
 	static BYTE BCD2Hex(const char *);
 	static char *compattaHex(char *);
@@ -349,13 +392,16 @@ public:
 	static char *parseFormParm(const char *,const char *, char *, char *);
 	static int parseQuery(CLineText *,MSG_HEADER *);
 	DWORD subBuildPageDir(const char *, const char *path=NULL,int sort1=0,int sort2=0);
-	//virtual int subBuildPageStatus(int *);
+	virtual int subBuildPageStatus(int *);
 	int subBuildPageExt(const char *, const char *, MSG_HEADER *, CTime *);
 	virtual int buildHTMLPage(int,const char *,const char *);
 	virtual int buildWMLPage(int,const char *,const char *);
-	virtual int buildCGIPage(const char *,const char *,int *,int *,int isWML);
+	virtual int buildCGIPage(const char *,const char *,enum mimeTypes *,int *,BOOL isWML);
+	int buildXSLPage(const char *,const char *,int);
+//	int subBuildXSLPage_CreateSet(CXSLSet **,int *,const char *);
+//	static CString convertCSV2Table(CStringEx,CStringEx header="",BOOL bAddHyperlink=0,BOOL bBorder=0);
 
-	CString prepareHTTPHeader(const char *,int,CTime);
+	CString prepareHTTPHeader(const char *,enum mimeTypes,CTime);
 	int SendHeader();
 	int SendBody();
 	BOOL doLogin(const char *nome,const char *pasw,int *status);
@@ -452,8 +498,8 @@ public:
 //	char *subBuildPageStatus(char *, DWORD *,int *);
 	int buildHTMLPage(int,const char *,const char *);
 	int buildWMLPage(int,const char *,const char *);
-	int buildCGIPage(const char *,const char *,int *,int *,int isWML);
-	CWebSrvSocket2_vidsend(CWebSrvSocket *p) : CWebSrvSocket2_base(p) { };
+	int buildCGIPage(const char *,const char *,enum mimeTypes *,int *,int isWML);
+	CWebSrvSocket2_vidsend(CWebSrvSocket *p) : CWebSrvSocket2_base(p) { }
 	};
 
 
@@ -468,6 +514,10 @@ public:
 		PROXY_SOCKS4
 		};
 	enum {
+		HTTP_AUTHORIZATION_PLAINTEXT=1,
+		HTTP_AUTHORIZATION_BASIC=2
+		};
+	enum {
 		MAX_HEADER_LEN=4096
 		};
 public:
@@ -480,9 +530,11 @@ public:
 	BOOL Connect(LPCTSTR,BOOL bSecure=FALSE,WORD port=IPPORT_HTTP /*o IPPORT_HTTPS */ );
 	BOOL Disconnect();
 	int Send(CString);
-	CString buildQuery(CString, CString ,int m=0,int proxyMode=0);		// 0=GET, 1=PUT
+	CString buildQuery(CString, CString,int m=0,int keepAlive=1,int proxyMode=0);		// 0=GET, 1=PUT
 	int sendQuery(CString );
-	void addHeader(int,const char *,const char *s2=NULL,CTime t1=NULL,DWORD n1=0);
+	void addHeader(enum CHTTPHeader::HEADER_TAG,const char *,const char *s2=NULL);
+	void addHeader(enum CHTTPHeader::HEADER_TAG,CTime t1);
+	void addHeader(enum CHTTPHeader::HEADER_TAG,DWORD n1);
 	int authorize(const char *,const char *,int tipo=CWebSrvSocket2_base::HTTP_AUTHORIZATION_BASIC);
 	int readHeader(char *buf=NULL,DWORD len=0,WORD timeout=30);		// posso passare NULL se voglio solo saltarlo!
 	int readPage(char *,DWORD,WORD timeout=45);
@@ -522,9 +574,9 @@ public:
   BOOL Attach(const CString& sFilename);
 	BOOL Attach(const BYTE *, DWORD , const char *fileName=NULL);
 	BOOL Attach(const char *, const char *filename=NULL);
-  CString GetFilename() const { return m_sFilename; };
-  const char* GetEncodedBuffer() const { return m_pszEncoded; };
-  int GetEncodedSize() const { return m_nEncodedSize; };
+  CString GetFilename() const { return m_sFilename; }
+  const char* GetEncodedBuffer() const { return m_pszEncoded; }
+  int GetEncodedSize() const { return m_nEncodedSize; }
   static int Base64BufferSize(int nInputSize);
   static BOOL EncodeBase64(const char* aIn, int aInLen, char* aOut, int aOutSize, int* aOutLen);
 
@@ -548,12 +600,16 @@ public:
 		waitResync=8
 		};
 public:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	DWORD status;
 	DWORD sentFrame,stops,skippedFrame;
 	CTime connectTime;		// per connessione a tempo!
 	int priority;					// per prioritizzare e differenziare le connessioni...
-	CStreamSrvSocket *myParent;
+	CStreamSrvSocket *m_Parent;
+	CString IPlocation;
+	DWORD timeForPacket;			// misura il tempo impiegato a spedire un pacchetto e può servire per auto-tarare il bitrate, la risoluzione ecc
+
+private:
 	// usati da Manda()
 	const BYTE *mandaBuf1;
 	const BYTE *oldMandaBuf1;
@@ -563,7 +619,8 @@ public:
 
 public:
 	int subManda();
-	int Manda(const struct AV_PACKET_HDR *,int );
+	int Manda(const struct AV_PACKET_HDR *,int);
+	int Manda(const void *,DWORD);
 	inline BOOL isXOn() {	return (m_hSocket != INVALID_SOCKET && !(status & CStreamSrvSocket2::xOff)); }
 	void OnReceive(int);
 	void OnClose(int);
@@ -576,19 +633,27 @@ public:
 
 class CStreamSrvSocket : public CSocketEx {
 public:
+	enum STREAM_TYPE {
+		normal=0,
+		MP3=1
+		};
+public:
 	int maxConn;
 	CList < CStreamSrvSocket2 *, CStreamSrvSocket2 * > cSockRoot;
 	int flag1,flag2;
+	enum STREAM_TYPE m_Type;
+	DWORD tag;			// global data, tipo gf per MP3
 
 public:
 	void OnAccept(int);
 	void doDelete(CStreamSrvSocket2 *);
 	int Manda(const struct AV_PACKET_HDR *,int);
+	int Manda(const void *,int);
 
-	CStreamSrvSocket(CDocument *p);
+	CStreamSrvSocket(CDocument *p,enum STREAM_TYPE type=normal);
 	~CStreamSrvSocket();
 protected:
-	CDocument *myParent;
+	CDocument *m_Parent;
 	};
 
 
@@ -598,31 +663,31 @@ public:
 public:
 	DWORD receivedFrame,stops,skippedFrame;
 protected:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	CWnd *theWnd;
 	struct AV_PACKET_HDR *anAvh;
-	struct AV_PACKET_HDR **sBuffer;
-	DWORD firstIn,lastOut,ok2In,ok2Out,totBytesReceived;
+	const struct AV_PACKET_HDR * *sBuffer;
+	DWORD firstIn,lastOut,totBytesReceived;
 	DWORD maxBuffers,lowBuffers,highBuffers;
-	BOOL critical;
+	CRITICAL_SECTION m_cs;
 	DWORD lastGoodFrame;
 
 public:
-	inline int getFirstIn() { return firstIn; };
-	inline int getLastOut() { return lastOut; };
-	inline DWORD getBytesReceived() { DWORD n=totBytesReceived; totBytesReceived=0; return n; };
-	inline struct AV_PACKET_HDR *getOutBuffer() { 
-		return ok2Out ? sBuffer[lastOut] : NULL; }
-	inline BOOL roomForBuffers() { 
-		int n=firstIn-lastOut; if(n<=0) n+=maxBuffers;	return n<= maxBuffers; };
-	inline BOOL needMoreBuffers() { 
-		int n=firstIn-lastOut; if(n<=0) n+=maxBuffers;	return n<= highBuffers /*(((highBuffers-lowBuffers)/2)+1)*/; };
-	inline WORD totAvailBuffers() { 
-		int n=firstIn-lastOut; if(n<=0) n+=maxBuffers; return n; }
+	void clear();
+	inline int getFirstIn() { return firstIn; }
+	inline int getLastOut() { return lastOut; }
+	inline DWORD getBytesReceived() { DWORD n=totBytesReceived; totBytesReceived=0; return n; }
+	inline const struct AV_PACKET_HDR *getOutBuffer() { 
+		return isOk2Out() ? sBuffer[lastOut] : NULL; }
+	BOOL roomForBuffers();
+	BOOL needMoreBuffers();
+	WORD totAvailBuffers();
 	inline WORD getMaxBuffers() { return maxBuffers;	}
 	inline WORD getLowBuffers() { return lowBuffers;	}
+	inline BOOL isOk2In() { return 1; }
+	inline BOOL isOk2Out() { return totAvailBuffers()>lowBuffers; }
 	void bumpOutBuffer();
-	void addInBuffer(struct AV_PACKET_HDR *);
+	void addInBuffer(const struct AV_PACKET_HDR *);
 	void emptyBuffers();
 	void initBuffers(int,DWORD bl=0,DWORD bh=0);
 	static void delay(DWORD);
@@ -645,7 +710,7 @@ public:
 class CStreamACliSocket : public CStreamCliSocket {
 public:
 public:
-	int totBuffers;
+	int receivedSample;
 protected:
 	HWAVEOUT *hWaveOut;
 
@@ -660,11 +725,12 @@ public:
 class CControlSrvSocket;
 class CControlSrvSocket2 : public CSocketEx {
 public:
-	CLineText *myLineText;
-	CControlSrvSocket *myParent;
+	CLineText *m_LineText;
+	CControlSrvSocket *m_Parent;
 	DWORD numLogConn;
 	DWORD cliTimeOut;
 	CString connName;
+	CString appName;
 	CTime startConn;			// il momento di inizio connessione...
 	CTimeSpan timedConn;	// ...e la durata max. (se prevista)
 private:
@@ -697,13 +763,13 @@ public:
 	CControlSrvSocket(CDocument *);
 	~CControlSrvSocket();
 protected:
-	CDocument *myParent;
+	CDocument *m_Parent;
 	};
 
 class CControlCliSocket : public CSocketEx {
 public:
 public:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	BYTE packetType;
 protected:
 	CWnd *theWnd;
@@ -716,12 +782,95 @@ public:
 	~CControlCliSocket();
 	};
 
+
+// VBAN 2021 https://vb-audio.com/
+
+/**
+ * stream_config_t structure.
+ * This structures helps to pass the stream important audio parameters around.
+ */
+struct stream_config_t {
+  unsigned int            nb_channels;
+  unsigned int            sample_rate;
+  enum VBanBitResolution  bit_fmt;
+	};
+/**
+ * Socket configuration structure.
+ * To be used at init time
+ */
+#define SOCKET_IP_ADDRESS_SIZE    32
+struct socket_config_t {
+  enum socket_direction   direction;
+  char                    ip_address[SOCKET_IP_ADDRESS_SIZE];
+  short                   port;
+	};
+
+class CVBANSocket : public CSocketEx {
+public:
+/**
+ * Number of characters for ip address
+ */
+	enum socket_direction {
+		SOCKET_IN,
+		SOCKET_OUT,
+		};
+	enum {
+		VBAN_PORT=VBAN_DEFAULT_PORT,
+		DEFAULT_PORT=0 /*34568*/
+		};
+
+public:
+/**
+ * @warning: MUST BE ADAPTED WITH VBAN PROTOCOL EVOLUTIONS
+ */
+	static const char *bit_fmt_names [VBAN_BIT_RESOLUTION_MAX];
+
+	int Manda(const void *,DWORD);
+	int Open(LPSTR address=NULL /*broadcast*/);
+	int Ping();
+	int PacketInitHeader(const struct stream_config_t *, const char *);
+	int PacketSetNewContent(size_t);
+	void PacketSetNewSeq(DWORD);
+	static int PacketInitHeader(const char *, const struct stream_config_t *, const char *);
+	static int PacketSetNewContent(const char *, size_t);
+	static void PacketSetNewSeq(const char *, DWORD);
+	static int PacketCheck(const char *, const BYTE *, size_t);
+	static int PacketPcmCheck(const BYTE *, size_t);
+	static int PacketGetMaxPayloadSize(const BYTE *);
+	static int PacketGetStreamConfig(const BYTE *, struct stream_config_t *);
+/**
+ * Helper function to parse command line parameter.
+ */
+	enum VBanBitResolution stream_parse_bit_fmt(char const* argv);
+	char const* stream_print_bit_fmt(enum VBanBitResolution bit_fmt);
+/**
+ * Helper function to get the help message.
+ */
+	char const* stream_bit_fmt_help();
+	size_t vban_sr_from_value(unsigned int);
+	CVBANSocket(CDocument *p,UINT port=DEFAULT_PORT);
+	~CVBANSocket();
+
+private:
+  struct socket_config_t config;
+	struct stream_config_t stream_config;
+	BYTE databuf[65535];
+	UINT m_Port;
+	WORD bytesPerFrame;
+
+protected:
+	CDocument *m_Parent;
+	};
+
+
+
+
 // Authentication server/client
 class CAuthSrvSocket;
 class CAuthSrvSocket2 : public CSocketEx {
 public:
-	CLineText *myLineText;
-	CAuthSrvSocket *myParent;
+	CLineText *m_LineText;
+	CAuthSrvSocket *m_Parent;
 	BYTE packetType;
 	CString nome;
 	BYTE pasw[64];			// è criptata, quindi BYTE...
@@ -757,7 +906,7 @@ public:
 class CAuthCliSocket : public CSocketEx {
 public:
 public:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	int response,extraParm;
 	DWORD IDutente;
 	char tariffa[16],passwordSconto[16];
@@ -770,10 +919,10 @@ private:
 	BYTE packetType;
 protected:
 	CWnd *theWnd;
-	CExDocument *myParent; 
+	CExDocument *m_Parent; 
 
 public:
-	CExDocument *getParent() { return myParent; }
+	CExDocument *getParent() { return m_Parent; }
 	int SendUserPass(char *,char *,int,DWORD,DWORD,DWORD,DWORD);
 	void reInit();
 	void OnReceive(int);
@@ -787,8 +936,8 @@ public:
 class CDirectorySrvSocket;
 class CDirectorySrvSocket2 : public CSocketEx {
 public:
-	CLineText *myLineText;
-	CDirectorySrvSocket *myParent;
+	CLineText *m_LineText;
+	CDirectorySrvSocket *m_Parent;
 	CString connName;
 	int cliTimeOut;			// diverso dall'altro... qua uso anche -1
 	BYTE packetType;
@@ -818,7 +967,7 @@ public:
 class CDirectoryCliSocket : public CSocketEx {
 public:
 public:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	BYTE packetType;
 protected:
 
@@ -833,8 +982,8 @@ public:
 class CChatSrvSocket;
 class CChatSrvSocket2 : public CSocketEx /*CAsyncSocket*/ {
 public:
-	CLineText *myLineText;
-	CChatSrvSocket *myParent;
+	CLineText *m_LineText;
+	CChatSrvSocket *m_Parent;
 	DWORD serNum;
 	BOOL richOne2One;
 	CString connName;
@@ -844,7 +993,7 @@ public:
 	BYTE packetType;
 
 public:
-	int Manda(char *,int );
+	int Manda(const char *,int );
 	void OnReceive(int);
 	void OnClose(int);
 
@@ -860,7 +1009,7 @@ public:
 
 public:
 	void doDelete(CChatSrvSocket2 *);
-	int Manda(char *,int );
+	int Manda(const char *,int );
 	void OnAccept(int);
 
 	CChatSrvSocket();
@@ -870,7 +1019,7 @@ public:
 class CChatCliSocket : public CSocketEx /* CAsyncSocket comporterebbe cambiamenti in OnConnect (v.anche NMChat) */ {
 public:
 public:
-	CLineText *myLineText;
+	CLineText *m_LineText;
 	BYTE packetType;
 protected:
 	CWnd *theWnd;
@@ -885,6 +1034,7 @@ public:
 
 
 class CFTPclient : public CSocketEx {
+public:
 	enum { bufSize=4096 };
 
 public:
@@ -922,4 +1072,7 @@ private:
 protected:
 
 	};
+
+
+
 

@@ -10,7 +10,11 @@
 #include "vidsendlog.h"
 #include "vidsendDialog.h"
 #include "vidsendSet.h"
+#include "digitaltext.h"
 #include "cjpeg2.h"
+#include "player.h"
+#include "mp3coder.h"
+#include "joshuamp3.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -43,6 +47,8 @@ BEGIN_MESSAGE_MAP(CVidsendDoc, CExDocument)
 	ON_UPDATE_COMMAND_UI(ID_VISUALIZZA_DIMENSIONEDOPPIA, OnUpdateVisualizzaDimensionedoppia)
 	ON_COMMAND(ID_VISUALIZZA_STEREOSIMULATO, OnVisualizzaStereosimulato)
 	ON_UPDATE_COMMAND_UI(ID_VISUALIZZA_STEREOSIMULATO, OnUpdateVisualizzaStereosimulato)
+	ON_COMMAND(ID_VISUALIZZA_MUTE, OnVisualizzaMute)
+	ON_UPDATE_COMMAND_UI(ID_VISUALIZZA_MUTE, OnUpdateVisualizzaMute)
 	ON_COMMAND(ID_CONNESSIONE_PAUSA, OnConnessionePausa)
 	ON_UPDATE_COMMAND_UI(ID_CONNESSIONE_PAUSA, OnUpdateConnessionePausa)
 	ON_COMMAND(ID_CONNESSIONE_RIPRENDI, OnConnessioneRiprendi)
@@ -77,6 +83,7 @@ CVidsendDoc::CVidsendDoc() {
   loginPasw=myBuf;
   GetPrivateProfileString(IDS_AUTHSERVER,myBuf,127);
   authWWW=myBuf;
+	wantsVideo=wantsAudio=TRUE;
 	}
 
 CVidsendDoc::~CVidsendDoc() {
@@ -97,18 +104,6 @@ BOOL CVidsendDoc::OnNewDocument() {
 
 	if(!CExDocument::OnNewDocument())
 		return FALSE;
-
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		char myBuf[64];
-		RECT rc;
-		CVidsendView *w=(CVidsendView *)getView();
-
-		SetRectEmpty(&rc);
-		GetPrivateProfileString(IDS_COORDINATE,myBuf,32);
-		sscanf(myBuf,"%d,%d,%d,%d",&rc.left,&rc.top,&rc.right,&rc.bottom);	// sono coord. client rispetto alla MDIFRAME madre della mia ChildFrame
-		if(!IsRectEmpty(&rc))
-			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
-		}
 
 	return TRUE;
 	}
@@ -177,7 +172,7 @@ void CVidsendDoc::OnFilePrint() {
 		_tcscpy(myBuf,"Immagine Video ricevuta ");
 		wsprintf(myBuf1,"(VideoSender %ux%u)",w->streamInfo.bm.biWidth,w->streamInfo.bm.biHeight);
 
-		strcat(myBuf,myBuf1);
+		_tcscat(myBuf,myBuf1);
 		dInfo.cbSize=sizeof(DOCINFO);
 		dInfo.lpszDocName=myBuf;
 		dInfo.lpszOutput=NULL;
@@ -230,7 +225,7 @@ void CVidsendDoc::OnFilePrint() {
 		
 fine:
 		EndWaitCursor();
-		GlobalFree(lpdm);
+		HeapFree(GetProcessHeap(),0,lpdm);
 		}
 
 	DeleteDC(hDC);
@@ -277,6 +272,7 @@ void CVidsendDoc::OnVisualizza43() {
 void CVidsendDoc::OnUpdateVisualizza43(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::fmt4_3 ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockV ? 1 : 0);
 	}
 
 
@@ -288,6 +284,7 @@ void CVidsendDoc::OnVisualizzaBn() {
 void CVidsendDoc::OnUpdateVisualizzaBn(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::fmt_bn ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockV ? 1 : 0);
 	}
 
 void CVidsendDoc::OnVisualizzaDimensionedoppia() {
@@ -300,6 +297,7 @@ void CVidsendDoc::OnVisualizzaDimensionedoppia() {
 void CVidsendDoc::OnUpdateVisualizzaDimensionedoppia(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::fmt_double ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockV ? 1 : 0);
 	}
 
 void CVidsendDoc::OnVisualizzaAtuttoschermo() {
@@ -312,6 +310,7 @@ void CVidsendDoc::OnVisualizzaAtuttoschermo() {
 void CVidsendDoc::OnUpdateVisualizzaAtuttoschermo(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::fmt_full ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockV ? 1 : 0);
 	}
 
 void CVidsendDoc::standardSize() {
@@ -347,6 +346,8 @@ void CVidsendDoc::standardSize() {
 fine: ;
 	}
 
+
+//-----------------------------------------------------------------------------
 void CExDocument::getWindow(RECT *r) {
 	CVidsendView *w=(CVidsendView *)getView();
 
@@ -367,6 +368,36 @@ void CExDocument::move(int x1,int y1,int x2,int y2) {
 		}
 	}
 
+BOOL CExDocument::OnNewDocument() {
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout) {
+		char myBuf[64];
+		RECT rc;
+		CVidsendView *w=(CVidsendView *)getView();
+
+		SetRectEmpty(&rc);
+		GetPrivateProfileString(IDS_COORDINATE,myBuf,32);
+		sscanf(myBuf,"%d,%d,%d,%d",&rc.left,&rc.top,&rc.right,&rc.bottom);	// sono coord. client rispetto alla MDIFRAME madre della mia ChildFrame
+		if(!IsRectEmpty(&rc))
+			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
+		}
+
+	return CDocument::OnNewDocument();
+	}
+
+void CExDocument::savelayout() {
+	RECT rc;
+	char myBuf[64];
+
+	getView()->GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
+	getView()->GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una in mezzo...
+//		if(!IsIconic() && !IsZoomed()) {		// NON VANNO PORCODIO
+	if(rc.left>0 && rc.top>0 && (rc.right-rc.left)>100 && (rc.bottom-rc.top)>50) {		// cagata quando qualsiasi MDI child maximized...@#$%
+		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
+		WritePrivateProfileString(IDS_COORDINATE,myBuf);
+		}
+	}
+
 void CVidsendDoc::OnVisualizzaStereosimulato() {
 	
 	Opzioni ^= CVidsendDoc::sstereo;
@@ -375,11 +406,24 @@ void CVidsendDoc::OnVisualizzaStereosimulato() {
 void CVidsendDoc::OnUpdateVisualizzaStereosimulato(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::sstereo ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockA ? 1 : 0);
+	}
+
+void CVidsendDoc::OnVisualizzaMute() {
+	
+	Opzioni ^= CVidsendDoc::muted;
+	}
+
+void CVidsendDoc::OnUpdateVisualizzaMute(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(Opzioni & CVidsendDoc::muted ? 1 : 0);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockA ? 1 : 0);
 	}
 
 void CVidsendDoc::OnVisualizzaVolume() {
 
 	WinExec("sndvol32.exe",SW_SHOWNORMAL);
+	WinExec("sndvol.exe",SW_SHOWNORMAL);			// per Windows 7 !!!
 	}
 
 
@@ -455,6 +499,7 @@ void CVidsendDoc::OnControlloImmagine() {
 void CVidsendDoc::OnUpdateControlloImmagine(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(Opzioni & CVidsendDoc::fmt_controls);
+	pCmdUI->Enable(((CVidsendView *)getView())->cliSockV ? 1 : 0);
 	}
 
 
@@ -498,19 +543,57 @@ void CVidsendDoc::sendHrtBt() {
 
 
 
-
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendDoc2
 
 IMPLEMENT_DYNCREATE(CVidsendDoc2, CDocument)
+
+const struct WAVE_QUALITY CVidsendDoc2::waveQualities[8] = {
+	{8000,8,1},
+	{11025,8,1},
+	{22050,8,1},
+	{22050,16,1},
+	{44100,8,1},
+	{44100,16,1},
+	{44100,16,2},
+	{48000,16,2},
+	};
+
+const struct QUALITY_MODEL_V CVidsendDoc2::qsv[15]= {
+	{160,120,24,1,2500},
+	{160,120,24,2,2500}, /*200 150*/
+	{160,120,24,5,2500}, /*240 180*/
+	{320,240,24,2,5000}, /*240 180*/
+	{320,240,24,2,7500},
+	{320,240,24,5,5000},
+	{320,240,24,10,5000},
+	{320,240,24,15,7500},
+	{640,480,24,5,7000},
+	{640,480,24,15,9000},
+	{720,576,24,5,7000},
+	{720,576,24,15,9000},
+	{720,576,24,25,9000},
+	{800,600,24,15,9000},
+	{1280,720,24,15,9000}
+	};
+
+const struct QUALITY_MODEL_A CVidsendDoc2::qsa[7]= {
+	{8000,8,1,2500},
+	{11025,8,1,5000},
+	{22050,8,1,5000},
+	{22050,8,2,5000},
+	{22050,16,2,5000},
+	{44100,16,2,5000},
+	{44100,16,2,9000}
+	};
 
 CVidsendDoc2::CVidsendDoc2() {
 	char myBuf[128];
 	
 	prfSection="ServerStream";
 	Opzioni=GetPrivateProfileInt(IDS_OPZIONI);
-	OpzioniSalvaVideo=GetPrivateProfileInt(IDS_OPZIONI2);
 	OpzioniSorgenteVideo=GetPrivateProfileInt(IDS_OPZIONI3);
+	OpzioniSalvaVideo=GetPrivateProfileInt(IDS_OPZIONI4);
 	imposeDateTime=GetPrivateProfileInt(IDS_IMPOSEDATETIME);
 	GetPrivateProfileString(IDS_IMPOSETEXT,imposeText,31);
 	imposeTextPos=GetPrivateProfileInt(IDS_IMPOSETEXTPOS);
@@ -544,6 +627,13 @@ CVidsendDoc2::CVidsendDoc2() {
 #endif
 #endif
 	videoSource=GetPrivateProfileInt(IDS_VIDEOSOURCE);
+// è in Opzioni!	videoSourceRTSP=GetPrivateProfileInt(IDS_VIDEOSOURCE2);
+	GetPrivateProfileString(IDS_RTSP_SERVER,myBuf,127);
+	RTSPaddress=myBuf;
+	GetPrivateProfileString(IDS_RTSP_USER,myBuf,127);
+	RTSPuser=myBuf;
+	GetPrivateProfileString(IDS_RTSP_PASS,myBuf,127);
+	RTSPpassword=myBuf;
 	alternaSource=videoSource & 0x8000 ? 1 : 0;
 	videoSource &= 0x7fff;
 	GetPrivateProfileString(IDS_FORCEOPENWWW,myBuf,127);
@@ -628,10 +718,14 @@ CVidsendDoc2::CVidsendDoc2() {
 	GetPrivateProfileString(IDS_STREAMTITLE,myBuf,127);
 	streamTitle=myBuf;
 	theSet=NULL;
-	myID=0;
+	myID=1;
 	myTimedConn=0;
 
+	theTV=NULL;
+
 	ZeroMemory(&myQV,sizeof(myQV));
+	GetPrivateProfileString(IDS_VFORMATNAME,myBuf,5);
+	myQV.format=*myBuf ? *((DWORD *)myBuf) : 0L;
 	GetPrivateProfileString(IDS_VCOMPRESSORNAME,myBuf,5);
 	myQV.compressor=*myBuf ? *((DWORD *)myBuf) : 0L;
 	myQV.fps=GetPrivateProfileInt(IDS_FRAMESPERSEC);
@@ -640,8 +734,8 @@ CVidsendDoc2::CVidsendDoc2() {
 #else
 	GetPrivateProfileString(IDS_COMPRESSORDIMENSIONI,myBuf,32,"320x240");
 #endif
-	myQV.imageSize.right=atoi(myBuf);		// N.B. stringa vuota=crash... non ho parole!
-	myQV.imageSize.bottom=atoi(strchr(myBuf,'x')+1);
+	myQV.imageSize.cx=atoi(myBuf);		// N.B. stringa vuota=crash... non ho parole!
+	myQV.imageSize.cy=atoi(strchr(myBuf,'x')+1);
 	myQV.bpp=24;
 	myQV.quality=GetPrivateProfileInt(IDS_COMPRESSORQUALITYV);
 	KFrame=GetPrivateProfileInt(IDS_KFRAME);
@@ -667,6 +761,7 @@ CVidsendDoc2::CVidsendDoc2() {
 	GetPrivateProfileString(IDS_QUALITYBOX,myBuf,32,"0,0,0,0");
 	sscanf(myBuf,"%u,%u,%u,%u",&qualityBox.top,&qualityBox.left,&qualityBox.bottom,&qualityBox.right);		// 
 
+	theHDD=NULL;
 
 	pagProva.tipoVideo=GetPrivateProfileInt(IDS_COMPRESSOR_TESTPAGEV);
 	pagProva.tipoAudio=GetPrivateProfileInt(IDS_COMPRESSOR_TESTPAGEA);
@@ -691,6 +786,18 @@ CVidsendDoc2::CVidsendDoc2() {
 		}
 	else {
 		}
+	streamSocketA2=new CStreamSrvSocket(this,CStreamSrvSocket::MP3);		// MP3 streaming, 2023
+	streamSocketA2->Create(MP3_STREAM_SOCKET,SOCK_STREAM);
+	streamSocketA2->Listen();
+	streamSocketA2->tag=(DWORD)lame_init();
+	lame_init_params((lame_global_flags*)streamSocketA2->tag);
+	id3tag_init((lame_global_flags*)streamSocketA2->tag);
+	id3tag_set_title((lame_global_flags*)streamSocketA2->tag, "RadioG");
+	id3tag_set_artist((lame_global_flags*)streamSocketA2->tag, "DarioG");
+	id3tag_set_year((lame_global_flags*)streamSocketA2->tag, "2023");
+	id3tag_add_v2((lame_global_flags*)streamSocketA2->tag);
+
+
 	controlSocket=new CControlSrvSocket(this);
 	controlSocket->Create(CONTROL_SOCKET);
 	if(!(theApp.Opzioni & CVidsendApp::TCP_UDP)) {
@@ -698,6 +805,27 @@ CVidsendDoc2::CVidsendDoc2() {
 		}
 	else {
 		}
+
+	streamSocketVBAN=NULL;
+	if(Opzioni & usaVBAN) {
+		streamSocketVBAN=new CVBANSocket(this);
+		struct stream_config_t stream_config;
+		if(theTV) {
+			stream_config.bit_fmt=theTV->wfd.wf.wBitsPerSample==16 ? VBAN_BITFMT_16_INT : VBAN_BITFMT_8_INT;
+			stream_config.nb_channels=theTV->wfd.wf.nChannels;
+			stream_config.sample_rate=theTV->wfd.wf.nSamplesPerSec;
+			}
+		else {
+			stream_config.bit_fmt=VBAN_BITFMT_8_INT;
+			stream_config.nb_channels=1;
+			stream_config.sample_rate=22050;
+			}
+		streamSocketVBAN->PacketInitHeader(&stream_config, "Liverpool's GD");		//NO! va cmq fatta a ogni pacchetto
+
+		streamSocketVBAN->Open();
+
+		}
+
 	authSocket=NULL;
 	theTV=NULL;
 	aviFile=NULL;
@@ -709,60 +837,34 @@ CVidsendDoc2::CVidsendDoc2() {
 	bPaused=0;
 	bAudio=Opzioni & maySendAudio;
 
+/* da ocx...
+	if(Opzioni & usaRTSP) {
+		rtspSocket=new CRTSPServer(_T("stream1"));
+		if(rtspSocket) {
+	#define RTSP_PORT 554
+			int i=rtspSocket->Create(RTSP_PORT);
+			if(!i) {
+				if(theApp.FileSpool) 
+					theApp.FileSpool->print(CLogFile::flagError,"Impossibile installare server RTSP");
+				}
+			else
+				i=rtspSocket->Listen();
+		//										i=WSAGetLastError();
+			}
+		}
+		*/
+
+
+
 	pipeV = INVALID_HANDLE_VALUE;
 	pipeVBuffer=NULL;
 
 
 #ifndef _NEWMEET_MODE
-	qsv[0].imageSize.right=160;
-	qsv[0].imageSize.bottom=120;
-	qsv[0].bpp=24;
-	qsv[0].fps=2;
-	qsv[0].quality=2500;
-	qsv[1].imageSize.right=160 /*200*/;
-	qsv[1].imageSize.bottom=120 /*150*/;
-	qsv[1].bpp=24;
-	qsv[1].fps=5;
-	qsv[1].quality=2500;
-	qsv[2].imageSize.right=320 /*240*/;
-	qsv[2].imageSize.bottom=240 /*180*/;
-	qsv[2].bpp=24;
-	qsv[2].fps=2;
-	qsv[2].quality=5000;
-	qsv[3].imageSize.right=320 /*240*/;
-	qsv[3].imageSize.bottom=240 /*180*/;
-	qsv[3].bpp=24;
-	qsv[3].fps=5;
-	qsv[3].quality=5000;
-	qsv[4].imageSize.right=320;
-	qsv[4].imageSize.bottom=240;
-	qsv[4].bpp=24;
-	qsv[4].fps=10;
-	qsv[4].quality=5000;
-	qsv[5].imageSize.right=320;
-	qsv[5].imageSize.bottom=240;
-	qsv[5].bpp=24;
-	qsv[5].fps=15;
-	qsv[5].quality=7500;
-	qsv[6].imageSize.right=640;
-	qsv[6].imageSize.bottom=480;
-	qsv[6].bpp=24;
-	qsv[6].fps=25;
-	qsv[6].quality=7500;
-
-	qsa[0].samplesPerSec=8000;
-	qsa[0].bitsPerSample=8;
-	qsa[0].channels=1;
-	qsa[0].quality=2500;
-	qsa[1].samplesPerSec=11025;
-	qsa[1].bitsPerSample=8;
-	qsa[1].channels=1;
-	qsa[1].quality=5000;
-	qsa[2].samplesPerSec=22050;
-	qsa[2].bitsPerSample=8;
-	qsa[2].channels=1;
-	qsa[2].quality=5000;
 #else
+
+	FINIRE ::) #stuprimannone #cazziinculoallaltropedofilo
+
 	qsv[0].imageSize.right=160;
 	qsv[0].imageSize.bottom=120;
 	qsv[0].bpp=24;
@@ -852,6 +954,7 @@ no_reg:
 			}	
 		}
 
+#if defined(_NEWMEET_MODE) || defined(_CAMPARTY_MODE)		// lascio cmq sta cagata... 2023 morte a voi 
 	if(theApp.Opzioni & CVidsendApp::saveLayout) {
 		char myBuf[64];
 		RECT rc;
@@ -875,6 +978,7 @@ no_reg:
 #endif
 		// NO RESIZE! uso le dim. della finestra video!
 		}
+#endif
 
 	setTXMode(0);		// salvare TXmode??
 
@@ -927,16 +1031,23 @@ no_set:
 		pipeVBuffer=(TCHAR*)HeapAlloc(hHeap, 0, PIPEBUFSIZE*sizeof(TCHAR));
 		}
 
+	theHDD=DrawDibOpen();
+	DrawDibBegin(theHDD,0,myQV.imageSize.cx,myQV.imageSize.cy,&theTV->biRawBitmap,		//2019
+		myQV.imageSize.cx,myQV.imageSize.cy,0);
 	return TRUE;
 	}
 
 CVidsendDoc2::~CVidsendDoc2() {
 	char myBuf[128];
 
+	if(theHDD) {
+		DrawDibEnd(theHDD);
+		DrawDibClose(theHDD);
+		}
+	setTXMode(-1);
 	if(theTV)
 		delete theTV;
 	theTV=NULL;
-	setTXMode(-1);
 	if(authSocket) {
 		authSocket->Close();
 		delete authSocket;
@@ -962,31 +1073,50 @@ CVidsendDoc2::~CVidsendDoc2() {
 		delete streamSocketA;
 		}
 	streamSocketA=NULL;
+	if(streamSocketA2) {
+		streamSocketA2->Close();
+		if(streamSocketA2->tag) {
+			free_id3tag(((lame_global_flags *)streamSocketA2->tag)->internal_flags);
+			lame_close((lame_global_flags *)streamSocketA2->tag);
+			}
+		delete streamSocketA2;
+		}
+	streamSocketA2=NULL;
+
 	if(streamSocketV) {
 		streamSocketV->Close();
 		delete streamSocketV;
 		}
 	streamSocketV=NULL;
+	if(streamSocketVBAN) {
+		streamSocketVBAN->Close();
+		delete streamSocketVBAN;
+		}
+	streamSocketVBAN=NULL;
 	save();
   WritePrivateProfileInt(IDS_MAXCONN,maxConn);
   WritePrivateProfileInt(IDS_OPZIONI,Opzioni);
-  WritePrivateProfileInt(IDS_OPZIONI2,OpzioniSalvaVideo);
   WritePrivateProfileInt(IDS_OPZIONI3,OpzioniSorgenteVideo);
+  WritePrivateProfileInt(IDS_OPZIONI4,OpzioniSalvaVideo);
   WritePrivateProfileInt(IDS_VIDEOSOURCE,videoSource | (alternaSource ? 0x8000 : 0));
 	}
+
 
 BOOL CVidsendDoc2::save() {
 	char myBuf[64];
 	int i;
 
+	*((DWORD *)myBuf)=myQV.format;
+	myBuf[4]=0;
+	WritePrivateProfileString(IDS_VFORMATNAME,myBuf);
 	*((DWORD *)myBuf)=myQV.compressor;
 	myBuf[4]=0;
 	WritePrivateProfileString(IDS_VCOMPRESSORNAME,myBuf);
 	WritePrivateProfileInt(IDS_FRAMESPERSEC,myQV.fps);
-	wsprintf(myBuf,"%ux%u",myQV.imageSize.right,myQV.imageSize.bottom);
+	wsprintf(myBuf,"%ux%u",myQV.imageSize.cx,myQV.imageSize.cy);
 	WritePrivateProfileString(IDS_COMPRESSORDIMENSIONI,myBuf);
-	wsprintf(myBuf,"%d",myQA.compressor);
 	WritePrivateProfileInt(IDS_KFRAME,KFrame);
+	wsprintf(myBuf,"%d",myQA.compressor);
 	WritePrivateProfileString(IDS_ACOMPRESSORNAME,myBuf);
 	WritePrivateProfileInt(IDS_COMPRESSORQUALITYV,myQV.quality);
 	WritePrivateProfileInt(IDS_COMPRESSORQUALITYA,myQA.quality);
@@ -1009,6 +1139,10 @@ BOOL CVidsendDoc2::save() {
   WritePrivateProfileString(IDS_IMPOSETEXT,imposeText);
   WritePrivateProfileInt(IDS_IMPOSETEXTPOS,imposeTextPos);
 	WritePrivateProfileString(IDS_AVIFILE_PB,(LPSTR)(LPCTSTR)nomeAVI_PB);
+	WritePrivateProfileString(IDS_RTSP_SERVER,(LPSTR)(LPCTSTR)RTSPaddress);
+	WritePrivateProfileString(IDS_RTSP_USER,(LPSTR)(LPCTSTR)RTSPuser);
+	WritePrivateProfileString(IDS_RTSP_PASS,(LPSTR)(LPCTSTR)RTSPpassword);
+	
 	
 
 	wsprintf(myBuf,"%u,%u,%u,%u",qualityBox.top,qualityBox.left,qualityBox.bottom,qualityBox.right);
@@ -1069,9 +1203,19 @@ int CVidsendDoc2::acceptConnect(const char *who) {
 
 int CVidsendDoc2::openVideo(CVidsendView2 *v) {
 	CChildFrame2 *w;
+	WAVEFORMATEX myWf;
 
+	myWf.wFormatTag = WAVE_FORMAT_PCM;
+	myWf.nChannels =  1;
+	myWf.nSamplesPerSec = 22050;
+	myWf.wBitsPerSample = 8;
+	myWf.nBlockAlign= (myWf.nChannels * myWf.wBitsPerSample)/8;
+	myWf.nAvgBytesPerSec = (myWf.nSamplesPerSec * myWf.nChannels * myWf.wBitsPerSample)/8;
+	myWf.cbSize = 0 /*sizeof(WAVEFORMATEX)*/;
+
+	theApp.theServer=this;		// mi serve in CTV!! (v. anche main OpenDocument())
 	theTV=new CTV(v,OpzioniSorgenteVideo & CVidsendDoc2::useOverlay,&myQV.imageSize,
-		24,myQV.fps,myQV.compressor,KFrame,Opzioni & CVidsendDoc2::maySendAudio);
+		24,myQV.fps,myQV.format,myQV.compressor,KFrame,Opzioni & CVidsendDoc2::maySendAudio,&myWf);
 #ifdef _CAMPARTY_MODE				// per ora solo qua, ma potrebbe avere senso anche agli altri
 	// myQV viene salvato...
 #endif
@@ -1087,6 +1231,20 @@ int CVidsendDoc2::openVideo(CVidsendView2 *v) {
 		/*i=*/theTV->Capture(1);
 //				d->impostaVideoSource(d->videoSource);
 		// fa delle cagate se un'altra finestra si apre in contemporanea... SISTEMARE!!
+
+
+		if(Opzioni & usaVBAN) {
+			if(streamSocketVBAN)
+				streamSocketVBAN->Close();
+			struct stream_config_t stream_config;
+			stream_config.bit_fmt=theTV->wfd.wf.wBitsPerSample==16 ? VBAN_BITFMT_16_INT : VBAN_BITFMT_8_INT;
+			stream_config.nb_channels=theTV->wfd.wf.nChannels;
+			stream_config.sample_rate=theTV->wfd.wf.nSamplesPerSec;
+			streamSocketVBAN->PacketInitHeader(&stream_config, "Liverpool's GD");
+//			streamSocketVBAN->Open("255.255.255.255");
+			streamSocketVBAN->Open("192.168.1.104");
+			}
+
 		}
 	if(w)
 		w->setStatusIcons(this);
@@ -1111,9 +1269,11 @@ BEGIN_MESSAGE_MAP(CVidsendDoc2, CExDocument)
 	ON_COMMAND(ID_VIDEO_TRASMISSIONE_DALVIVO, OnVideoTrasmissioneDalvivo)
 	ON_COMMAND(ID_VIDEO_TRASMISSIONE_FILMATO, OnVideoTrasmissioneFilmato)
 	ON_COMMAND(ID_VIDEO_TRASMISSIONE_PAGINADIPROVA, OnVideoTrasmissionePaginadiprova)
+	ON_COMMAND(ID_VIDEO_TRASMISSIONE_CLIENTVIDEOPROXY, OnVideoTrasmissioneClientVideoProxy)
 	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_PAGINADIPROVA, OnUpdateVideoTrasmissionePaginadiprova)
 	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_FILMATO, OnUpdateVideoTrasmissioneFilmato)
 	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_DALVIVO, OnUpdateVideoTrasmissioneDalvivo)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_CLIENTVIDEOPROXY, OnUpdateVideoTrasmissioneClientVideoProxy)
 #endif
 	ON_COMMAND(ID_VIDEO_INFORMAZIONI, OnVideoInformazioni)
 	ON_COMMAND(ID_FILE_SAVE_VIDEO, OnFileSaveVideo)
@@ -1175,12 +1335,17 @@ void CVidsendDoc2::OnFileProprieta() {
 			Opzioni |= myPage0.m_ServerVideo ? maySendVideo : 0;
 			Opzioni |= myPage0.m_ServerAudio ? maySendAudio : 0;
 			Opzioni |= myPage0.m_TipoVideo ? videoType : 0;
+// in prop video src			Opzioni |= myPage0.m_TipoVideo ? usaRTSP : 0;
+			Opzioni |= myPage0.m_VBAN ? usaVBAN : 0;
 
 //	if(!theApp.Opzioni & CVidsendApp::advancedConf)		// per ora no...
 //			theTV->theCapture=myPage0bis.m_Schede-1;
 
 //			if(theApp.Opzioni & CVidsendApp::advancedConf) {
+				myQV.format=myPage0.m_FormatV;
 				myQV.compressor=myPage0.m_CompressorV;
+//				myQV.format=myPage0bis.m_QV.format;
+//				myQV.compressor=myPage0bis.m_QV.compressor;
 				myQV.imageSize=myPage0.m_QV.imageSize;
 				myQV.fps=myPage0.m_QV.fps;
 				myQV.quality=myPage0.m_QV.quality;
@@ -1247,6 +1412,7 @@ void CVidsendDoc2::OnFileProprieta() {
 				Opzioni |= maySendAudio;
 			else
 				Opzioni &= ~maySendAudio;
+			myQV.format=myPage0bis.m_QV.format;
 			myQV.compressor=myPage0bis.m_QV.compressor;
 			myQV.imageSize=myPage0bis.m_QV.imageSize;
 			myQV.fps=myPage0bis.m_QV.fps;
@@ -1293,7 +1459,7 @@ void CVidsendDoc2::OnCloseDocument() {
 			}
 		}
 
-	if(pipeV) {
+	if(pipeV != INVALID_HANDLE_VALUE) {
 		FlushFileBuffers(pipeV); 
 		DisconnectNamedPipe(pipeV); 
 		CloseHandle(pipeV); 
@@ -1308,7 +1474,7 @@ void CVidsendDoc2::OnFileSaveFotogramma() {
 	CBitmap b;
 	CVidsendView2 *v=(CVidsendView2 *)getView();
 	CFileDialog myDlg(FALSE,"*.jpg",NULL,OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY,"File JPEG (*.jpg)|*.jpg|File Bitmap (*.bmp)|*.bmp|Tutti i file (*.*)|*.*||",v);
-	CString S;
+	CStringEx S;
 	
 	theTV->theFrame=(BYTE *)-1;
 	if(myDlg.DoModal() == IDOK) {
@@ -1316,7 +1482,7 @@ void CVidsendDoc2::OnFileSaveFotogramma() {
 			l=theTV->biRawDef.bmiHeader.biWidth*theTV->biRawDef.bmiHeader.biHeight*3;
 			CFile mF;
 			S=myDlg.GetFileName();
-			if(S.Find("jpg") != -1) {
+			if(S.FindNoCase("jpg") != -1) {
 				CJpeg myJPEG;
 				BYTE *p;
 				if(b.CreateBitmap(theTV->biRawDef.bmiHeader.biWidth,theTV->biRawDef.bmiHeader.biHeight,1,24,NULL)) {
@@ -1326,13 +1492,13 @@ void CVidsendDoc2::OnFileSaveFotogramma() {
 								mF.Write(p,len);
 								mF.Close();
 								}
-							GlobalFree(p);
+							HeapFree(GetProcessHeap(),0,p);
 							return;
 							}
 						}
 					}
 				}
-			else if(S.Find("bmp") != -1) {
+			else if(S.FindNoCase("bmp") != -1) {
 				BITMAPFILEHEADER bh;
 				BITMAPINFO bi=theTV->biRawDef;
 				if(mF.Open(myDlg.GetPathName(),CFile::modeCreate | CFile::modeReadWrite | CFile::typeBinary | CFile::shareDenyWrite)) {
@@ -1354,7 +1520,8 @@ void CVidsendDoc2::OnFileSaveFotogramma() {
 		AfxMessageBox("Impossibile salvare l'immagine!");
 		}
 	if(theTV->theFrame && theTV->theFrame != (BYTE *)-1) {
-		GlobalFree(theTV->theFrame);
+		HeapFree(GetProcessHeap(),0,theTV->theFrame);
+#pragma warning {VERIFICARE come e allocata questa memoria...
 		theTV->theFrame=NULL;
 		}
 	
@@ -1512,7 +1679,7 @@ rifo2:
 								myFTP.SendBuff(S,p,len);
 								retVal=1;
 								}
-							GlobalFree(p);
+							HeapFree(GetProcessHeap(),0,p);
 							delete myJPEG;
 							}
 
@@ -1536,7 +1703,8 @@ fine:
 			myFTP.LogOffServer();
 			}
 		if(theTV->theFrame && theTV->theFrame != (BYTE *)-1) {
-			GlobalFree(theTV->theFrame);
+#pragma warning { verificare...
+			HeapFree(GetProcessHeap(),0,theTV->theFrame);
 			theTV->theFrame=NULL;
 			}
 		
@@ -1726,7 +1894,8 @@ void CVidsendDoc2::OnFilePrint() {
 
 		if(theTV) {
 			if(theTV->theFrame && theTV->theFrame != (BYTE *)-1) {
-				GlobalFree(theTV->theFrame);
+#pragma warning {verificare...
+				HeapFree(GetProcessHeap(),0,theTV->theFrame);
 				theTV->theFrame=NULL;
 				}
 			}
@@ -1739,7 +1908,7 @@ void CVidsendDoc2::OnFilePrint() {
 //		theFax->prnFax(m_hWnd,hDC,&rc,nomeFile,&dInfo,myDlg.m_pd.nFromPage,myDlg.m_pd.nToPage);
 fine:
 		EndWaitCursor();
-		GlobalFree(lpdm);
+		HeapFree(GetProcessHeap(),0,lpdm);
 		}
 
 	DeleteDC(hDC);
@@ -1797,6 +1966,10 @@ void CVidsendDoc2::OnVideoTrasmissioneDalvivo() {
 		OpzioniSorgenteVideo &= 0xffff0000;
 		OpzioniSorgenteVideo |= myDlg.m_Overlay ? useOverlay : 0;
 		theTV->theCapture=myDlg.m_Schede-1;
+//		videoSourceRTSP=myDlg.m_VideoSource2;
+		Opzioni &= ~usaRTSP;
+		Opzioni |= myDlg.m_VideoSource2 ? usaRTSP : 0;
+		RTSPaddress=myDlg.m_RTSPAddress;
 
 		setTXMode(0);
 		}
@@ -1832,16 +2005,32 @@ void CVidsendDoc2::OnVideoTrasmissionePaginadiprova() {
 		}
 	}
 
+void CVidsendDoc2::OnVideoTrasmissioneClientVideoProxy() {
+
+	if(!theApp.aClient[0])
+		theApp.OnFileNuovoVideoclient();
+	//FINIRE!
+	setTXMode(3);
+	}
+
 void CVidsendDoc2::OnUpdateVideoTrasmissionePaginadiprova(CCmdUI* pCmdUI) {
 	pCmdUI->SetCheck(trasmMode == 2);
+	pCmdUI->Enable((Opzioni & maySendVideo | Opzioni & maySendAudio) ? TRUE : FALSE);
 	}
 
 void CVidsendDoc2::OnUpdateVideoTrasmissioneFilmato(CCmdUI* pCmdUI) {
 	pCmdUI->SetCheck(trasmMode == 1);
+	pCmdUI->Enable((Opzioni & maySendVideo | Opzioni & maySendAudio) ? TRUE : FALSE);
 	}
 
 void CVidsendDoc2::OnUpdateVideoTrasmissioneDalvivo(CCmdUI* pCmdUI) {
 	pCmdUI->SetCheck(trasmMode == 0);
+	pCmdUI->Enable((Opzioni & maySendVideo | Opzioni & maySendAudio) ? TRUE : FALSE);
+	}
+
+void CVidsendDoc2::OnUpdateVideoTrasmissioneClientVideoProxy(CCmdUI* pCmdUI) {
+	pCmdUI->SetCheck(trasmMode == 3);
+	pCmdUI->Enable((Opzioni & maySendVideo | Opzioni & maySendAudio) ? TRUE : FALSE);
 	}
 
 #endif
@@ -1908,7 +2097,7 @@ void CVidsendDoc2::OnVideoInformazioni() {
 				n2+=streamSocketV->cSockRoot.GetNext(po)->skippedFrame;
 				} while(po);
 			}
-		S1.Format("Frame inviati: %u, STOP ricevuti:%u, frame NON inviati",n,n1,n2);
+		S1.Format("Frame inviati: %u, STOP ricevuti: %u, frame NON inviati",n,n1,n2);
 		S+=S1;
 		}
 		}
@@ -1928,11 +2117,12 @@ void CVidsendDoc2::OnVideoAudio() {
 void CVidsendDoc2::OnUpdateVideoAudio(CCmdUI* pCmdUI) {
 	
 	pCmdUI->SetCheck(bAudio);
-	pCmdUI->Enable(Opzioni & maySendAudio);
+	pCmdUI->Enable(Opzioni & maySendAudio ? TRUE : FALSE);
 	}
 
 void CVidsendDoc2::OnVideoLivellivolume() {
 	WinExec("sndvol32.exe",SW_SHOWNORMAL);
+	WinExec("sndvol.exe",SW_SHOWNORMAL);			// per Windows 7 !!!
 	}
 
 
@@ -1960,14 +2150,15 @@ void CVidsendDoc2::setTXMode(int mode) {
 	if(gotFrame)
 		AVIStreamGetFrameClose(gotFrame);
 	gotFrame=NULL;
+	AVIFileExit();  // 
 	if(PBsi)
-		GlobalFree(PBsi);
+		HeapFree(GetProcessHeap(),0,PBsi);
 	PBsi=NULL;
 	if(PBbiSrc)
-		GlobalFree(PBbiSrc);
+		HeapFree(GetProcessHeap(),0,PBbiSrc);
 	PBbiSrc=NULL;
 	if(PBbiDest)
-		GlobalFree(PBbiDest);
+		HeapFree(GetProcessHeap(),0,PBbiDest);
 	PBbiDest=NULL;
 	switch(mode) {
 		case 0:				// live
@@ -1981,22 +2172,24 @@ void CVidsendDoc2::setTXMode(int mode) {
 		case 1:				// filmato
 			if(theTV) 
 				theTV->Capture(0);
+			AVIFileInit();  // initialize vfw library.... 2025
 			hr=AVIFileOpen(&aviFile,(LPCTSTR)nomeAVI_PB,OF_READ,NULL);    // use handler determined from file extension....
 			if(hr != AVIERR_OK)
 				goto error1;
 			hr = AVIFileGetStream(aviFile, &psVideo, streamtypeVIDEO, 0); 
 			if(hr != AVIERR_OK)
 				goto error1;
-			PBsi=(AVISTREAMINFO *)GlobalAlloc(GPTR,sizeof(AVISTREAMINFO));
+// provare, dovrebbe fare le 2 cose insieme			AVIStreamOpenFromFile(
+			PBsi=(AVISTREAMINFO *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,sizeof(AVISTREAMINFO));
 			AVIStreamInfo(psVideo,PBsi,sizeof(AVISTREAMINFO));
-			PBbiSrc=(BITMAPINFOHEADER *)GlobalAlloc(GPTR,sizeof(BITMAPINFOHEADER));
+			PBbiSrc=(BITMAPINFOHEADER *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,sizeof(BITMAPINFOHEADER));
 			PBbiSrc->biSize=sizeof(BITMAPINFOHEADER);
 			PBbiSrc->biWidth=PBsi->rcFrame.right-PBsi->rcFrame.left;
 			PBbiSrc->biHeight=PBsi->rcFrame.bottom-PBsi->rcFrame.top;
 			PBbiSrc->biCompression=PBsi->fccHandler;
 			PBbiSrc->biPlanes=1;
 			PBbiSrc->biBitCount=24;		// sicuro??
-			PBbiDest=(BITMAPINFOHEADER *)GlobalAlloc(GPTR,sizeof(BITMAPINFOHEADER));
+			PBbiDest=(BITMAPINFOHEADER *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,sizeof(BITMAPINFOHEADER));
 			*PBbiDest=*PBbiSrc;
 			PBbiDest->biCompression=0;
 			gotFrame=AVIStreamGetFrameOpen(psVideo,PBbiDest);
@@ -2021,68 +2214,82 @@ error1:
 	if(mode>=0)
 		((CChildFrame2 *)v->GetParent())->setStatusIcons();
 	}
-
+ 
 
 struct STREAM_INFO *CVidsendDoc2::getConnectionInfo() {
 	struct STREAM_INFO *si;
 
 	si=new struct STREAM_INFO;
-	si->versione=VIDSEND_VERSIONE;
-	if(Opzioni & maySendVideo && theTV) {
-		if(trasmMode==0 || trasmMode==2)
-			si->bm=theTV->biCompDef.bmiHeader;
-		else {
-			if(/*(PBbiSrc->biCompression==0) && */ (Opzioni & videoType)
-				/*ovvero OpzioniSorgenteVideo & CVidsendDoc2::aviMode*/ )
-				si->bm=*PBbiSrc;
-			else
-				si->bm=theTV->biCompDef.bmiHeader;
+
+/*#include <mmreg.h>	
+	char buf[32];
+	wsprintf(buf,"%u, %u",sizeof(struct STREAM_INFO),sizeof(struct EXT_WAVEFORMATEX));
+	AfxMessageBox(buf);*/
+
+
+	if(si) {
+		ZeroMemory(si,sizeof(si));
+		si->versione=VIDSEND_VERSIONE;
+		if(Opzioni & maySendVideo && theTV) {
+			if(trasmMode==0 || trasmMode==2) {
+				if(Opzioni & videoType)			// non son sicuro che venga scritto il formato nativo, qua, specie con video non-compresso... VERIFICARE!
+					si->bm=theTV->biCompDef.bmiHeader;
+				else
+					si->bm=theTV->biCompDef.bmiHeader;
+				}
+			else {
+				if(/*(PBbiSrc->biCompression==0) && */ (Opzioni & videoType)
+					/*ovvero OpzioniSorgenteVideo & CVidsendDoc2::aviMode*/ )
+					si->bm=*PBbiSrc;
+				else
+					si->bm=theTV->biCompDef.bmiHeader;
+				}
 			}
+		else
+			si->bm.biSize=0;
+		si->fps=theTV ? theTV->framesPerSec : 1;			// giusto pre protezione; 1 xche' 0 potrebbe dare /0!
+		si->quality=myQV.quality;
+		if(Opzioni & maySendAudio && theTV)
+			memcpy(&si->wf,&theTV->wfd,sizeof(theTV->wfd));
+		else
+			si->wf.wf.wFormatTag=0;
+		if(Opzioni & timedConnection)
+			si->maxTime=timedConnLenght;
+		else
+			si->maxTime=0;
+		switch((Opzioni & needAuthenticate) >> 29) {
+			case 2:
+			case 1:
+				_tcscpy(si->authenticationWWW,(LPCTSTR)authenticationWWW);
+				break;
+			case 0:
+				*si->authenticationWWW=0;
+				break;
+			}
+		if(Opzioni & openWWW)
+			_tcscpy(si->openWWW,(LPCTSTR)forceOpenWWW);
+		else
+			*si->openWWW=0;
+		si->IDServer=myID;
+		si->dontSave=Opzioni & dontSave;
+		si->noBuffers=FALSE;
+		si->remoteCtrl=0;		// finire!
+		_tcscpy(si->streamTitle,(LPCTSTR)streamTitle);
+		_tcscpy(si->splashOrIntro,(LPCTSTR)splashOrIntroName);
 		}
-	else
-		si->bm.biSize=0;
-	si->fps=theTV ? theTV->framesPerSec : 1;			// giusto pre protezione; 1 xche' 0 potrebbe dare /0!
-	si->quality=myQV.quality;
-	if(Opzioni & maySendAudio && theTV)
-		memcpy(&si->wf,&theTV->wfd,sizeof(theTV->wfd));
-	else
-		si->wf.wf.wFormatTag=0;
-	if(Opzioni & timedConnection)
-		si->maxTime=timedConnLenght;
-	else
-		si->maxTime=0;
-	switch((Opzioni & needAuthenticate) >> 29) {
-		case 2:
-		case 1:
-			_tcscpy(si->authenticationWWW,(LPCTSTR)authenticationWWW);
-			break;
-		case 0:
-			*si->authenticationWWW=0;
-			break;
-		}
-	if(Opzioni & openWWW)
-		_tcscpy(si->openWWW,(LPCTSTR)forceOpenWWW);
-	else
-		*si->openWWW=0;
-	si->IDServer=myID;
-	si->dontSave=Opzioni & dontSave;
-	si->noBuffers=FALSE;
-	si->remoteCtrl=0;		// finire!
-	_tcscpy(si->streamTitle,(LPCTSTR)streamTitle);
-	_tcscpy(si->splashOrIntro,(LPCTSTR)splashOrIntroName);
 
 	return si;
 	}
 
 
 int CVidsendDoc2::calcBandWidth() {		// quella in uso al momento...
-	RECT rc;
+	SIZE rc;
 
-	SetRectEmpty(&rc);
-	rc.bottom=theTV->biRawBitmap.biHeight;
-	rc.right=theTV->biRawBitmap.biWidth;
+	rc.cy=theTV->biRawBitmap.biHeight;
+	rc.cx=theTV->biRawBitmap.biWidth;
 	return calcBandWidth(Opzioni & CVidsendDoc2::maySendVideo,
-		&rc,theTV->biRawBitmap.biBitCount,
+		&rc,
+		Opzioni & CVidsendDoc2::videoType ? theTV->biRawBitmap.biBitCount : theTV->biBaseRawBitmap.biBitCount,
 		myQV.compressor,myQV.quality,myQV.fps,
 		Opzioni & CVidsendDoc2::maySendAudio,theTV->wfd.wf.nSamplesPerSec,
 		theTV->wfd.wf.wBitsPerSample,theTV->wfd.wf.nChannels,myQA.compressor,myQA.quality);
@@ -2092,14 +2299,14 @@ int CVidsendDoc2::calcBandWidth() {		// quella in uso al momento...
 int CVidsendDoc2::calcBandWidth(int vq, int aq) {
 	int i,n;
 
-	if(vq >= 7 || aq >= 3)
+	if(vq >= 14 || aq >= 7)
 		return -1;
 	n=calcBandWidth(vq>=0,&qsv[vq].imageSize,qsv[vq].bpp,myQV.compressor,qsv[vq].quality,qsv[vq].fps,
 		aq>=0,qsa[aq].samplesPerSec,qsa[aq].bitsPerSample,qsa[aq].channels,myQA.compressor,qsa[aq].quality);
 	return n;
 	}
 
-int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWORD compressorV,int qualityV,int fps,
+int CVidsendDoc2::calcBandWidth(BOOL bVideo,const SIZE *imageSize,int imageFormat,DWORD compressorV,int qualityV,int fps,
 																BOOL bAudio,DWORD samplesPerSec,WORD bitsPerSample,WORD channels,DWORD compressorA,int qualityA,
 																CString *info) {
 	int i;
@@ -2110,21 +2317,16 @@ int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWOR
 			if(compressorV != -1) {
 				HIC hICCo;
 				BITMAPINFOHEADER bi,bo;
-				RECT r;
+				SIZE r;
 				CBitmap *b;
 				BITMAP bmp;
 				DWORD bSize;
 				BYTE *s,*d;
 				DWORD l1,l2;
 				r=*imageSize;
-				b=theApp.createTestBitmap(&r,(LPBITMAPINFOHEADER)&theTV->biRawDef, 0 /*4*/);
-				b->GetBitmap(&bmp);
-				bSize=bmp.bmWidthBytes*bmp.bmHeight;
-				s=(BYTE *)GlobalAlloc(GPTR,bSize);
-				b->GetBitmapBits(bSize,s);
 				bi.biSize=sizeof(BITMAPINFOHEADER);
-				bi.biWidth=imageSize->right;
-				bi.biHeight=imageSize->bottom;
+				bi.biWidth=imageSize->cx;
+				bi.biHeight=imageSize->cy;
 				bi.biBitCount=imageFormat;
 				bi.biPlanes=1;
 				bi.biClrImportant=bi.biClrUsed=0;
@@ -2132,12 +2334,17 @@ int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWOR
 				bi.biCompression=0;
 				bo=bi;
 				bo.biCompression=compressorV;
+				b=theApp.createTestBitmap(&r,&bi, 0 /*4*/);
+				b->GetBitmap(&bmp);
+				bSize=bmp.bmWidthBytes*bmp.bmHeight;
+				s=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,bSize);
+				b->GetBitmapBits(bSize,s);
 				hICCo=ICOpen(ICTYPE_VIDEO,compressorV,ICMODE_FASTCOMPRESS);
 				nv=-1;
 				if(hICCo) {
-					if(!(i=ICCompressBegin(hICCo,&bi,&bo))) {
+					if((i=ICCompressBegin(hICCo,&bi,&bo)) == ICERR_OK) {
 						t=ICCompressGetSize(hICCo,&bi,&bo);
-						d=(BYTE *)GlobalAlloc(GPTR,t+100);
+						d=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,t+100);
 						l1=l2=0;
 						i=ICCompress(hICCo,0,
 							&bo,d+sizeof(BITMAPINFOHEADER),&bi,s,
@@ -2168,8 +2375,8 @@ int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWOR
 
 					ICClose(hICCo);
 					}
-				GlobalFree(d);	
-				GlobalFree(s);
+				HeapFree(GetProcessHeap(),0,d);	
+				HeapFree(GetProcessHeap(),0,s);
 				delete b;
 				}
 			else {		// finire!
@@ -2177,7 +2384,7 @@ int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWOR
 				}
 			}
 		else {
-			t1=t=imageSize->right*imageSize->bottom*imageFormat/8;
+			t1=t=imageSize->cx*imageSize->cy*imageFormat/8;
 			nv = t*(fps-1)+t1;
 			}
 		}
@@ -2191,26 +2398,95 @@ int CVidsendDoc2::calcBandWidth(BOOL bVideo,RECT *imageSize,int imageFormat,DWOR
 			wf.nChannels = channels;
 			wf.nSamplesPerSec = samplesPerSec;
 			wf.nBlockAlign = 1;
-			wf.wBitsPerSample = bitsPerSample ;
+			wf.wBitsPerSample = bitsPerSample;
 			wf.nAvgBytesPerSec = wf.nSamplesPerSec*wf.nChannels*(wf.wBitsPerSample/8);
 			wf.cbSize = 0;
-			GSM610WAVEFORMAT mywfx;
-			samplesPerSec=8000;
-			mywfx.wfx.wFormatTag = compressorA;
-			mywfx.wfx.nChannels = 1;
-			mywfx.wfx.nSamplesPerSec = (samplesPerSec/320)*320;
-			mywfx.wfx.nAvgBytesPerSec = 1625;
-			mywfx.wfx.nBlockAlign = 65;
-			mywfx.wfx.wBitsPerSample = 0;
-			mywfx.wfx.cbSize = 2;
-			mywfx.wSamplesPerBlock = 320;
-			acmStreamOpen(&hAcm,NULL,&wf,(WAVEFORMATEX *)&mywfx,NULL,NULL,0,0);
-			if(hAcm) {
-				acmStreamSize(hAcm,wf.nAvgBytesPerSec,&na,ACM_STREAMSIZEF_SOURCE);
-				acmStreamClose(hAcm,0);
-				}
-			else {
-				na=-1;
+
+
+
+			/* v. per MP3 https://social.msdn.microsoft.com/Forums/en-US/5345daf5-2aca-4956-a45c-d8ef494af5da/how-to-play-mp3?forum=vssmartdevicesnative
+
+	WAVEFORMATEX waveFormat;
+    waveFormat.wFormatTag = 1;
+    waveFormat.nChannels = NCHANNEL;
+    waveFormat.nSamplesPerSec = SAMPLE_RATE;
+    waveFormat.nAvgBytesPerSec = SAMPLE_RATE * NCHANNEL * BYTE_PER_SAMPLE;
+    waveFormat.nBlockAlign = NCHANNEL * BYTE_PER_SAMPLE;
+    waveFormat.wBitsPerSample = BYTE_PER_SAMPLE * BITS_PER_BYTES;
+    waveFormat.cbSize = 0;
+
+	MPEGLAYER3WAVEFORMAT mp3Format;
+	ZeroMemory(&mp3Format, sizeof(MPEGLAYER3WAVEFORMAT));
+	mp3Format.wfx.wFormatTag = WAVE_FORMAT_MPEGLAYER3;
+	mp3Format.wfx.nChannels = NCHANNEL;
+	mp3Format.wfx.nSamplesPerSec = SAMPLE_RATE;
+	mp3Format.wfx.nAvgBytesPerSec = SAMPLE_RATE * NCHANNEL * BYTE_PER_SAMPLE;
+	mp3Format.wfx.nBlockAlign = NCHANNEL * BYTE_PER_SAMPLE;
+	mp3Format.wfx.wBitsPerSample = 0;//BYTE_PER_SAMPLE * BITS_PER_BYTES;
+	mp3Format.wfx.cbSize = MPEGLAYER3_WFX_EXTRA_BYTES;
+	mp3Format.wID = MPEGLAYER3_ID_MPEG;
+	mp3Format.fdwFlags = MPEGLAYER3_FLAG_PADDING_OFF;
+	mp3Format.nFramesPerBlock = 1;
+	mp3Format.nBlockSize =  mp3Format.wfx.nAvgBytesPerSec * 8 / mp3Format.wfx.nSamplesPerSec;
+	mp3Format.nCodecDelay = 1393;
+
+	switch(acmStreamOpen(NULL, NULL, (LPWAVEFORMATEX)&mp3Format, &waveFormat, NULL, 0, 0, ACM_STREAMOPENF_QUERY))
+	*/
+			switch(compressorA) {
+				case WAVE_FORMAT_GSM610:
+					GSM610WAVEFORMAT mywfx;
+					samplesPerSec=8000;
+					mywfx.wfx.wFormatTag = compressorA;
+					mywfx.wfx.nChannels = 1;
+					mywfx.wfx.nSamplesPerSec = (samplesPerSec/320)*320;
+					mywfx.wfx.nAvgBytesPerSec = 1625;
+					mywfx.wfx.nBlockAlign = 65;
+					mywfx.wfx.wBitsPerSample = 0;
+					mywfx.wfx.cbSize = 2;
+					mywfx.wSamplesPerBlock = 320;
+					acmStreamOpen(&hAcm,NULL,&wf,(WAVEFORMATEX *)&mywfx,NULL,NULL,0,0);
+					if(hAcm) {
+						acmStreamSize(hAcm,wf.nAvgBytesPerSec,&na,ACM_STREAMSIZEF_SOURCE);
+						acmStreamClose(hAcm,0);
+						}
+					else {
+						na=-1;
+						}
+					break;
+				case WAVE_FORMAT_MPEGLAYER3:
+					MPEGLAYER3WAVEFORMAT mp3Format;
+					ZeroMemory(&mp3Format, sizeof(MPEGLAYER3WAVEFORMAT));
+					mp3Format.wfx.wFormatTag = WAVE_FORMAT_MPEGLAYER3;
+					mp3Format.wfx.nChannels = channels;
+					mp3Format.wfx.nSamplesPerSec = samplesPerSec;
+					mp3Format.wfx.nAvgBytesPerSec = samplesPerSec * channels * bitsPerSample;
+					mp3Format.wfx.nBlockAlign = (channels*bitsPerSample)/8;;
+					mp3Format.wfx.wBitsPerSample = 0;//BYTE_PER_SAMPLE * BITS_PER_BYTES;
+					mp3Format.wfx.cbSize = MPEGLAYER3_WFX_EXTRA_BYTES;
+					mp3Format.wID = MPEGLAYER3_ID_MPEG;
+
+					// v. CMP3Coder (lame) 2023!
+
+					mp3Format.fdwFlags = MPEGLAYER3_FLAG_PADDING_OFF;
+					mp3Format.nFramesPerBlock = 1;
+					mp3Format.nBlockSize =  mp3Format.wfx.nAvgBytesPerSec * 8 / mp3Format.wfx.nSamplesPerSec;
+					mp3Format.nCodecDelay = 1393;
+					if(acmStreamOpen(&hAcm /*NULL*/, NULL, (LPWAVEFORMATEX)&mp3Format, &wf, NULL, 0, 0, ACM_STREAMOPENF_QUERY)) {
+						acmStreamSize(hAcm,wf.nAvgBytesPerSec,&na,ACM_STREAMSIZEF_SOURCE);
+						acmStreamClose(hAcm,0);
+						}
+					else {
+						na=-1;
+						}
+//					na=mp3Format.wfx.nAvgBytesPerSec; // FARE!! v.sopra
+					na=16384 /*diciamo 128Kbps :) */;
+					break;
+				case WAVE_FORMAT_PCM:
+					na=wf.nAvgBytesPerSec;
+					break;
+				default:
+					na=-1;
+					break;
 				}
 			}
 		else {
@@ -2230,22 +2506,22 @@ DWORD CVidsendDoc2::getAVstep(struct QUALITY_MODEL_V *qv,struct QUALITY_MODEL_A 
 	register int i,j;
 
 	if(qv) {
-		for(i=0; i<7; i++) {
-			if(qv->imageSize.right == qsv[i].imageSize.right) {
+		for(i=0; i<15; i++) {
+			if(qv->imageSize.cx == qsv[i].imageSize.cx) {
 				if(qv->fps <= qsv[i].fps) {
 //					if(qv->qualita <= qsv[i].qualita) {
 					break;
 					}
 				}
-			if(qv->imageSize.right < qsv[i].imageSize.right) {
-				while(i>0 && (qv->imageSize.right < qsv[i].imageSize.right)) 
+			if(qv->imageSize.cx < qsv[i].imageSize.cx) {
+				while(i>0 && (qv->imageSize.cx < qsv[i].imageSize.cx)) 
 					i--;
 				break;
 				}
 			}
 		}
 	if(qa) {
-		for(j=0; j<3; j++) {
+		for(j=0; j<7; j++) {
 			if(qa->samplesPerSec <= qsa[j].samplesPerSec) {
 				break;
 				}
@@ -2282,13 +2558,13 @@ void CVidsendDoc2::sendHrtBt() {
 		}
 	}
 
-int CVidsendDoc2::MandaPipeV(struct AV_PACKET_HDR *avh,LPARAM lParam) {
+int CVidsendDoc2::MandaPipeV(const struct AV_PACKET_HDR *avh,LPARAM lParam) {
 	int i;
 	DWORD cbBytesRead = 0, cbReplyBytes = 0, cbWritten = 0; 
   BOOL fSuccess = FALSE;
 
 //https://docs.microsoft.com/en-us/windows/desktop/ipc/multithreaded-pipe-server
-	if(pipeV) {
+	if(pipeV != INVALID_HANDLE_VALUE) {
 		cbReplyBytes=lParam;
 		// Write the reply to the pipe. 
     fSuccess = WriteFile( 
@@ -2348,6 +2624,1186 @@ int CVidsendDoc2::HandlePipeV() {
 	return fSuccess;
 	}
 
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc2
+
+IMPLEMENT_DYNCREATE(CVidsendDoc22, CDocument)
+
+const struct WAVE_QUALITY CVidsendDoc22::waveQualities[8] = {
+	{8000,8,1},
+	{11025,8,1},
+	{22050,8,1},
+	{22050,16,1},
+	{44100,8,1},
+	{44100,16,1},
+	{44100,16,2},
+	{48000,16,2},
+	};
+
+const struct QUALITY_MODEL_A CVidsendDoc22::qsa[7]= {
+	{8000,8,1,2500},
+	{11025,8,1,5000},
+	{22050,8,1,5000},
+	{22050,8,2,5000},
+	{22050,16,2,5000},
+	{44100,16,2,5000},
+	{44100,16,2,9000}
+	};
+
+CVidsendDoc22::CVidsendDoc22() {
+	char myBuf[128];
+	
+	prfSection="ServerStream";
+	Opzioni=GetPrivateProfileInt(IDS_OPZIONI);
+	Opzioni2=theApp.prStore->GetPrivateProfileInt(prfSection,IDS_OPZIONI2,7);
+	OpzioniSorgenteVideo=GetPrivateProfileInt(IDS_OPZIONI3);
+	maxConn=GetPrivateProfileInt(IDS_MAXCONN);
+	if(!maxConn)
+		maxConn=10;
+
+/*	CString S;
+	S.Format("%u",maxConn);
+	AfxMessageBox(S);*/
+
+	GetPrivateProfileString(IDS_FORCEOPENWWW,myBuf,127);
+	forceOpenWWW=myBuf;
+	GetPrivateProfileString(IDS_AUTHWWW,myBuf,127);
+	authenticationWWW=myBuf;
+
+//	authenticationWWW="192.168.0.100";
+
+
+	timedConnLenght=GetPrivateProfileTimeSpan(IDS_TIMEDCONN);
+	GetPrivateProfileString(IDS_STREAM_DIRECTORYWWW,myBuf,127);
+	directoryWWW=myBuf;
+	GetPrivateProfileString(IDS_STREAM_DIRECTORYWWWLOGIN,myBuf,31);
+	directoryWWWLogin=myBuf;
+
+//	directoryWWW="192.168.0.100";
+
+
+	GetPrivateProfileString(IDS_MP3FILE_PB,myBuf,255);
+	nomeMP3_PB=myBuf;
+	GetPrivateProfileString(IDS_SUONO1,myBuf,127);
+	suonoIn=myBuf;
+	GetPrivateProfileString(IDS_SUONO2,myBuf,127);
+	suonoOut=myBuf;
+	GetPrivateProfileString(IDS_STREAMTITLE,myBuf,127);
+	streamTitle=myBuf;
+	theSet=NULL;
+	myID=1;
+	myTimedConn=0;
+
+//	theTV->setOpzioni(OpzioniSalvaAudio);
+
+	ZeroMemory(&myQA,sizeof(myQA));
+	myQA.compressor=GetPrivateProfileInt(IDS_ACOMPRESSORNAME);
+	myQA.samplesPerSec=8000;
+	myQA.bitsPerSample=8;
+	myQA.channels=1;
+	myQA.quality=GetPrivateProfileInt(IDS_COMPRESSORQUALITYA);
+	myQA.mp3bitrate=theApp.prStore->GetPrivateProfileInt(prfSection,IDS_MP3BITRATE,128);
+
+	pagProva.tipoAudio=GetPrivateProfileInt(IDS_COMPRESSOR_TESTPAGEA);
+	pagProva.audioOpzioni=GetPrivateProfileInt(IDS_COMPRESSOR_TESTPAGEOPZ);
+
+	streamSocketA=new CStreamSrvSocket(this);
+	streamSocketA->Create(AUDIO_SOCKET,theApp.Opzioni & CVidsendApp::TCP_UDP ? SOCK_DGRAM : SOCK_STREAM);
+	if(!(theApp.Opzioni & CVidsendApp::TCP_UDP)) {
+		streamSocketA->Listen();
+		}
+	else {
+		}
+	streamSocketA2=new CStreamSrvSocket(this,CStreamSrvSocket::MP3);		// MP3 streaming, 2023
+	streamSocketA2->Create(MP3_STREAM_SOCKET,SOCK_STREAM);
+	streamSocketA2->Listen();
+	streamSocketA2->tag=(DWORD)lame_init();
+	((lame_global_flags*)streamSocketA2->tag)->brate=myQA.mp3bitrate;
+	lame_init_params((lame_global_flags*)streamSocketA2->tag);
+	id3tag_init((lame_global_flags*)streamSocketA2->tag);
+	id3tag_set_title((lame_global_flags*)streamSocketA2->tag, "RadioG");
+	id3tag_set_artist((lame_global_flags*)streamSocketA2->tag, "Dario Greggio");
+	id3tag_set_year((lame_global_flags*)streamSocketA2->tag, "2023");
+	id3tag_add_v2((lame_global_flags*)streamSocketA2->tag);
+
+
+	controlSocket=new CControlSrvSocket(this);
+	controlSocket->Create(CONTROL_SOCKET);
+	if(!(theApp.Opzioni & CVidsendApp::TCP_UDP)) {
+		controlSocket->Listen();
+		}
+	else {
+		}
+
+	streamSocketVBAN=NULL;
+	if(Opzioni & usaVBAN) {
+		streamSocketVBAN=new CVBANSocket(this);
+		struct stream_config_t stream_config;
+		stream_config.bit_fmt=VBAN_BITFMT_8_INT;
+		stream_config.nb_channels=1;
+		stream_config.sample_rate=22050;
+		streamSocketVBAN->PacketInitHeader(&stream_config, "Liverpool's GD");		//NO! va cmq fatta a ogni pacchetto
+
+		streamSocketVBAN->Open();
+
+		}
+
+	authSocket=NULL;
+	trasmMode=0;
+	bPaused=0;
+	bAudio=Opzioni & maySendAudio ? TRUE : FALSE;
+
+	psAudio=NULL;
+
+/* da ocx...
+	if(Opzioni & usaRTSP) {
+		rtspSocket=new CRTSPServer(_T("stream1"));
+		if(rtspSocket) {
+	#define RTSP_PORT 554
+			int i=rtspSocket->Create(RTSP_PORT);
+			if(!i) {
+				if(theApp.FileSpool) 
+					theApp.FileSpool->print(CLogFile::flagError,"Impossibile installare server RTSP");
+				}
+			else
+				i=rtspSocket->Listen();
+		//										i=WSAGetLastError();
+			}
+		}
+		*/
+
+
+
+
+	pipeA = INVALID_HANDLE_VALUE;
+	pipeABuffer=NULL;
+
+
+	dirCliSocket=NULL;
+
+	}
+
+BOOL CVidsendDoc22::OnNewDocument() {
+	char *p,myBuf[128];
+	int i,j;
+	
+	if(!CExDocument::OnNewDocument())
+		return FALSE;
+
+	SetTitle("Audio live");
+
+	if(Opzioni & doDialUp) {
+		i=theApp.callRAS((LPCTSTR)theApp.DialUpNome);
+		}
+
+	if(Opzioni & registerServer) {
+		if(!(dirCliSocket=new CDirectoryCliSocket))
+			goto no_reg;
+		if(!dirCliSocket->Create())
+			goto no_reg;
+		if(dirCliSocket->Connect(directoryWWW,DIRECTORY_SOCKET)) {
+			ZeroMemory(myBuf,33);
+			*myBuf='\x1';
+			_tcscpy(myBuf+1,directoryWWWLogin);
+			dirCliSocket->Send(myBuf,33);
+			}
+		else {
+no_reg:
+			if(theApp.FileSpool)
+				*theApp.FileSpool << "Impossibile registrare server nella directory dei Server!";
+			}	
+		}
+
+	setTXMode(0);		// salvare TXmode??
+
+	if(((theApp.Opzioni & CVidsendDoc22::needAuthenticate) >> 29) == 2) {
+		if(theSet=new CVidsendSet2(theApp.theDB)) {
+			if(!theSet->Open(AFX_DB_USE_DEFAULT_TYPE,NULL,CRecordset::readOnly))
+				goto no_set;
+			}
+		else {
+no_set:
+			p="Impossibile aprire database utenti!";
+			AfxMessageBox(p);
+			if(theApp.FileSpool)
+				*theApp.FileSpool << p;
+			if(theSet) {
+				delete theSet;
+				return FALSE;
+				}
+			}
+		}
+
+/*	if(Opzioni & needAuthenticateServer) {		//se aperto con autenticazione (cioe' per newmeet)
+		if(!theApp.theChat) {
+			theApp.OnFileNuovoChat();
+			if(theApp.theChat) {
+				theApp.theChat->Opzioni |= CVidsendDoc4::slaveMode;
+				}
+			}
+		} no! lo fanno le #define */
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+	((CChildFrame22 *)v->GetParent())->setStatusIcons(this);
+	v->m_DSound=new CDSound;
+	if(v->m_DSound) {
+		v->m_DS=new CDSoundPlay;
+		if(Opzioni2 & CVidsendDoc22::preascoltoMono)
+			v->m_DSound->Create(0);		// serve DOPO creazione finestra...
+		else if(Opzioni2 & CVidsendDoc22::attivaSchedaAudio2)
+			v->m_DSound->Create(2);		// serve DOPO 
+		else
+			v->m_DSound->Create(1);		// serve DOPO 
+		v->m_DSound->SetCooperativeLevel(v->GetSafeHwnd(),/*DSSCL_EXCLUSIVE | */ DSSCL_PRIORITY);
+		}
+
+
+	if(theApp.Opzioni & CVidsendApp::namedPipes) {
+		pipeA = CreateNamedPipe( 
+			TEXT("\\\\.\\pipe\\audiosenderpipe"),             // pipe name 
+			PIPE_ACCESS_DUPLEX |       // read/write access 
+			FILE_FLAG_OVERLAPPED,    // overlapped mode 
+			PIPE_TYPE_MESSAGE |       // message type pipe 
+			PIPE_READMODE_MESSAGE |   // message-read mode 
+			PIPE_WAIT,                // blocking mode 
+			PIPE_UNLIMITED_INSTANCES, // max. instances  
+			PIPEBUFSIZE,                  // output buffer size 
+			PIPEBUFSIZE,                  // input buffer size 
+			0,                        // client time-out 
+			NULL);  
+		HANDLE hHeap      = GetProcessHeap();
+		pipeABuffer=(TCHAR*)HeapAlloc(hHeap, 0, PIPEBUFSIZE*sizeof(TCHAR));
+		}
+
+	for(j=0; j<3; j++) {
+  	for(i=0; i<12; i++) {
+		char myBuf2[128];
+		  wsprintf(myBuf,"Banco%u_Suono%u",j,i);
+		  theApp.prStore->GetPrivateProfileString(prfSection,myBuf,myBuf2,127,"");
+			WAVFiles[j][i]=myBuf2;
+			}
+		}
+	bBanco=0;
+	v->UpdateBanco();
+/*	WAVFiles[0][0]="applaus2.wav";
+	WAVFiles[0][1]="chord.wav";
+	WAVFiles[0][2]="chimes.wav";
+	WAVFiles[0][3]="camera.wav";
+	WAVFiles[0][4]="laser.wav";
+	WAVFiles[0][5]="bounce.wav";
+	WAVFiles[0][6]="buzz.wav";
+	WAVFiles[0][7]="basemt.wav";
+	WAVFiles[0][8]="phnring.wav";
+	WAVFiles[0][9]="big_explosion_01.wav";
+	WAVFiles[0][10]="snoring.wav";
+	WAVFiles[0][11]="stbeam1.wav";
+	WAVFiles[1][0]="monkey.wav";
+	WAVFiles[1][1]="cow.wav";
+	WAVFiles[1][2]="dogbark.wav";
+	WAVFiles[1][3]="miaow02.wav";
+	WAVFiles[1][4]="maiale.wav";
+	WAVFiles[1][5]="owl.wav";
+	WAVFiles[1][6]="sheep_02.wav";
+	WAVFiles[1][7]=".wav";
+	WAVFiles[1][8]=".wav";
+	WAVFiles[1][9]=".wav";
+	WAVFiles[1][10]="wolfhowl.wav";
+	WAVFiles[1][11]="drumroll.wav";
+	WAVFiles[2][0]="crash1.wav";
+	WAVFiles[2][1]="carhorn2.wav";
+	WAVFiles[2][2]="meepmeep.wav";
+	WAVFiles[2][3]="rifle8.wav";
+	WAVFiles[2][4]="stphoton.wav";
+	WAVFiles[2][5]="whistle1.wav";
+	WAVFiles[2][6]=".wav";
+	WAVFiles[2][7]=".wav";
+	WAVFiles[2][8]=".wav";
+	WAVFiles[2][9]=".wav";
+	WAVFiles[2][10]=".wav";
+	WAVFiles[2][11]=".wav";
+*/
+	m_Equalizzatore=0;
+
+	GetPrivateProfileString(IDS_CANZONE1,myBuf,127);
+	m_Canzone1=myBuf;
+	GetPrivateProfileString(IDS_CANZONE2,myBuf,127);
+	m_Canzone2=myBuf;
+
+	saveFile=NULL;
+
+	return TRUE;
+	}
+
+CVidsendDoc22::~CVidsendDoc22() {
+	char myBuf[128];
+
+	if(saveFile) {
+		saveFile->Close();
+		delete saveFile; saveFile=NULL;
+		}
+	if(psAudio) {
+		psAudio->Close();
+		delete psAudio; psAudio=NULL;
+		}
+	setTXMode(-1);
+	if(authSocket) {
+		authSocket->Close();
+		delete authSocket;
+		}
+	authSocket=NULL;
+	if(dirCliSocket) {
+		dirCliSocket->Close();
+		delete dirCliSocket;
+		}
+	dirCliSocket=NULL;
+	if(theSet) {
+		theSet->Close();
+		delete theSet;
+		}
+	theSet=NULL;
+	if(controlSocket) {
+		controlSocket->Close();
+		delete controlSocket;
+		}
+	controlSocket=NULL;
+	if(streamSocketA) {
+		streamSocketA->Close();
+		delete streamSocketA;
+		}
+	streamSocketA=NULL;
+	if(streamSocketA2) {
+		streamSocketA2->Close();
+		if(streamSocketA2->tag) {
+			free_id3tag(((lame_global_flags *)streamSocketA2->tag)->internal_flags);
+			lame_close((lame_global_flags *)streamSocketA2->tag);
+			}
+		delete streamSocketA2;
+		}
+	streamSocketA2=NULL;
+
+	if(streamSocketVBAN) {
+		streamSocketVBAN->Close();
+		delete streamSocketVBAN;
+		}
+	streamSocketVBAN=NULL;
+	save();
+  WritePrivateProfileInt(IDS_MAXCONN,maxConn);
+  WritePrivateProfileInt(IDS_OPZIONI,Opzioni);
+  WritePrivateProfileInt(IDS_OPZIONI3,OpzioniSorgenteVideo);
+  WritePrivateProfileInt(IDS_OPZIONI2,Opzioni2);
+	}
+
+BOOL CVidsendDoc22::save() {
+	char myBuf[64];
+	int i,j;
+
+
+	for(j=0; j<3; j++) {
+  	for(i=0; i<12; i++) {
+    	wsprintf(myBuf,"Banco%u_Suono%u",j,i);
+		  theApp.prStore->WritePrivateProfileString(prfSection,myBuf,WAVFiles[j][i]);
+			}
+		}
+
+	wsprintf(myBuf,"%d",myQA.compressor);
+	WritePrivateProfileString(IDS_ACOMPRESSORNAME,myBuf);
+	WritePrivateProfileInt(IDS_MP3BITRATE,myQA.mp3bitrate);
+	WritePrivateProfileInt(IDS_COMPRESSORQUALITYA,myQA.quality);
+	WritePrivateProfileInt(IDS_COMPRESSOR_TESTPAGEA,pagProva.tipoAudio);
+	WritePrivateProfileInt(IDS_COMPRESSOR_TESTPAGEOPZ,pagProva.audioOpzioni);
+	WritePrivateProfileString(IDS_FORCEOPENWWW,(LPSTR)(LPCTSTR)forceOpenWWW);
+	WritePrivateProfileString(IDS_AUTHWWW,(LPSTR)(LPCTSTR)authenticationWWW);
+	WritePrivateProfileTime(IDS_TIMEDCONN,timedConnLenght);
+	WritePrivateProfileString(IDS_STREAM_DIRECTORYWWW,(LPSTR)(LPCTSTR)directoryWWW);
+	WritePrivateProfileString(IDS_STREAM_DIRECTORYWWWLOGIN,(LPSTR)(LPCTSTR)directoryWWWLogin);
+	WritePrivateProfileString(IDS_SUONO1,(LPSTR)(LPCTSTR)suonoIn);
+	WritePrivateProfileString(IDS_SUONO2,(LPSTR)(LPCTSTR)suonoOut);
+	WritePrivateProfileString(IDS_STREAMTITLE,(LPSTR)(LPCTSTR)streamTitle);
+	WritePrivateProfileString(IDS_MP3FILE_PB,(LPSTR)(LPCTSTR)nomeMP3_PB);
+	WritePrivateProfileString(IDS_CANZONE1,(LPSTR)(LPCTSTR)m_Canzone1);
+	WritePrivateProfileString(IDS_CANZONE2,(LPSTR)(LPCTSTR)m_Canzone2);
+	
+	return 1;
+	}
+
+int CVidsendDoc22::acceptConnect(const char *who) {
+	CString S;
+	static BOOL inUse;
+
+	if(!suonoIn.IsEmpty()) {
+		sndPlaySound(suonoIn,SND_ASYNC);		// v. anche MP3!
+		}
+	if(Opzioni & askOnConnect) {
+		if(inUse)
+			return 0;
+		inUse=1;
+		S.Format("Accettare la connessione entrante (da %s )?",who ? who : "<sconosciuto>");
+		if(AfxMessageBox(S,MB_YESNO | MB_ICONQUESTION) == IDYES) {
+			inUse=0;
+			}
+		else {
+			inUse=0;
+			return 0;
+			}
+		}
+	return 1;
+	}
+
+int CVidsendDoc22::openAudio(CVidsendView22 *v) {
+	CChildFrame22 *w;
+	WAVEFORMATEX myWf;
+
+	myWf.wFormatTag = WAVE_FORMAT_PCM;
+	myWf.nChannels =  2 /*1*/;
+	myWf.nSamplesPerSec = 44100 /*22050*/;
+#pragma warning WAVEFORMAT 44100
+	myWf.wBitsPerSample = 16 /*8*/;
+	myWf.nBlockAlign= (myWf.nChannels * myWf.wBitsPerSample)/8;
+	myWf.nAvgBytesPerSec = (myWf.nSamplesPerSec * myWf.nChannels * myWf.wBitsPerSample)/8;
+	myWf.cbSize = 0 /*sizeof(WAVEFORMATEX)*/;
+
+	theApp.theServer2=this;		// mi serve in CTV!! (v. anche main OpenDocument())
+
+//		GetParent()->SendMessage(WM_MOVE,d->theTV->GetXSize(),d->theTV->GetYSize());
+	if(w=(CChildFrame22 *)v->GetParent())
+
+		if(Opzioni & usaVBAN) {
+			if(streamSocketVBAN)
+				streamSocketVBAN->Close();
+			struct stream_config_t stream_config;
+			stream_config.bit_fmt=v->wfd.wf.wBitsPerSample==16 ? VBAN_BITFMT_16_INT : VBAN_BITFMT_8_INT;
+			stream_config.nb_channels=v->wfd.wf.nChannels;
+			stream_config.sample_rate=v->wfd.wf.nSamplesPerSec;
+			streamSocketVBAN->PacketInitHeader(&stream_config, "Liverpool's GD");
+//			streamSocketVBAN->Open("255.255.255.255");
+			streamSocketVBAN->Open("192.168.1.104");
+
+		}
+	if(w)
+		w->setStatusIcons(this);
+	return 1;
+	}
+
+
+
+BEGIN_MESSAGE_MAP(CVidsendDoc22, CExDocument)
+	//{{AFX_MSG_MAP(CVidsendDoc22)
+	ON_COMMAND(ID_FILE_PROPRIETA, OnFileProprieta)
+	ON_COMMAND(ID_VIDEO_LIVELLIVOLUME, OnAudioLivellivolume)
+	ON_COMMAND(ID_FILE_SAVE_VIDEO, OnFileSaveAudio)
+	ON_UPDATE_COMMAND_UI(ID_FILE_SAVE_VIDEO, OnUpdateFileSaveAudio)
+	ON_COMMAND(ID_CONNESSIONE_RIPRENDI, OnAudioTrasmissioneRiprendi)
+	ON_UPDATE_COMMAND_UI(ID_CONNESSIONE_RIPRENDI, OnUpdateAudioTrasmissioneRiprendi)
+	ON_COMMAND(ID_CONNESSIONE_PAUSA, OnAudioTrasmissionePausa)
+	ON_UPDATE_COMMAND_UI(ID_CONNESSIONE_PAUSA, OnUpdateAudioTrasmissionePausa)
+	ON_COMMAND(ID_VIDEO_AUDIO, OnAudioAudio)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_AUDIO, OnUpdateAudioAudio)
+	ON_COMMAND(ID_VIDEO_TRASMISSIONE_DALVIVO, OnAudioTrasmissioneDalvivo)
+	ON_COMMAND(ID_VIDEO_TRASMISSIONE_FILMATO, OnAudioTrasmissioneCanzone)
+	ON_COMMAND(ID_VIDEO_TRASMISSIONE_PAGINADIPROVA, OnAudioTrasmissionePaginadiprova)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_PAGINADIPROVA, OnUpdateAudioTrasmissionePaginadiprova)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_FILMATO, OnUpdateAudioTrasmissioneCanzone)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_TRASMISSIONE_DALVIVO, OnUpdateAudioTrasmissioneDalvivo)
+	ON_COMMAND(ID_VIDEO_INFORMAZIONI, OnAudioInformazioni)
+	ON_COMMAND(ID_AUDIO_MONO, OnAudioMono)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_MONO, OnUpdateAudioMono)
+	ON_COMMAND(ID_AUDIO_SUPERSTEREO, OnAudioSuperstereo)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_SUPERSTEREO, OnUpdateAudioSuperstereo)
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc22 diagnostics
+
+#ifdef _DEBUG
+void CVidsendDoc22::AssertValid() const
+{
+	CExDocument::AssertValid();
+}
+
+void CVidsendDoc22::Dump(CDumpContext& dc) const
+{
+	CExDocument::Dump(dc);
+}
+#endif //_DEBUG
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendDoc22 commands
+
+void CVidsendDoc22::OnFileProprieta() {
+	int i;
+
+	CVidsendPropPage mySheet("Proprietà streaming audio",(CVidsendView22 *)getView());
+	CVidsendDoc2PropPage00 myPage00(this,&myQA);
+	CVidsendDoc2PropPage2 myPage2(this);
+	CVidsendDoc2PropPage3 myPage3(this);
+	
+	if(theApp.Opzioni & CVidsendApp::passwordProtect) {
+		if(0)
+			goto fine;
+		}
+//	if(theApp.Opzioni & CVidsendApp::advancedConf)		// per ora no...
+		mySheet.AddPage(&myPage00);
+//	else
+//		mySheet.AddPage(&myPage0bis);
+	mySheet.AddPage(&myPage2);
+	mySheet.AddPage(&myPage3);
+	mySheet.m_psh.dwFlags |= PSH_NOAPPLYNOW;
+	if(mySheet.DoModal() == IDOK) {
+		if(myPage00.isInitialized) {
+			Opzioni &= 0xffff0000;
+			Opzioni |= myPage00.m_ServerAudio ? maySendAudio : 0;
+			Opzioni |= myPage00.m_VBAN ? usaVBAN : 0;
+			Opzioni |= myPage00.m_MP3 ? sendAudioMP3 : 0;
+
+//	if(!theApp.Opzioni & CVidsendApp::advancedConf)		// per ora no...
+//			theTV->theCapture=myPage0bis.m_Schede-1;
+
+//			if(theApp.Opzioni & CVidsendApp::advancedConf) {
+				myQA.compressor=myPage00.m_CompressorA;
+				myQA.quality=myPage00.m_QA.quality;
+				myQA.mp3bitrate=myPage00.m_QA.mp3bitrate;
+//				}
+			Opzioni2 = 0x00000000;
+			Opzioni2 |= myPage00.m_Attiva0 ? attivaSchedaAudio0 : 0;
+			Opzioni2 |= myPage00.m_Attiva1 ? attivaSchedaAudio1 : 0;
+			Opzioni2 |= myPage00.m_Attiva2 ? attivaSchedaAudio2 : 0;
+			Opzioni2 |= myPage00.m_PreascoltoMono ? preascoltoMono : 0;
+//	WORD m_SchedaAudio1,m_SchedaAudio2,m_SchedaAudio0;
+
+			}
+
+		if(myPage2.isInitialized) {
+			Opzioni &= 0x00ffffff;
+			Opzioni |= (myPage2.m_TipoAutorizzazione) << 29;
+			Opzioni |= myPage2.m_bDirectoryServer ? registerServer : 0;
+			Opzioni |= myPage2.m_bNeedAuthenticate ? needAuthenticateServer : 0;
+			maxConn=myPage2.m_MaxConn;
+			authenticationWWW=myPage2.m_AuthWWW;
+			directoryWWW=myPage2.m_DirectoryServer;
+			directoryWWWLogin=myPage2.m_NomePerServer;
+			}
+		if(myPage3.isInitialized) {
+			forceOpenWWW=myPage3.m_OpenWWW;
+			Opzioni &= 0xf00fffff;
+			Opzioni |= myPage3.m_bOpenWWW ? openWWW : 0;
+			Opzioni |= myPage3.m_bTimedConn ? timedConnection : 0;
+			Opzioni |= myPage3.m_DontSave ? dontSave : 0;
+			Opzioni |= myPage3.m_ActivateIf ? openAudioOnConnect : 0;
+			Opzioni |= myPage3.m_ActivateWaitConfirm ? askOnConnect : 0;
+			Opzioni |= myPage3.m_DialUp ? doDialUp : 0;
+			theApp.DialUpNome=myPage3.m_DialUpNome;
+			{ CTimeSpan myTS(0,myPage3.m_TimedConn.GetHour(),myPage3.m_TimedConn.GetMinute(),0);
+				timedConnLenght=myTS;
+			}
+			suonoIn=myPage3.m_SuonoIn;
+			suonoOut=myPage3.m_SuonoOut;
+			streamTitle=myPage3.m_StreamTitle;
+			}
+		}
+
+
+fine:
+		;
+
+	}
+
+
+void CVidsendDoc22::OnAudioMono() {
+	
+	Opzioni ^= CVidsendDoc22::mono;
+	Opzioni &= ~CVidsendDoc22::sstereo;
+	}
+
+void CVidsendDoc22::OnAudioSuperstereo() {
+	
+	Opzioni ^= CVidsendDoc22::sstereo;
+	Opzioni &= ~CVidsendDoc22::mono;
+	}
+
+void CVidsendDoc22::OnUpdateAudioMono(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(Opzioni & CVidsendDoc22::mono ? 1 : 0);
+//	pCmdUI->Enable(((CVidsendView22 *)getView())->cliSockA ? 1 : 0);
+	}
+
+void CVidsendDoc22::OnUpdateAudioSuperstereo(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(Opzioni & CVidsendDoc22::sstereo ? 1 : 0);
+//	pCmdUI->Enable(((CVidsendView22 *)getView())->cliSockA ? 1 : 0);
+	}
+
+void CVidsendDoc22::OnCloseDocument() {
+
+	if(Opzioni & needAuthenticateServer) {		//se aperto con autenticazione (cioe' per newmeet)
+
+		}
+
+	if(pipeA != INVALID_HANDLE_VALUE) {
+		FlushFileBuffers(pipeA); 
+		DisconnectNamedPipe(pipeA); 
+		CloseHandle(pipeA); 
+		}
+
+	CExDocument::OnCloseDocument();
+	theApp.theServer2=NULL;
+	}
+
+
+
+
+void CVidsendDoc22::OnAudioTrasmissioneDalvivo() {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+
+/*	if(myDlg.DoModal() == IDOK) {
+		videoSource=myDlg.m_VideoSource;
+		setTXMode(0);
+		}*/
+	setTXMode(0);
+	}
+
+void CVidsendDoc22::OnAudioTrasmissioneCanzone() {
+	CApriAudioDlg myDlg(this);
+
+	if(myDlg.DoModal() == IDOK) {
+		nomeMP3_PB=myDlg.m_NomeFile;
+		OpzioniSorgenteVideo &= 0xff00ffff;
+		OpzioniSorgenteVideo |= myDlg.m_Loop ? mp3Loop : 0;
+		setTXMode(1);
+		}
+
+	}
+
+void CVidsendDoc22::OnAudioTrasmissionePaginadiprova() {
+	CPaginaTestDlg myDlg(this);
+	int i;
+//	CVidsendView22 *c=(CVidsendView22 *)GetWindow(GW_CHILD);
+//	CVidsendDoc22 *d=(CVidsendDoc22 *)c->GetDocument();
+	
+	if(myDlg.DoModal() == IDOK) {
+		pagProva.tipoAudio=myDlg.m_AudioFrequenza;
+		pagProva.audioOpzioni=0;
+		pagProva.audioOpzioni |= myDlg.m_AudioIntervallato ? 1 : 0;
+		pagProva.audioOpzioni |= myDlg.m_AudioSweep ? 2 : 0;
+		setTXMode(2);
+		}
+	}
+
+void CVidsendDoc22::OnUpdateAudioTrasmissionePaginadiprova(CCmdUI* pCmdUI) {
+	pCmdUI->SetCheck(trasmMode == 2);
+	pCmdUI->Enable(Opzioni & (maySendAudio | sendAudioMP3) ? TRUE : FALSE);
+	}
+
+void CVidsendDoc22::OnUpdateAudioTrasmissioneCanzone(CCmdUI* pCmdUI) {
+	pCmdUI->SetCheck(trasmMode == 1);
+	pCmdUI->Enable(Opzioni & (maySendAudio | sendAudioMP3) ? TRUE : FALSE);
+	}
+
+void CVidsendDoc22::OnUpdateAudioTrasmissioneDalvivo(CCmdUI* pCmdUI) {
+	pCmdUI->SetCheck(trasmMode == 0);
+	pCmdUI->Enable(Opzioni & (maySendAudio | sendAudioMP3) ? TRUE : FALSE);
+	}
+
+
+
+void CVidsendDoc22::OnUpdateAudioPaginadiprova(CCmdUI* pCmdUI) {
+	
+	}
+
+void CVidsendDoc22::OnAudioTrasmissionePausa() {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+	
+	bPaused=1;		// azzerare i contatori dei frame?
+	((CChildFrame22 *)v->GetParent())->setStatusIcons();
+	v->buttonS->SetCheck(!bPaused);
+	}
+
+void CVidsendDoc22::OnUpdateAudioTrasmissionePausa(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(bPaused);
+	pCmdUI->Enable(!bPaused);
+	}
+
+void CVidsendDoc22::OnAudioTrasmissioneRiprendi() {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+	
+	bPaused=0;
+	((CChildFrame22 *)v->GetParent())->setStatusIcons();
+	v->buttonS->SetCheck(!bPaused);
+	}
+
+void CVidsendDoc22::OnUpdateAudioTrasmissioneRiprendi(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(!bPaused);
+	pCmdUI->Enable(bPaused);
+	}
+
+void CVidsendDoc22::OnFileSaveAudio() {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+	
+	if(isRecordingAudio())
+		endSaveFile();
+	else {
+		CFileDialog myDlg(FALSE,"*.mp3",NULL,OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY,"File Audio (*.mp3)|*.mp3|File Audio (*.wav)|*.wav|Tutti i file (*.*)|*.*||",v);
+		if(myDlg.DoModal() == IDOK) {
+			int i=myDlg.GetFileName().ReverseFind('\\');
+			if(i>0) {
+				nomeMP3=myDlg.GetFileName().Mid(i+1);
+				pathMP3=myDlg.GetFileName().Left(i);
+				}
+			else {
+				nomeMP3=myDlg.GetFileName();
+				pathMP3="";
+				}
+			if(nomeMP3.Find('.') == -1)
+				nomeMP3+=".mp3";
+			if(pathMP3.Right(1) != '\\')
+				pathMP3+='\\';
+			startSaveFile(myDlg.GetFileName() /*pathMP3+nomeMP3 boh*/,0);
+			}
+		}
+	((CChildFrame22 *)v->GetParent())->setStatusIcons();
+	}
+
+void CVidsendDoc22::OnUpdateFileSaveAudio(CCmdUI* pCmdUI) {
+//	pCmdUI->Enable(  ? 1 : 0)	;
+	pCmdUI->SetCheck(isRecordingAudio() ? 1 : 0)	;
+	}
+
+
+void CVidsendDoc22::OnAudioInformazioni() {
+	CString S,S1;
+	DWORD n,n1,n2;
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+
+		if(streamSocketA && Opzioni & CVidsendDoc22::maySendAudio) {
+			S1.Format("Trasmissione audio compresso frequenza %u, %u bit, %u canale(i), compressione 0x%X",
+				v->wfd.wf.nSamplesPerSec,v->wfd.wf.wBitsPerSample,v->wfd.wf.nChannels,v->wfd.wf.wFormatTag);
+			S+=S1+"\n";
+			S1.Format("Trasmissione audio MP3 frequenza %u, %u bit, %u canale(i)",
+				v->wfex.nSamplesPerSec,v->wfex.wBitsPerSample,v->wfex.nChannels);
+			S+=S1+"\n";
+			}
+		n=calcBandWidth();
+		S1.Format("Bitrate: %uKbps",n/128);					//*8 e /1K
+		S+=S1;
+		{
+		POSITION po;
+		n=n1=n2=0;
+		po=streamSocketA2->cSockRoot.GetHeadPosition();
+		if(po) {
+			do {
+				n+=streamSocketA2->cSockRoot.GetNext(po)->sentFrame;
+				n1+=streamSocketA2->cSockRoot.GetNext(po)->stops;
+				n2+=streamSocketA2->cSockRoot.GetNext(po)->skippedFrame;
+				} while(po);
+			}
+		S1.Format("Frame inviati: %u, STOP ricevuti: %u, frame NON inviati",n,n1,n2);
+		S+=S1;
+		}
+
+	AfxMessageBox(S,MB_ICONINFORMATION);
+	}
+
+
+void CVidsendDoc22::OnAudioAudio() {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+
+	bAudio=!bAudio;
+	((CChildFrame22 *)v->GetParent())->setStatusIcons();
+	}
+
+void CVidsendDoc22::OnUpdateAudioAudio(CCmdUI* pCmdUI) {
+	
+	pCmdUI->SetCheck(bAudio);
+	pCmdUI->Enable(Opzioni & maySendAudio ? TRUE : FALSE);
+	}
+
+void CVidsendDoc22::OnAudioLivellivolume() {
+	WinExec("sndvol32.exe",SW_SHOWNORMAL);
+	WinExec("sndvol.exe",SW_SHOWNORMAL);			// per Windows 7 !!!
+	}
+
+
+
+void CVidsendDoc22::setTXMode(int mode) {
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+	HRESULT hr; 
+	
+	if(mode>=0) {
+		v->gdaFrameNum=0;
+//		v->KillTimer(1);
+/*		if(v->m_AudioThread) {
+			TerminateThread(v->m_AudioThread->m_hThread,-1);
+			v->m_AudioThread=NULL;
+			}*/
+		if(psAudio) {
+			psAudio->Close();
+			delete psAudio; psAudio=NULL;
+			}
+		if(v->PBMP3buffer)
+			delete v->PBMP3buffer;
+		v->PBMP3buffer=NULL;
+		}
+	switch(mode) {
+		case 0:				// live
+			trasmMode=0;
+			v->initCapture(NULL, TRUE);		// in effetti initCapture servirebbe anche negli altri casi, ora
+			break;
+		case 1:				// canzone
+/*			if(v->m_pwi)
+				v->m_pwi->StopRecord();*/
+
+			if(Opzioni & maySendAudio) {
+				psAudio=new CFile;
+				if(!psAudio->Open(nomeMP3_PB,CFile::modeRead | CFile::typeBinary | CFile::shareDenyWrite)) {
+					delete psAudio; 	psAudio=NULL;
+//					goto case_2;
+					}
+				}
+			v->PBMP3from=v->PBMP3to=0;
+			if(!v->PBMP3buffer)
+				v->PBMP3buffer=new BYTE[44100L*2*2 *2];		// diciamo 2 secondi per sicurezza! v. di là
+			v->PBMP3bufferSize=v->PBMP3bufferPointer=0;
+
+//			v->SetTimer(1,1000/AUDIO_BUFFER_DIVIDER,NULL);
+//			AfxBeginThread(CVidsendView22::audioProva,v);
+			trasmMode=1;
+			v->VUMeter3->SetWindowText(0);
+
+error1:
+			break;
+		case 2:				// test
+case_2:
+/*			if(v->m_pwi)
+				v->m_pwi->StopRecord();*/
+//			v->SetTimer(1,1000/AUDIO_BUFFER_DIVIDER,NULL);
+//			AfxBeginThread(CVidsendView22::audioProva,v);
+			trasmMode=2;
+			v->VUMeter3->SetWindowText(0);
+			break;
+		}
+	if(mode>=0)
+		((CChildFrame22 *)v->GetParent())->setStatusIcons();
+	}
+
+BOOL CVidsendDoc22::startSaveFile(CString S,int m) {
+
+	if(!saveFile && !S.IsEmpty()) {
+		saveFile=new CFile;
+		saveFile->Open(S,CFile::modeCreate | CFile::modeWrite | CFile::typeBinary | CFile::shareExclusive);
+		return 1;
+		}
+	return 0;
+	}
+BOOL CVidsendDoc22::endSaveFile() {
+
+	if(saveFile) {
+		struct ID3_TAG id3;
+		ZeroMemory(&id3,sizeof(struct ID3_TAG));
+		id3.tag[0]='T'; id3.tag[1]='A'; id3.tag[2]='G';
+		strcpy(id3.titolo, streamTitle);
+		strcpy(id3.autore, theApp.infoUtente.cognome /*"DarioG"*/);
+		// OCCHIO lunghezza 30!
+		strcat(id3.autore, theApp.infoUtente.nome);
+		strcpy(id3.anno, "2023");
+		id3.genere=186;		// Podcast
+		saveFile->Write(&id3,128);
+		saveFile->Close();
+		delete saveFile; saveFile=NULL;
+		return 1;
+		}
+	return 0;
+	}
+
+struct STREAM_INFO *CVidsendDoc22::getConnectionInfo() {
+	struct STREAM_INFO *si;
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+
+	si=new struct STREAM_INFO;
+
+/*#include <mmreg.h>	
+	char buf[32];
+	wsprintf(buf,"%u, %u",sizeof(struct STREAM_INFO),sizeof(struct EXT_WAVEFORMATEX));
+	AfxMessageBox(buf);*/
+
+
+	if(si) {
+		ZeroMemory(si,sizeof(si));
+		si->versione=VIDSEND_VERSIONE;
+		if(Opzioni & maySendAudio)
+			memcpy(&si->wf,&v->wfd,sizeof(v->wfd));
+		else
+			si->wf.wf.wFormatTag=0;
+		if(Opzioni & timedConnection)
+			si->maxTime=timedConnLenght;
+		else
+			si->maxTime=0;
+		switch((Opzioni & needAuthenticate) >> 29) {
+			case 2:
+			case 1:
+				_tcscpy(si->authenticationWWW,(LPCTSTR)authenticationWWW);
+				break;
+			case 0:
+				*si->authenticationWWW=0;
+				break;
+			}
+		if(Opzioni & openWWW)
+			_tcscpy(si->openWWW,(LPCTSTR)forceOpenWWW);
+		else
+			*si->openWWW=0;
+		si->IDServer=myID;
+		si->dontSave=Opzioni & dontSave;
+		si->noBuffers=FALSE;
+		si->remoteCtrl=0;		// finire!
+		_tcscpy(si->streamTitle,(LPCTSTR)streamTitle);
+		_tcscpy(si->splashOrIntro,(LPCTSTR)splashOrIntroName);
+		}
+
+	return si;
+	}
+
+
+int CVidsendDoc22::calcBandWidth() {		// quella in uso al momento...
+	CVidsendView22 *v=(CVidsendView22 *)getView();
+
+	return calcBandWidth(Opzioni & CVidsendDoc22::maySendAudio,v->wfd.wf.nSamplesPerSec,
+		v->wfd.wf.wBitsPerSample,v->wfd.wf.nChannels,myQA.compressor,myQA.quality);
+	}
+
+int CVidsendDoc22::calcBandWidth(int aq) {
+	int i,n;
+
+	if(aq >= 7)
+		return -1;
+	n=calcBandWidth(aq>=0,qsa[aq].samplesPerSec,qsa[aq].bitsPerSample,qsa[aq].channels,myQA.compressor,qsa[aq].quality);
+	return n;
+	}
+
+int CVidsendDoc22::calcBandWidth(BOOL bAudio,DWORD samplesPerSec,WORD bitsPerSample,WORD channels,DWORD compressorA,int qualityA,
+																CString *info) {
+	int i;
+	DWORD nv=0,na=0,t,t1;
+
+	if(bAudio) {
+		if(compressorA) {
+			WAVEFORMATEX wf;
+			HACMSTREAM hAcm;
+			wf.wFormatTag = WAVE_FORMAT_PCM;
+			wf.nChannels = channels;
+			wf.nSamplesPerSec = samplesPerSec;
+			wf.nBlockAlign = 1;
+			wf.wBitsPerSample = bitsPerSample;
+			wf.nAvgBytesPerSec = wf.nSamplesPerSec*wf.nChannels*(wf.wBitsPerSample/8);
+			wf.cbSize = 0;
+
+
+
+			/* v. per MP3 https://social.msdn.microsoft.com/Forums/en-US/5345daf5-2aca-4956-a45c-d8ef494af5da/how-to-play-mp3?forum=vssmartdevicesnative
+
+	WAVEFORMATEX waveFormat;
+    waveFormat.wFormatTag = 1;
+    waveFormat.nChannels = NCHANNEL;
+    waveFormat.nSamplesPerSec = SAMPLE_RATE;
+    waveFormat.nAvgBytesPerSec = SAMPLE_RATE * NCHANNEL * BYTE_PER_SAMPLE;
+    waveFormat.nBlockAlign = NCHANNEL * BYTE_PER_SAMPLE;
+    waveFormat.wBitsPerSample = BYTE_PER_SAMPLE * BITS_PER_BYTES;
+    waveFormat.cbSize = 0;
+
+	MPEGLAYER3WAVEFORMAT mp3Format;
+	ZeroMemory(&mp3Format, sizeof(MPEGLAYER3WAVEFORMAT));
+	mp3Format.wfx.wFormatTag = WAVE_FORMAT_MPEGLAYER3;
+	mp3Format.wfx.nChannels = NCHANNEL;
+	mp3Format.wfx.nSamplesPerSec = SAMPLE_RATE;
+	mp3Format.wfx.nAvgBytesPerSec = SAMPLE_RATE * NCHANNEL * BYTE_PER_SAMPLE;
+	mp3Format.wfx.nBlockAlign = NCHANNEL * BYTE_PER_SAMPLE;
+	mp3Format.wfx.wBitsPerSample = 0;//BYTE_PER_SAMPLE * BITS_PER_BYTES;
+	mp3Format.wfx.cbSize = MPEGLAYER3_WFX_EXTRA_BYTES;
+	mp3Format.wID = MPEGLAYER3_ID_MPEG;
+	mp3Format.fdwFlags = MPEGLAYER3_FLAG_PADDING_OFF;
+	mp3Format.nFramesPerBlock = 1;
+	mp3Format.nBlockSize =  mp3Format.wfx.nAvgBytesPerSec * 8 / mp3Format.wfx.nSamplesPerSec;
+	mp3Format.nCodecDelay = 1393;
+
+	switch(acmStreamOpen(NULL, NULL, (LPWAVEFORMATEX)&mp3Format, &waveFormat, NULL, 0, 0, ACM_STREAMOPENF_QUERY))
+	*/
+			switch(compressorA) {
+				case WAVE_FORMAT_GSM610:
+					GSM610WAVEFORMAT mywfx;
+					samplesPerSec=8000;
+					mywfx.wfx.wFormatTag = compressorA;
+					mywfx.wfx.nChannels = 1;
+					mywfx.wfx.nSamplesPerSec = (samplesPerSec/320)*320;
+					mywfx.wfx.nAvgBytesPerSec = 1625;
+					mywfx.wfx.nBlockAlign = 65;
+					mywfx.wfx.wBitsPerSample = 0;
+					mywfx.wfx.cbSize = 2;
+					mywfx.wSamplesPerBlock = 320;
+					acmStreamOpen(&hAcm,NULL,&wf,(WAVEFORMATEX *)&mywfx,NULL,NULL,0,0);
+					if(hAcm) {
+						acmStreamSize(hAcm,wf.nAvgBytesPerSec,&na,ACM_STREAMSIZEF_SOURCE);
+						acmStreamClose(hAcm,0);
+						}
+					else {
+						na=-1;
+						}
+					break;
+				case WAVE_FORMAT_MPEGLAYER3:
+					MPEGLAYER3WAVEFORMAT mp3Format;
+					ZeroMemory(&mp3Format, sizeof(MPEGLAYER3WAVEFORMAT));
+					mp3Format.wfx.wFormatTag = WAVE_FORMAT_MPEGLAYER3;
+					mp3Format.wfx.nChannels = channels;
+					mp3Format.wfx.nSamplesPerSec = samplesPerSec;
+					mp3Format.wfx.nAvgBytesPerSec = samplesPerSec * channels * bitsPerSample;
+					mp3Format.wfx.nBlockAlign = (channels*bitsPerSample)/8;;
+					mp3Format.wfx.wBitsPerSample = 0;//BYTE_PER_SAMPLE * BITS_PER_BYTES;
+					mp3Format.wfx.cbSize = MPEGLAYER3_WFX_EXTRA_BYTES;
+					mp3Format.wID = MPEGLAYER3_ID_MPEG;
+
+					// v. CMP3Coder (lame) 2023!
+
+					mp3Format.fdwFlags = MPEGLAYER3_FLAG_PADDING_OFF;
+					mp3Format.nFramesPerBlock = 1;
+					mp3Format.nBlockSize =  mp3Format.wfx.nAvgBytesPerSec * 8 / mp3Format.wfx.nSamplesPerSec;
+					mp3Format.nCodecDelay = 1393;
+					if(acmStreamOpen(&hAcm /*NULL*/, NULL, (LPWAVEFORMATEX)&mp3Format, &wf, NULL, 0, 0, ACM_STREAMOPENF_QUERY)) {
+						acmStreamSize(hAcm,wf.nAvgBytesPerSec,&na,ACM_STREAMSIZEF_SOURCE);
+						acmStreamClose(hAcm,0);
+						}
+					else {
+						na=-1;
+						}
+//					na=mp3Format.wfx.nAvgBytesPerSec; // FARE!! v.sopra
+					na=16384 /*diciamo 128Kbps :) */;
+					break;
+				case WAVE_FORMAT_PCM:
+					na=wf.nAvgBytesPerSec;
+					break;
+				default:
+					na=-1;
+					break;
+				}
+			}
+		else {
+			na=samplesPerSec*bitsPerSample/8;
+			na*=channels;
+			}
+		}
+	else
+		na=0;
+	if(nv != -1 && na != -1)
+		return nv+na;
+	else
+		return 0;
+	}
+
+DWORD CVidsendDoc22::getAVstep(struct QUALITY_MODEL_A *qa) {
+	register int i,j;
+
+	if(qa) {
+		for(j=0; j<7; j++) {
+			if(qa->samplesPerSec <= qsa[j].samplesPerSec) {
+				break;
+				}
+			}
+		}
+	return MAKELONG(i,j);
+	}
+
+void CVidsendDoc22::checkUtenti() {
+
+	if(controlSocket)
+		controlSocket->checkUtenti();
+	}
+
+void CVidsendDoc22::sendHrtBt() {
+	char myBuf[2];
+	int i;
+
+	if(authSocket) {
+		myBuf[0]=11;
+		myBuf[1]=0;
+		if((i=authSocket->Send(myBuf,2)) == 2)
+			;
+		else {
+			DWORD n=GetLastError();
+			if(theApp.debugMode)
+				if(theApp.FileSpool) 
+					theApp.FileSpool->print(CLogFile::flagError,"impossibile inviare heartbeat AUTH (errore Send %d,%u)!",i,n);
+			}
+		}
+	else {
+		if(theApp.FileSpool) 
+			theApp.FileSpool->print(CLogFile::flagError,"impossibile inviare heartbeat AUTH (socket NULLO)!");
+		}
+	}
+
+int CVidsendDoc22::MandaPipeA(const struct AV_PACKET_HDR *avh,LPARAM lParam) {
+	int i;
+	DWORD cbBytesRead = 0, cbReplyBytes = 0, cbWritten = 0; 
+  BOOL fSuccess = FALSE;
+
+//https://docs.microsoft.com/en-us/windows/desktop/ipc/multithreaded-pipe-server
+	if(pipeA != INVALID_HANDLE_VALUE) {
+		cbReplyBytes=lParam;
+		// Write the reply to the pipe. 
+    fSuccess = WriteFile( 
+			pipeA,        // handle to pipe 
+			avh,     // buffer to write from 
+			cbReplyBytes, // number of bytes to write 
+			&cbWritten,   // number of bytes written 
+			NULL);        // not overlapped I/O 
+
+    if (!fSuccess || cbReplyBytes != cbWritten) {   
+     // _tprintf(TEXT("InstanceThread WriteFile failed, GLE=%d.\n"), GetLastError()); 
+      //break;
+      }
+		}
+
+	return fSuccess;
+	}
+
+int CVidsendDoc22::HandlePipeA() {
+  BOOL   fConnected = FALSE,fSuccess = FALSE;
+	DWORD cbBytesRead = 0;
+  OVERLAPPED oOverlap; 
+
+	// Wait for the client to connect; if it succeeds, 
+	// the function returns a nonzero value. If the function
+	// returns zero, GetLastError returns ERROR_PIPE_CONNECTED. 
+
+	fConnected = ConnectNamedPipe(pipeA, &oOverlap) ? 
+		 TRUE : (GetLastError() == ERROR_PIPE_CONNECTED); 
+
+	if(fConnected) { 
+
+   // Read client requests from the pipe. This simplistic code only allows messages
+   // up to BUFSIZE characters in length.
+    fSuccess = ReadFile( 
+			pipeA,        // handle to pipe 
+			pipeABuffer,    // buffer to receive data 
+			PIPEBUFSIZE*sizeof(TCHAR), // size of buffer 
+			&cbBytesRead, // number of bytes read 
+			NULL);        // not overlapped I/O 
+
+    if (!fSuccess || cbBytesRead == 0) {   
+      if (GetLastError() == ERROR_BROKEN_PIPE) {
+//             _tprintf(TEXT("InstanceThread: client disconnected.\n"), GetLastError()); 
+        }
+      else {
+//             _tprintf(TEXT("InstanceThread ReadFile failed, GLE=%d.\n"), GetLastError()); 
+        }
+      }
+		else {
+			char *p=(char *)GlobalAlloc(GPTR,1024);
+			wsprintf(p,"NamedPipe receive: %s",pipeABuffer); 
+			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+			}
+		} 
+
+	return fSuccess;
+	}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendDoc3 - log file
@@ -2365,17 +3821,6 @@ BOOL CVidsendDoc3::OnNewDocument() {
 	if(!CExDocument::OnNewDocument())
 		return FALSE;
 	SetTitle("Log eventi");
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		char myBuf[64];
-		RECT rc;
-		CVidsendView3 *w=(CVidsendView3 *)getView();
-
-		SetRectEmpty(&rc);
-		GetPrivateProfileString(IDS_COORDINATE,myBuf,32);
-		sscanf(myBuf,"%d,%d,%d,%d",&rc.left,&rc.top,&rc.right,&rc.bottom);	// sono coord. client rispetto alla MDIFRAME madre della mia ChildFrame
-		if(!IsRectEmpty(&rc))
-			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
-		}
 
 	m_vidsendSet=new CVidsendSet(NULL);
 
@@ -2462,7 +3907,7 @@ CVidsendDoc4::CVidsendDoc4() {
 	Opzioni &= ~(dontSave | noFreeChat | noOne2One | onlyOne2One);	
 			// forse serverMode non servirebbe... arriva dal "forza server chat" in App
 #endif
-	opzioniVisive=GetPrivateProfileInt(IDS_OPZIONI2);
+	opzioniVisive=GetPrivateProfileInt(IDS_OPZIONI4);
 #ifdef _NEWMEET_MODE
 	opzioniVisive |= avvisi_sonori | avvisi_sonori2;
 #endif
@@ -2526,6 +3971,7 @@ BOOL CVidsendDoc4::OnNewDocument() {
 #endif
 		}
 
+#if defined(_NEWMEET_MODE) || defined(_CAMPARTY_MODE)  // idem 2023
 	if(theApp.Opzioni & CVidsendApp::saveLayout) {
 		char myBuf[64];
 		RECT rc;
@@ -2544,6 +3990,7 @@ BOOL CVidsendDoc4::OnNewDocument() {
 		if(!IsRectEmpty(&rc))
 			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
 		}
+#endif
 
 	return TRUE;
 	}
@@ -2559,7 +4006,7 @@ CVidsendDoc4::~CVidsendDoc4() {
 
 	save();
   WritePrivateProfileInt(IDS_OPZIONI,Opzioni);
-  WritePrivateProfileInt(IDS_OPZIONI2,opzioniVisive);
+  WritePrivateProfileInt(IDS_OPZIONI4,opzioniVisive);
   WritePrivateProfileInt(IDS_MAXCONN,maxConn);
   WritePrivateProfileInt(IDS_MAXMSG,maxMessaggi);
   WritePrivateProfileString(IDS_USER,(char *)(LPCTSTR)loginName);
@@ -2856,6 +4303,7 @@ struct CHAT_INFO *CVidsendDoc4::getConnectionInfo() {
 
 	si=new struct CHAT_INFO;
 	if(si) {
+		ZeroMemory(si,sizeof(struct CHAT_INFO));
 		si->maxTime=0;
 		*si->authenticationWWW=0;
 		if(Opzioni & openWWW)
@@ -2908,17 +4356,6 @@ BOOL CVidsendDoc5::OnNewDocument() {
 	
 	if(!CExDocument::OnNewDocument())
 		return FALSE;
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		char myBuf[64];
-		RECT rc;
-		CVidsendView5 *w=(CVidsendView5 *)getView();
-
-		SetRectEmpty(&rc);
-		GetPrivateProfileString(IDS_COORDINATE,myBuf,32);
-		sscanf(myBuf,"%d,%d,%d,%d",&rc.left,&rc.top,&rc.right,&rc.bottom);	// sono coord. client rispetto alla MDIFRAME madre della mia ChildFrame
-		if(!IsRectEmpty(&rc))
-			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
-		}
 
 	return TRUE;
 	}
@@ -3071,6 +4508,8 @@ BOOL CVidsendDoc6::OnNewDocument() {
 		S+=")";
 		}
 	SetTitle(S);
+
+#ifdef _NEWMEET_MODE
 	if(theApp.Opzioni & CVidsendApp::saveLayout) {
 		char myBuf[64];
 		RECT rc;
@@ -3085,6 +4524,7 @@ BOOL CVidsendDoc6::OnNewDocument() {
 		if(!IsRectEmpty(&rc))
 			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
 		}
+#endif
 
 	return TRUE;
 	}
@@ -3118,10 +4558,9 @@ void CVidsendDoc6::Dump(CDumpContext& dc) const
 /////////////////////////////////////////////////////////////////////////////
 // CVidesendDoc6 serialization
 
-void CVidsendDoc6::Serialize(CArchive& ar)
-{
-	if(ar.IsStoring())
-	{
+void CVidsendDoc6::Serialize(CArchive& ar) {
+
+	if(ar.IsStoring()) {
 		// TODO: add storing code here
 	}
 	else
@@ -3156,9 +4595,13 @@ void CVidsendDoc6::OnFileProprieta() {
 		if(myPage0.isInitialized) {
 			Opzioni = 0;
 			Opzioni |= myPage0.m_AncheDirSrv ? mostraAncheDirSrv : 0;
+			Opzioni |= myPage0.m_IPlookup ? visualizzaIpLookup : 0;
 			theApp.maxHTMLconn=myPage0.m_MaxHTMLconn;
 			if(theApp.theServer) {
 				theApp.theServer->maxConn=myPage0.m_Maxconn;
+				}
+			if(theApp.theServer2) {
+				theApp.theServer2->maxConn=myPage0.m_Maxconn;
 				}
 			}
 		
@@ -3195,17 +4638,6 @@ BOOL CVidsendDoc7::OnNewDocument() {
 	if(!CExDocument::OnNewDocument())
 		return FALSE;
 	SetTitle("Server disponibili");
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		char myBuf[64];
-		RECT rc;
-		CVidsendView7 *w=(CVidsendView7 *)getView();
-
-		SetRectEmpty(&rc);
-		GetPrivateProfileString(IDS_COORDINATE,myBuf,32);
-		sscanf(myBuf,"%d,%d,%d,%d",&rc.left,&rc.top,&rc.right,&rc.bottom);	// sono coord. client rispetto alla MDIFRAME madre della mia ChildFrame
-		if(!IsRectEmpty(&rc))
-			w->GetParent()->SetWindowPos(NULL,rc.left,rc.top,rc.right-rc.left,rc.bottom-rc.top,SWP_NOZORDER);
-		}
 
 	return TRUE;
 	}

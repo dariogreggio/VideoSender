@@ -1,4 +1,7 @@
 #include "afxcview.h"
+#include "mutex.h"
+#include "ScopeGuardMutex.h"
+#include "player.h"
 
 // vidsendView.h : interface of the CVidsendView classes
 //
@@ -45,6 +48,7 @@ public:
 
 	UINT theTimer;
 	DWORD timeRef,renderedFrameTsp;
+	Mutex m_exprMutex;
 
 
 protected:
@@ -53,15 +57,18 @@ protected:
 // Operations
 public:
 	CVidsendDoc *GetDocument();
-	void drawFrame(struct AV_PACKET_HDR *);
-	void playSample(struct AV_PACKET_HDR *);
-	BOOL syncToVideo(struct AV_PACKET_HDR *);
+	void drawFrame(const struct AV_PACKET_HDR *);
+	void playSample(const struct AV_PACKET_HDR *);
+	BOOL syncToVideo(const struct AV_PACKET_HDR *);
 	int setTimer(int);
-	void initAV(BITMAPINFOHEADER *,DWORD,EXT_WAVEFORMATEX *);
+	void initAV(const BITMAPINFOHEADER *,DWORD,const EXT_WAVEFORMATEX *);
 	void stopAV();
-	int doConnect(char *,struct STREAM_INFO *);
+	int doConnect(const char *,const struct STREAM_INFO *);
 	int endConnect();
 	BYTE *getFrame() { return theFrame; }
+	static WORD measureAudio(const BYTE *,DWORD);
+	int doConnessioneRiconnetti(BOOL video=TRUE,BOOL audio=TRUE);
+	static long OnSoundPlayerNotify(long);
 
 
 // Overrides
@@ -111,6 +118,12 @@ protected:
 	afx_msg void OnUpdateControlloControlloremototelecamereAlternasorgenti(CCmdUI* pCmdUI);
 	afx_msg void OnVisualizzaVolume();
 	afx_msg void OnDestroy();
+	afx_msg void OnUpdateControlloControlloremototelecamereSorgente4(CCmdUI* pCmdUI);
+	afx_msg void OnControlloControlloremototelecamereAlternasorgenti();
+	afx_msg void OnControlloControlloremototelecamereSorgente1();
+	afx_msg void OnControlloControlloremototelecamereSorgente2();
+	afx_msg void OnControlloControlloremototelecamereSorgente3();
+	afx_msg void OnControlloControlloremototelecamereSorgente4();
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 };
@@ -179,8 +192,9 @@ protected:
 	//}}AFX_MSG
 	afx_msg LRESULT OnVideoFrameReady(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnAudioFrameReady(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnRawAudioFrameReady(WPARAM wParam, LPARAM lParam);
 	DECLARE_MESSAGE_MAP()
-	int gdvFrameNum,gdaFrameNum;
+	int gdvFrameNum,gdaFrameNum;		// UNIFORMARE con FrameNum in CTV
 	};
 
 #ifndef _DEBUG  
@@ -188,6 +202,347 @@ inline CVidsendDoc2 *CVidsendView2::GetDocument()
    { return (CVidsendDoc2 *)m_pDocument; }
 #endif
 
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendView22 - Finestra main audio server
+
+class CJoshuaMP3;
+class CVUMeter;
+class CDSound;
+class CDSoundPlay;
+
+class CButtonDrop : public CButton {			// https://www.ucancode.net/Visual_C_MFC_Samples/CButton-Button-Control-3D-Text-Drawing-VC-MFC-Example.htm
+public:
+protected:
+  //{{AFX_MSG(CButtonDrop)
+	afx_msg void OnDropFiles(HDROP hDropInfo);
+	//}}AFX_MSG
+	//{{AFX_VIRTUAL(CButtonDrop)
+	void PreSubclassWindow();
+	//}}AFX_VIRTUAL
+  DECLARE_MESSAGE_MAP()
+	};
+
+
+class CODBaseBtn : public CButton {		// https://www.codeproject.com/Articles/21184/Owner-Draw-Button-Helper-Class 
+public:
+
+public:
+    CODBaseBtn();
+    virtual ~CODBaseBtn();
+		bool GetState() { return bState; }
+		void SetCheck(int nCheck) { bState=nCheck; Invalidate(); }
+
+    // ClassWizard generated virtual function overrides
+    //{{AFX_VIRTUAL(CODBaseBtn)
+    public:
+    virtual void DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct);
+    protected:
+    virtual void PreSubclassWindow();
+    //}}AFX_VIRTUAL
+
+protected:
+    //{{AFX_MSG(CODBaseBtn)
+    afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+    afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
+		afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+		afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
+    //}}AFX_MSG
+
+    // Manually added functions
+    afx_msg LRESULT OnMouseLeave( WPARAM, LPARAM );
+
+    DECLARE_MESSAGE_MAP()
+
+protected:
+    // Virtual functions provided to draw the states of the button
+    virtual void OnDrawNormal(CDC& dc, CRect rect) = 0;
+    virtual void OnDrawHovered(CDC& dc, CRect rect) { OnDrawNormal( dc, rect ); }
+    virtual void OnDrawPressed(CDC& dc, CRect rect) { OnDrawNormal( dc, rect ); }
+    virtual void OnDrawDisabled(CDC& dc, CRect rect) { OnDrawNormal( dc, rect ); }
+
+    // Virtual functions provided to handle the special events
+    virtual void OnBeginHover() { }
+    virtual void OnEndHover() { }
+    virtual void OnPressed() { }
+    virtual void OnReleased() { }
+
+private:
+  // Flags
+  bool m_bMouseHover;
+  bool m_bPressedState;
+
+protected:
+	BYTE bState;		// serve perché con OwnerDraw non si può avere nessun altro stile, in particolare "checkbox"...
+	DWORD mStyle;
+};
+
+class CRoundButton : public CODBaseBtn {
+public:
+//	CBrush m_brBkgnd;
+//	CPen m_Pen;
+	enum {
+		COLOR_VARIATION=40,
+		VALUES_RANGE=100
+		};
+
+public:
+	void SetValues() { m_start=m_end=-1; Invalidate(); }
+	void SetValues(short int end) { m_start=0; m_end=end; Invalidate(); }
+	void SetValues(short int start, short int end) { m_start=start; m_end=end; Invalidate(); }
+	void SetColors(COLORREF fore, COLORREF fore2, COLORREF back) { m_crTextColor=fore; m_crOutlineColor=fore2; m_crBkColor=back; Invalidate(); }
+	static COLORREF darken(COLORREF);
+	static COLORREF lighten(COLORREF);
+  CRoundButton(DWORD style=BS_PUSHBUTTON, COLORREF fore=RGB(192,192,192), COLORREF fore2=RGB(96,96,96), COLORREF back=RGB(64,64,64));
+  virtual ~CRoundButton();
+
+private:
+	COLORREF m_crBkColor; // Holds the Background Color for the Text
+	COLORREF m_crTextColor; // Holds the Color for the Text
+	COLORREF m_crOutlineColor;
+	short int m_start,m_end;
+
+protected:
+  void OnDrawNormal(CDC& dc, CRect rect);
+  void OnDrawHovered(CDC& dc, CRect rect);
+  void OnDrawPressed(CDC& dc, CRect rect);
+  void OnDrawDisabled(CDC& dc, CRect rect);
+	};
+
+class CShapeButton : public CODBaseBtn {
+public:
+//	CBrush m_brBkgnd;
+//	CPen m_Pen;
+
+public:
+  CShapeButton(COLORREF fore=RGB(64,64,64), COLORREF back=RGB(192,192,192));
+  virtual ~CShapeButton();
+	void SetColors(COLORREF fore, COLORREF back) { m_crTextColor=fore; m_crBkColor=back; Invalidate(); }
+
+private:
+	COLORREF m_crBkColor; // Holds the Background Color for the Text
+	COLORREF m_crTextColor; // Holds the Color for the Text
+
+protected:
+  void OnDrawNormal(CDC& dc, CRect rect);
+  void OnDrawHovered(CDC& dc, CRect rect);
+  void OnDrawPressed(CDC& dc, CRect rect);
+  void OnDrawDisabled(CDC& dc, CRect rect);
+	};
+
+class CStaticDrop : public CStatic {
+public:
+	CBrush m_brBkgnd; // Holds Brush Color for the Static Text
+	COLORREF m_crBkColor; // Holds the Background Color for the Text
+	COLORREF m_crTextColor; // Holds the Color for the Text
+protected:
+  //{{AFX_MSG(CStaticDrop)
+	afx_msg void OnDropFiles(HDROP hDropInfo);
+	//}}AFX_MSG
+	//{{AFX_VIRTUAL(CStaticDrop)
+	void PreSubclassWindow();
+	afx_msg HBRUSH CtlColor(CDC* pDC, UINT nCtlColor);
+	//}}AFX_VIRTUAL
+  DECLARE_MESSAGE_MAP()
+	};
+
+class CClickableProgressCtrl : public CProgressCtrl {
+public:
+	CClickableProgressCtrl() { ClickPosition=0; }
+	int GetClickPosition();
+protected:
+    //{{AFX_MSG(CClickableProgressCtrl)
+    afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+		afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+		afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+    //}}AFX_MSG
+  DECLARE_MESSAGE_MAP()
+
+public:
+	int ClickPosition;
+
+	};
+
+class CSliderCtrlSmart : public CSliderCtrl {
+public:
+#define NM_LDBLCLICK 101  // bah
+public:
+	CSliderCtrlSmart();
+protected:
+    //{{AFX_MSG(CSliderCtrlSmart)
+		afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+		afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
+		afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
+		afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
+		afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+    //}}AFX_MSG
+  DECLARE_MESSAGE_MAP()
+
+public:
+
+	};
+
+
+class CAudioMixer;
+class CVidsendView22 : public CView {
+	friend class CVidsendDoc22;
+protected:
+	CVidsendView22();           // protected constructor used by dynamic creation
+	DECLARE_DYNCREATE(CVidsendView22)
+
+// Attributes
+public:
+	BOOL inClick;
+	WAVEFORMATEX wfex;
+	struct EXT_WAVEFORMATEX wfd;
+	HACMSTREAM m_hAcm;
+	CWaveIn *m_pwi;
+	DWORD maxWaveoutSize;
+	DWORD aFrameNum;
+	CJoshuaMP3 *m_MP3player[2];
+	CWinThread *m_MP3Thread[2];
+	CWinThread *m_AudioThread;
+	CDSound	*m_DSound;
+	CDSoundPlay *m_DS;
+	Player *playerPreascolto;
+	static CVidsendView22 *pThis;
+	BOOL inSound;
+	int gdaFrameNum;		// UNIFORMARE con FrameNum in CTV
+
+	struct EXT_WAVEFORMATEX soundWf;
+	BYTE *soundSample;
+	DWORD soundLength;
+	BYTE *soundSampleStart;
+
+	int PBMP3from,PBMP3to;
+	BYTE *PBMP3buffer;
+	DWORD PBMP3bufferSize,PBMP3bufferPointer;
+
+	CAudioMixer *m_Mixer;
+//	class lock_guard busyAudio;			// semaforo per callback audio/wavein
+	CCriticalSection /*CRITICAL_SECTION*/ m_CritSection;
+//	CSingleLock *busyAudio;
+//	BYTE busyAudio2;
+	HANDLE busyAudio3;
+
+	CSliderCtrlSmart *volume1,*volume2,*volume3,*volume4,*fader,*pitch1,*pitch2;
+	CRoundButton *button[10];
+	CRoundButton *buttonS,*buttonP1,*buttonP2;
+	CShapeButton *buttonM1,*buttonM2,*buttonM3,*buttonM4,*buttonPre1,*buttonPre2,*buttonPre3,*buttonPre4;
+	CButtonDrop *buttonC1,*buttonC2;
+	CButton *buttonE1;
+	CStaticDrop *txtMP31,*txtMP32;
+	CVUMeter *VUMeter1,*VUMeter2,*VUMeter3,*VUMeter4,*VUMeter5;
+	CClickableProgressCtrl *progress1,*progress2;
+	CFont m_Font1,m_Font2;
+
+
+// Operations
+public:
+	CVidsendDoc22 *GetDocument();
+	int doConnect();
+	int endConnect();
+	int initCapture(const WAVEFORMATEX *preferredWf, BOOL bVerbose);
+	void UpdateBanco();
+//	int waveCallback(HWAVEIN hwi,UINT uMsg,DWORD_PTR dwInstance,DWORD_PTR dwParam1,DWORD_PTR dwParam2);
+	static UINT suonaMP3(LPVOID);
+	static UINT audioProva(LPVOID);
+	int stopMP3(BYTE);
+	static WORD measureAudio(const short int *,DWORD);
+	double getVolumeFader(BYTE );
+	int playSound(BYTE n,BYTE volume);
+	int playSound(const char *sndFile,BYTE volume,BYTE q=0);
+	int playSound(const BYTE *sndSample,BYTE volume);
+	static LONG soundNotifyCallback(void *,LONG,LONG);
+	static LONG mp3NotifyCallback(void *,DWORD, DWORD, DWORD);
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CVidsendView22)
+	public:
+	virtual BOOL Create(LPCTSTR lpszClassName, LPCTSTR lpszWindowName, DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID, CCreateContext* pContext = NULL);
+	protected:
+	BOOL OnEraseBkgnd(CDC* pDC);
+	virtual void OnDraw(CDC* pDC);      // overridden to draw this view
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+	virtual ~CVidsendView22();
+#ifdef _DEBUG
+	virtual void AssertValid() const;
+	virtual void Dump(CDumpContext& dc) const;
+#endif
+
+	// Generated message map functions
+protected:
+	//{{AFX_MSG(CVidsendView22)
+	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnTimer(UINT nIDEvent);
+	afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
+	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
+	afx_msg BOOL OnMouseWheel(UINT nFlags, short zDelta, CPoint pt);
+	afx_msg void OnClose();
+	afx_msg void OnDestroy();
+	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+	afx_msg BOOL OnToolTipNotify(UINT /*id*/, NMHDR *pNMHDR, LRESULT * /*pResult*/);
+	afx_msg void OnEditCopy();
+	afx_msg void OnUpdateEditCopy(CCmdUI* pCmdUI);
+	afx_msg void OnConnessioni11();
+	afx_msg void OnUpdateConnessioni11(CCmdUI* pCmdUI);
+	afx_msg void OnConnessioniElenco();
+	afx_msg void OnAudioCanzone1();
+	afx_msg void OnAudioCanzone2();
+	afx_msg void OnAudioPlaylist();
+	afx_msg void OnAudioEqualizzatoreflat();
+	afx_msg void OnUpdateAudioEqualizzatoreflat(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEqualizzatorerock();
+	afx_msg void OnUpdateAudioEqualizzatorerock(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEqualizzatorepop();
+	afx_msg void OnUpdateAudioEqualizzatorepop(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEqualizzatoredance();
+	afx_msg void OnUpdateAudioEqualizzatoredance(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEqualizzatoreclassica();
+	afx_msg void OnUpdateAudioEqualizzatoreclassica(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEffettisonori(UINT nID);
+	afx_msg void OnUpdateAudioEffettisonori(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEffettisonori2(UINT nID);
+	afx_msg void OnAudioEffettisonoristop();
+	afx_msg void OnUpdateAudioEffettisonoristop(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEffettisonoriBanco(UINT nID);
+	afx_msg void OnUpdateAudioEffettisonoriBanco(CCmdUI* pCmdUI);
+	afx_msg void OnAudioEffettisonoriImposta();
+	afx_msg void OnAudioEffettisonoriImpostaBtn(UINT nID,NMHDR* p_notify_msg_ptr, LRESULT* p_result_ptr);
+	//}}AFX_MSG
+	afx_msg LRESULT OnAudioFrameReady(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnRawAudioFrameReady(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnMP3Finished(WPARAM wParam, LPARAM lParam);
+	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
+	afx_msg void OnAudioEffettisonoriPlay1();
+	afx_msg void OnAudioEffettisonoriPlay2();
+	afx_msg void OnAudioEffettisonoriOnAir();
+	afx_msg void OnAudioEffettisonoriMute1();
+	afx_msg void OnAudioEffettisonoriMute2();
+	afx_msg void OnAudioEffettisonoriMute3();
+	afx_msg void OnAudioEffettisonoriMute4();
+	afx_msg void OnAudioEffettisonoriMutePre1();
+	afx_msg void OnAudioEffettisonoriMutePre2();
+	afx_msg void OnAudioEffettisonoriMutePre3();
+	afx_msg void OnProgressCanzone1(NMHDR* pNotifyStruct, LRESULT* result);
+	afx_msg void OnProgressCanzone2(NMHDR* pNotifyStruct, LRESULT* result);
+	afx_msg void OnSliderFader(NMHDR* pNotifyStruct, LRESULT* result);
+	afx_msg void OnSliderPitch1(NMHDR* pNotifyStruct, LRESULT* result);
+	afx_msg void OnSliderPitch2(NMHDR* pNotifyStruct, LRESULT* result);
+	DECLARE_MESSAGE_MAP()
+	};
+
+#ifndef _DEBUG  
+inline CVidsendDoc22 *CVidsendView22::GetDocument()
+   { return (CVidsendDoc22 *)m_pDocument; }
+#endif
 
 
 
@@ -309,7 +664,7 @@ public:
 // Operations
 public:
 	CVidsendDoc4 *GetDocument();
-	int doConnect(char *,struct CHAT_INFO *);
+	int doConnect(const char *,struct CHAT_INFO *);
 	int endConnect();
 	int updateTree();
 	void addToListBox(struct CHAT_MESSAGE *);
@@ -515,6 +870,10 @@ protected:
 	afx_msg void OnConnessioniMandamessaggio();
 	afx_msg void OnUpdateConnessioniMandamessaggio(CCmdUI* pCmdUI);
 	afx_msg void OnConnessioniMandamessaggioatutti();
+	afx_msg void OnVisualizzaIpLookup();
+	afx_msg void OnUpdateVisualizzaIpLookup(CCmdUI* pCmdUI);
+	afx_msg void OnVisualizzaAncheDirectoryServer();
+	afx_msg void OnUpdateVisualizzaAncheDirectoryServer(CCmdUI* pCmdUI);
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 };

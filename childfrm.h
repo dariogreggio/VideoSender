@@ -97,6 +97,43 @@ protected:
 	DECLARE_MESSAGE_MAP()
 	};
 
+class CChildFrame22 : public CMDIChildWnd {
+	DECLARE_DYNCREATE(CChildFrame22)
+protected:
+	CChildFrame22();           // protected constructor used by dynamic creation
+
+// Attributes
+public:
+	CStatusBar m_wndStatusBar;
+	HICON iconOff,iconOn,iconSpkOff,iconSpkOn,iconPlay,iconPause,iconRecOn,iconRecOff;
+
+// Operations
+public:
+	void setStatusIcons(CVidsendDoc22 *d=NULL);
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CChildFrame2)
+	protected:
+	virtual BOOL OnNotify(WPARAM wParam, LPARAM lParam, LRESULT* pResult);
+	virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+	virtual ~CChildFrame22();
+
+	// Generated message map functions
+	//{{AFX_MSG(CChildFrame2)
+	afx_msg void OnMove(int x, int y);
+	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnClose();
+	//}}AFX_MSG
+	afx_msg void OnGetMinMaxInfo( MINMAXINFO FAR* lpMMI );
+	DECLARE_MESSAGE_MAP()
+	};
+
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
 // CChildFrame3 frame

@@ -16,17 +16,19 @@ public:
 	DWORD Opzioni;
 // Operations
 public:
+	BOOL OnNewDocument();
 	CView *getView() { POSITION pos=GetFirstViewPosition(); return GetNextView(pos); }
 	void getWindow(RECT *);
 	void move(int, int, int x2=0, int y2=0);
-	int GetPrivateProfileInt(int k) { return theApp.prStore->GetPrivateProfileInt(prfSection,k);};
-	int WritePrivateProfileInt(int k, int v)  { return theApp.prStore->WritePrivateProfileInt(prfSection,k,v);};
-	int GetPrivateProfileString(int k,char *s,int l,char *def=NULL) { return theApp.prStore->GetPrivateProfileString(prfSection,k,s,l,def ? def : "");};
-	int WritePrivateProfileString(int k, const char *s)  { return theApp.prStore->WritePrivateProfileString(prfSection,k,s);};
-	CTime GetPrivateProfileTime(int k) { return theApp.prStore->GetPrivateProfileTime(prfSection,k);};
-	CTimeSpan GetPrivateProfileTimeSpan(int k) { return theApp.prStore->GetPrivateProfileTimeSpan(prfSection,k);};
-	int WritePrivateProfileTime(int k, CTime t) { return theApp.prStore->WritePrivateProfileTime(prfSection,k,t);};
-	int WritePrivateProfileTime(int k, CTimeSpan t) { return theApp.prStore->WritePrivateProfileTime(prfSection,k,t);};
+	void savelayout();
+	int GetPrivateProfileInt(int k) { return theApp.prStore->GetPrivateProfileInt(prfSection,k);}
+	int WritePrivateProfileInt(int k, int v)  { return theApp.prStore->WritePrivateProfileInt(prfSection,k,v);}
+	int GetPrivateProfileString(int k,char *s,int l,char *def=NULL) { return theApp.prStore->GetPrivateProfileString(prfSection,k,s,l,def ? def : "");}
+	int WritePrivateProfileString(int k, const char *s)  { return theApp.prStore->WritePrivateProfileString(prfSection,k,s);}
+	CTime GetPrivateProfileTime(int k) { return theApp.prStore->GetPrivateProfileTime(prfSection,k);}
+	CTimeSpan GetPrivateProfileTimeSpan(int k) { return theApp.prStore->GetPrivateProfileTimeSpan(prfSection,k);}
+	int WritePrivateProfileTime(int k, CTime t) { return theApp.prStore->WritePrivateProfileTime(prfSection,k,t);}
+	int WritePrivateProfileTime(int k, CTimeSpan t) { return theApp.prStore->WritePrivateProfileTime(prfSection,k,t);}
 	};
 
 class CVidsendDoc : public CExDocument {
@@ -44,7 +46,9 @@ public:
 		fmt_full= 0x20,
 		fmt_double=0x40,
 		fmt_bn=0x80,
+		mono=0x10,
 		sstereo=0x8,
+		muted=0x4,
 		} OPZIONI_PROPRIETA;
 	enum {
 		MRU_SIZE=10
@@ -63,6 +67,7 @@ public:
 	CString loginName,loginPasw,authWWW;
 	CString streamTitle;
 	short int contrasto,luminosita,saturazione;
+	BOOL wantsVideo,wantsAudio;
 
 // Operations
 public:
@@ -103,6 +108,8 @@ protected:
 	afx_msg void OnUpdateVisualizzaDimensionedoppia(CCmdUI* pCmdUI);
 	afx_msg void OnVisualizzaStereosimulato();
 	afx_msg void OnUpdateVisualizzaStereosimulato(CCmdUI* pCmdUI);
+	afx_msg void OnVisualizzaMute();
+	afx_msg void OnUpdateVisualizzaMute(CCmdUI* pCmdUI);
 	afx_msg void OnConnessionePausa();
 	afx_msg void OnUpdateConnessionePausa(CCmdUI* pCmdUI);
 	afx_msg void OnConnessioneRiprendi();
@@ -121,9 +128,10 @@ protected:
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendDoc2 document
 struct QUALITY_MODEL_V {
-	RECT imageSize;
+	SIZE imageSize;
 	WORD bpp;
 	WORD fps;
+	DWORD format;
 	DWORD compressor;
 	DWORD quality;
 	};
@@ -134,6 +142,7 @@ struct QUALITY_MODEL_A {
 	WORD channels;
 	DWORD compressor;
 	DWORD quality;
+	WORD mp3bitrate;
 	};
 
 struct TEST_PAGE_PROP {
@@ -141,13 +150,21 @@ struct TEST_PAGE_PROP {
 	int tipoAudio;
 	int audioOpzioni;
 	};
+struct WAVE_QUALITY {
+	DWORD samplesPerSec;
+	BYTE bitsPerSample;
+	BYTE numChannels;
+	};
+
 
 class CVidsendDoc2 : public CExDocument {
 public:
 	enum {
 		sendVideo=1,								// I pagina propr.
-		videoType=0x4,
+		videoType=0x4,							// trasmette formato nativo o ricompresso
 		sendAudio=0x10,
+		usaRTSP=0x100,							// mah, spostare...?
+		usaVBAN=0x200,							// mah, spostare...?
 		maySendVideo=0x8000,
 		maySendAudio=0x4000,
 		maySendText= 0x2000,
@@ -182,6 +199,7 @@ public:
 	enum {
 		PIPEBUFSIZE=4096
 		};
+	static const struct WAVE_QUALITY waveQualities[8];
 protected:
 	CVidsendDoc2();           // protected constructor used by dynamic creation
 	DECLARE_DYNCREATE(CVidsendDoc2)
@@ -191,6 +209,7 @@ public:
 	DWORD maxConn,videoSource,alternaSource,OpzioniSalvaVideo,KFrame,OpzioniSorgenteVideo,countFTP;
 	CString forceOpenWWW,authenticationWWW,directoryWWW,directoryWWWLogin,myLogin,myPassword,splashOrIntroName,streamTitle;
 	CString suonoIn,suonoOut;
+	CString RTSPaddress,RTSPuser,RTSPpassword;
 	CTimeSpan timedConnLenght;
 	CTime countFTP_day;
 	struct QUALITY_MODEL_V myQV;
@@ -200,11 +219,14 @@ public:
 	DWORD myID;	// ID utente server nel database utenti
 	CTimeSpan myTimedConn;		// se, come server, il mio tempo di trasmissione viene limitato
 	CStreamSrvSocket *streamSocketV,*streamSocketA;
+	CStreamSrvSocket *streamSocketA2;
+	CVBANSocket *streamSocketVBAN;
 	CControlSrvSocket *controlSocket;
 	CDirectoryCliSocket *dirCliSocket;
 //	struct LOGGED_USER_INFO users[MAX_STREAM_CLIENTS];	// sistemare e rendere dinamico...
 	BOOL bPaused,bAudio;
 	RECT qualityBox;
+	BYTE vban;
 
 
 
@@ -215,14 +237,15 @@ public:
 	int trasmMode,imposeDateTime,imposeTextPos;
 	char imposeText[32];
 	CString nomeAVI,pathAVI,nomeAVI_PB;
-	struct QUALITY_MODEL_V qsv[7];
-	struct QUALITY_MODEL_A qsa[3];
+	static const struct QUALITY_MODEL_V qsv[15];
+	static const struct QUALITY_MODEL_A qsa[7];
 	struct TEST_PAGE_PROP pagProva;
 	PAVIFILE aviFile;
 	PAVISTREAM psVideo,psAudio;
 	AVISTREAMINFO *PBsi;
 	BITMAPINFOHEADER *PBbiSrc,*PBbiDest;
 	PGETFRAME gotFrame;
+	HDRAWDIB theHDD;
 	HANDLE pipeV;
 	TCHAR *pipeVBuffer;
 
@@ -234,13 +257,13 @@ public:
 	struct STREAM_INFO *getConnectionInfo();
 	int calcBandWidth();
 	int calcBandWidth(int, int);
-	int calcBandWidth(BOOL ,RECT *,int ,DWORD ,int ,int ,BOOL ,DWORD ,WORD ,WORD ,DWORD,int,CString *info=NULL);
+	static int calcBandWidth(BOOL ,const SIZE *,int ,DWORD ,int ,int ,BOOL ,DWORD ,WORD ,WORD ,DWORD,int,CString *info=NULL);
 	int acceptConnect(const char *who=NULL);
 	int openVideo(CVidsendView2 *);
 	DWORD getAVstep(struct QUALITY_MODEL_V *,struct QUALITY_MODEL_A *);
 	int impostaVideoSource(int );
 	BOOL save();
-	int MandaPipeV(struct AV_PACKET_HDR *,LPARAM);
+	int MandaPipeV(const struct AV_PACKET_HDR *,LPARAM);
 	int HandlePipeV();
 
 // Overrides
@@ -281,9 +304,11 @@ protected:							// ok se menu MDI diversi
 	afx_msg void OnVideoTrasmissioneDalvivo();
 	afx_msg void OnVideoTrasmissioneFilmato();
 	afx_msg void OnVideoTrasmissionePaginadiprova();
+	afx_msg void OnVideoTrasmissioneClientVideoProxy();
 	afx_msg void OnUpdateVideoTrasmissionePaginadiprova(CCmdUI* pCmdUI);
 	afx_msg void OnUpdateVideoTrasmissioneFilmato(CCmdUI* pCmdUI);
 	afx_msg void OnUpdateVideoTrasmissioneDalvivo(CCmdUI* pCmdUI);
+	afx_msg void OnUpdateVideoTrasmissioneClientVideoProxy(CCmdUI* pCmdUI);
 #endif
 	afx_msg void OnVideoInformazioni();
 	afx_msg void OnFileSaveVideo();
@@ -299,6 +324,158 @@ protected:							// ok se menu MDI diversi
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 	};
+
+class CVidsendView22;
+class CVidsendDoc22 : public CExDocument {
+public:
+	enum {
+		sendVideo=1,								// I pagina propr.
+		videoType=0x4,							// trasmette formato nativo o ricompresso
+		sendAudio=0x10,
+		sendAudioMP3=0x20,
+		usaVBAN=0x200,							// mah, spostare...?
+		maySendVideo=0x8000,
+		maySendAudio=0x4000,
+		maySendText= 0x2000,
+
+		openWWW=0x80000000,					// III & IV pagina propr.
+		needAuthenticate=0x60000000,	// radiobutton TipoAutorizzazione
+		dontSave=0x10000000,
+
+		timedConnection=0x8000000,
+		needAuthenticateServer=0x4000000,
+		registerServer=0x2000000,
+		openAudioOnConnect=0x1000000,
+		askOnConnect=0x800000,
+		doDialUp=0x400000,
+		mono=0x40000,
+		sstereo=0x20000
+		} OPZIONI_PROPRIETA;
+	enum {
+		attivaSchedaAudio0=1,
+		attivaSchedaAudio1=2,
+		attivaSchedaAudio2=4,
+		preascoltoMono=16,
+		} OPZIONI_PROPRIETA_2;
+	enum {
+		mp3Loop=0x10000,
+		} OPZIONI_SORGENTE_VIDEO;
+	enum {
+		PIPEBUFSIZE=4096
+		};
+	static const struct WAVE_QUALITY waveQualities[8];
+protected:
+	CVidsendDoc22();           // protected constructor used by dynamic creation
+	DECLARE_DYNCREATE(CVidsendDoc22)
+
+// Attributes
+public:
+	signed char trasmMode;
+	DWORD maxConn,alternaSource,OpzioniSorgenteVideo,Opzioni2;
+	CString forceOpenWWW,authenticationWWW,directoryWWW,directoryWWWLogin,myLogin,myPassword,splashOrIntroName,streamTitle;
+	CString suonoIn,suonoOut;
+	CTimeSpan timedConnLenght;
+	struct QUALITY_MODEL_A myQA;
+	DWORD maxWaveoutSize;
+	struct TEST_PAGE_PROP pagProva;
+	CVidsendSet2 *theSet;
+	DWORD myID;	// ID utente server nel database utenti
+	CTimeSpan myTimedConn;		// se, come server, il mio tempo di trasmissione viene limitato
+	CStreamSrvSocket *streamSocketA;
+	CStreamSrvSocket *streamSocketA2;
+	CVBANSocket *streamSocketVBAN;
+	CControlSrvSocket *controlSocket;
+	CDirectoryCliSocket *dirCliSocket;
+//	struct LOGGED_USER_INFO users[MAX_STREAM_CLIENTS];	// sistemare e rendere dinamico...
+	BOOL bPaused,bAudio;
+	BYTE vban;
+	CString WAVFiles[3][12];
+	BYTE bBanco;
+	CString m_Canzone1,m_Canzone2;
+	BYTE m_Equalizzatore;
+	CString nomeMP3,pathMP3;
+	CFile *saveFile;
+	CStringEx nomeMP3_PB;
+	CFile *psAudio;
+
+	CAuthCliSocket *authSocket;
+//spostato x test sovrascrittura...
+
+	static const struct QUALITY_MODEL_A qsa[7];
+	HANDLE pipeA;
+	TCHAR *pipeABuffer;
+
+// Operations
+public:
+	void sendHrtBt();
+	void checkUtenti();
+	void setTXMode(BOOL );
+	struct STREAM_INFO *getConnectionInfo();
+	int calcBandWidth();
+	int calcBandWidth(int);
+	static int calcBandWidth(BOOL ,DWORD ,WORD ,WORD ,DWORD,int,CString *info=NULL);
+	int acceptConnect(const char *who=NULL);
+	int openAudio(CVidsendView22 *);
+	DWORD getAVstep(struct QUALITY_MODEL_A *);
+	int impostaVideoSource(int );
+	BOOL isRecordingAudio() { return !nomeMP3.IsEmpty(); }
+	BOOL startSaveFile(CString,int);
+	BOOL endSaveFile();
+	BOOL save();
+	int MandaPipeA(const struct AV_PACKET_HDR *,LPARAM);
+	int HandlePipeA();
+
+// Overrides
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CVidsendDoc22)
+	public:
+	virtual void OnCloseDocument();
+	//}}AFX_VIRTUAL
+
+// Implementation
+public:
+	BOOL OnNewDocument();
+	virtual ~CVidsendDoc22();
+#ifdef _DEBUG
+	virtual void AssertValid() const;
+	virtual void Dump(CDumpContext& dc) const;
+#endif
+
+	// Generated message map functions
+protected:							// ok se menu MDI diversi
+	//{{AFX_MSG(CVidsendDoc22)
+	afx_msg void OnFileProprieta();
+	afx_msg void OnUpdateAudioPaginadiprova(CCmdUI* pCmdUI);
+	afx_msg void OnAudioLivellivolume();
+	afx_msg void OnAudioTrasmissioneRiprendi();
+	afx_msg void OnUpdateAudioTrasmissioneRiprendi(CCmdUI* pCmdUI);
+	afx_msg void OnAudioTrasmissionePausa();
+	afx_msg void OnUpdateAudioTrasmissionePausa(CCmdUI* pCmdUI);
+	afx_msg void OnAudioAudio();
+	afx_msg void OnUpdateAudioAudio(CCmdUI* pCmdUI);
+	afx_msg void OnAudioTrasmissioneDalvivo();
+	afx_msg void OnAudioTrasmissioneCanzone();
+	afx_msg void OnAudioTrasmissionePaginadiprova();
+	afx_msg void OnUpdateAudioTrasmissionePaginadiprova(CCmdUI* pCmdUI);
+	afx_msg void OnUpdateAudioTrasmissioneCanzone(CCmdUI* pCmdUI);
+	afx_msg void OnUpdateAudioTrasmissioneDalvivo(CCmdUI* pCmdUI);
+	afx_msg void OnAudioInformazioni();
+	afx_msg void OnFileSaveAudio();
+	afx_msg void OnUpdateFileSaveAudio(CCmdUI* pCmdUI);
+	afx_msg void OnFileImpostazioniAudio();
+	afx_msg void OnUpdateFileImpostazioniAudio(CCmdUI* pCmdUI);
+	afx_msg void OnFileArchivioimmagini();
+	afx_msg void OnUpdateFileArchivioimmagini(CCmdUI* pCmdUI);
+	afx_msg void OnFilePrint();
+	afx_msg void OnAudioMono();
+	afx_msg void OnUpdateAudioMono(CCmdUI* pCmdUI);
+	afx_msg void OnAudioSuperstereo();
+	afx_msg void OnUpdateAudioSuperstereo(CCmdUI* pCmdUI);
+//	afx_msg void OnUpdateFilePrint(CCmdUI* pCmdUI);
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+	};
+
 
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendDoc3 document - log file
@@ -500,6 +677,7 @@ class CVidsendDoc6 : public CExDocument {
 public:
 	enum {
 		mostraAncheDirSrv=1,
+		visualizzaIpLookup=2,
 		} OPZIONI_PROPRIETA;
 protected:
 	CVidsendDoc6();           // protected constructor used by dynamic creation

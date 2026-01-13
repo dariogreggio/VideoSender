@@ -28,6 +28,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CMDIFrameWnd)
 	ON_WM_MOVE()
 	ON_WM_ENDSESSION()
 	ON_WM_CLOSE()
+//	ON_WM_PAINT()
+//	ON_WM_ERASEBKGND()
 	ON_WM_NCPAINT()
 	ON_WM_CONTEXTMENU()
 	ON_WM_QUERYENDSESSION()
@@ -86,11 +88,14 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
 		}
 
 	if(!m_wndStatusBar.Create(this) ||
-		!m_wndStatusBar.SetIndicators(indicators,
-		  sizeof(indicators)/sizeof(UINT)))	{
+		!m_wndStatusBar.SetIndicators(indicators,sizeof(indicators)/sizeof(UINT)))	{
 		TRACE0("Failed to create status bar\n");
 		return -1;      // fail to create
 		}
+	m_wndStatusBar.SetPaneInfo(0,ID_SEPARATOR,SBPS_NORMAL,440);
+	m_wndStatusBar.SetPaneInfo(1,ID_SEPARATOR,SBPS_NORMAL | SBPS_STRETCH,330);
+	m_wndStatusBar.SetPaneInfo(2,ID_INDICATOR_NUM,SBPS_NORMAL,26);
+	m_wndStatusBar.SetPaneInfo(3,ID_INDICATOR_SCRL,SBPS_NORMAL,26);
 
 	// TODO: Remove this if you don't want tool tips
 	m_wndToolBar.SetBarStyle(m_wndToolBar.GetBarStyle() |	CBRS_TOOLTIPS | CBRS_FLYBY);
@@ -110,9 +115,19 @@ BOOL CMainFrame::PreCreateWindow(CREATESTRUCT& cs) {
 	char myBuf[64];
 
 	cs.style &= ~FWS_ADDTOTITLE;
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		theApp.prStore->GetProfileVariabileString(IDS_COORDINATE,myBuf,32);
-		sscanf(myBuf,"%d,%d,%d,%d",&cs.x,&cs.y,&cs.cx,&cs.cy);
+	CRect rc;
+	int n,n2;
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout) {			// credo inutile dato il nuovo flag in winappex
+		theApp.LoadWindowPlacement(rc,n,n2);
+		if(IsRectEmpty(&rc)) {
+			rc.left=rc.top=10;
+			rc.right=600; rc.bottom=400;
+			}
+		cs.x=rc.left;
+		cs.y=rc.top;
+		cs.cx=rc.right;
+		cs.cy=rc.bottom;
 		cs.cx-=cs.x;
 		cs.cy-=cs.y;
 		}
@@ -201,15 +216,28 @@ BOOL CMainFrame::DestroyWindow() {
 	RECT rc;
 	char myBuf[64];
 	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
+/*	if(theApp.Opzioni & CVidsendApp::saveLayout) {
 		GetWindowRect(&rc);
 		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
 		theApp.prStore->WriteProfileVariabileString(IDS_COORDINATE,myBuf);
-		}
+		}*/
 	
+	/* v. BestaudioPlayer, là va (SDI vs. MDI)
+	CRect r;
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout) {
+//	if(theApp.m_bLoadWindowPlacement) {
+		GetWindowRect(&r);
+		theApp.StoreWindowPlacement(r,0,IsIconic());
+		}
+	*/
+
 #ifdef _CAMPARTY_MODE
 	DestroyIcon(theApp.m_hIcon);
 #endif
+
+	theApp.OnClosingMainFrame();
+
 	return CMDIFrameWnd::DestroyWindow();
 	}
 
@@ -244,39 +272,55 @@ void CMainFrame::OnClose() {
 		}
 	else {
 #ifndef _NEWMEET_MODE
-		if(theApp.theServer) {
+		if(theApp.theServer || theApp.theServer2) {
+#ifndef _DEBUG
 #ifdef _LINGUA_INGLESE
-			if(MessageBox("Closing VideoSender will stop video streaming.\nContinue anyway?","Warning",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
+			if(MessageBox("Closing VideoSender will stop video/audio streaming.\nContinue anyway?","Warning",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #else
-			if(MessageBox("La chiusura di VideoSender interromperà la trasmissione video.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
+			if(MessageBox("La chiusura di VideoSender interromperà la trasmissione video/audio.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #endif
 				// metterci QUANTI utenti sono collegati!!
 				i=FALSE;
+#else
+				i=TRUE;
+#endif
 			}
 #endif
 #ifndef _NEWMEET_MODE
 		if(theApp.theChat && theApp.theChat->Opzioni & CVidsendDoc4::serverMode) {
+#ifndef _DEBUG
 #ifdef _LINGUA_INGLESE
 			if(MessageBox("Closing VideoSender will stop Chat.\nContinue anyway?","Warning",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #else
 			if(MessageBox("La chiusura di VideoSender interromperà la Chat.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #endif
 				i=FALSE;
+#else
+				i=TRUE;
+#endif
 			}
 #endif
 #ifdef _NEWMEET_MODE
 		if(theApp.theServer && theApp.theChat) {
+#ifndef _DEBUG
 #ifdef _LINGUA_INGLESE
 			if(MessageBox("Closing VideoSender will stop Video and Chat.\nContinue anyway?","Warning",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #else
 			if(MessageBox("La chiusura di VideoSender interromperà la trasmissione Video e la Chat.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #endif
 				i=FALSE;
+#else
+				i=TRUE;
+#endif
 			}
 #endif
 		if(theApp.Opzioni & CVidsendApp::authServer || theApp.Opzioni & CVidsendApp::dirServer) {
+#ifndef _DEBUG
 			if(MessageBox("La chiusura di VideoSender interromperà la gestione Utenti Autenticati.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 				i=FALSE;
+#else
+				i=TRUE;
+#endif
 			}
 		}
 	if(i)
@@ -294,12 +338,16 @@ BOOL CMainFrame::OnQueryEndSession() {
 		}
 	else {
 		if(theApp.theServer) {
+#ifndef _DEBUG
 #ifdef _LINGUA_INGLESE
 			if(MessageBox("Closing Windows and VideoSender will stop streaming.\nContinue anyway?","Warning",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #else
 			if(MessageBox("La chiusura di Windows e di VideoSender interromperà la trasmissione video.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
 #endif
 				i=FALSE;
+#else
+				i=TRUE;
+#endif
 			}
 		if(theApp.theChat && theApp.theChat->Opzioni & CVidsendDoc4::serverMode) {
 			if(MessageBox("La chiusura di Windows e di VideoSender interromperà la Chat.\nContinuare?","Attenzione",MB_OKCANCEL | MB_DEFBUTTON2 | MB_ICONSTOP) != IDOK)
@@ -582,6 +630,89 @@ void CMainFrame::OnUpdateWindowLayoutAdatta(CCmdUI* pCmdUI) {
 	pCmdUI->SetCheck(theApp.OpzioniOpenWin & 0x8000 ? 1 : 0);
 	}
 
+/*void CMainFrame::OnDraw(CDC* pDC) {
+	RECT rc;
+	
+  if(IsIconic())    {
+		}
+	else {
+		GetClientRect(&rc);
+		if(!theApp.sfondo.IsEmpty()) {
+			theApp.renderBitmap(pDC,IDB_DISCONNESSO,&rc);
+		}
+				}
+	}*/
+/*void CMainFrame::OnPaint() {
+//	https://forums.codeguru.com/showthread.php?111082-Bitmaps-in-the-MainFrame-Background
+	RECT rc;
+	
+  if(IsIconic())    {
+    CPaintDC dc(this); // device context for painting
+		}
+	else {
+    CPaintDC dc(this); // device context for painting
+		GetClientRect(&rc);
+		if(!theApp.sfondo.IsEmpty()) {
+			theApp.renderBitmap(&dc,theApp.sfondo,&rc,0);
+		}
+				}
+	CMDIFrameWnd::OnPaint();
+	}*/
+
+
+BEGIN_MESSAGE_MAP(CBackWnd, CWnd)
+	//{{AFX_MSG_MAP(CBackWnd)
+	ON_WM_ERASEBKGND()
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+
+BOOL CBackWnd::OnEraseBkgnd(CDC *pDC) {
+//	https://forums.codeguru.com/showthread.php?111082-Bitmaps-in-the-MainFrame-Background
+	RECT rc;
+	
+  if(IsIconic())    {
+		}
+	else {
+		GetClientRect(&rc);
+		if(!theApp.sfondo.IsEmpty()) {
+			theApp.renderBitmap(pDC,theApp.sfondo,&rc,0);
+//			theApp.renderBitmap(pDC,IDB_MONOSCOPIO,&rc);
+			return 1 /*CWnd::OnEraseBkgnd(pDC)*/;
+			}
+		else
+			return CWnd::OnEraseBkgnd(pDC);
+		}
+	return CWnd::OnEraseBkgnd(pDC);
+	}
+
+
+
+BOOL CMainFrame::OnCreateClient(LPCREATESTRUCT lpcs, CCreateContext* pContext) {
+	BOOL bRet = CMDIFrameWnd::OnCreateClient(lpcs, pContext);
+
+#undef SubclassWindow		// https://jeffpar.github.io/kbarchive/kb/150/Q150076/ fanculo
+	if(bRet)
+		m_BackWnd.SubclassWindow(m_hWndMDIClient);
+
+	return bRet;
+	}
+
+/*BOOL CMainFrame::OnEraseBkgnd(CDC *pDC) {
+//	https://forums.codeguru.com/showthread.php?111082-Bitmaps-in-the-MainFrame-Background
+	RECT rc;
+	
+  if(IsIconic())    {
+		}
+	else {
+		GetClientRect(&rc);
+		if(!theApp.sfondo.IsEmpty()) {
+//			theApp.renderBitmap(pDC,theApp.sfondo,&rc,0);
+			theApp.renderBitmap(pDC,IDB_MONOSCOPIO,&rc);
+		}
+				}
+	return  CMDIFrameWnd::OnEraseBkgnd(pDC);
+	}*/
 
 void CMainFrame::OnNcPaint() {
 	RECT rc;
@@ -719,7 +850,7 @@ void CMainFrame::OnTimer(UINT nIDEvent) {
 #endif
 
 	//					myRoot2->Close();	//non dovrebbe servire...
-						myRoot2->myParent->doDelete(myRoot2,TRUE);
+						myRoot2->m_Parent->doDelete(myRoot2,TRUE);
 						// se è un guest, bisognerebbe che l'exhibitor a cui è collegato lo buttasse fuori... è un po' un casino!
 						}
 					} while(po);
@@ -761,7 +892,7 @@ void CMainFrame::OnTimer(UINT nIDEvent) {
 //						}
 
 //					myRoot2->Close();	//non dovrebbe servire...
-						myRoot2->myParent->doDelete(myRoot2);
+						myRoot2->m_Parent->doDelete(myRoot2);
 						}
 					} while(po);
 				}
@@ -784,7 +915,7 @@ void CMainFrame::OnTimer(UINT nIDEvent) {
 //						}
 
 //					myRoot2->Close();	//non dovrebbe servire...
-					myRoot2->myParent->doDelete(myRoot2);
+					myRoot2->m_Parent->doDelete(myRoot2);
 					myRoot2=myRoot3;
 					}
 				else

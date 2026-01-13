@@ -12,14 +12,19 @@
 #include "digitaltext.h"
 #include "childfrm.h"
 #include "msacm.h"
+#include "wav.h"
 #include <cjpeg2.h>
+#include "player.h"
+#include "joshuamp3.h"
 //#include "tx4ole.h"
+#include "scopeguardmutex.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #undef THIS_FILE
 static char THIS_FILE[] = __FILE__;
 #endif
+
 
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendView - client streaming video
@@ -51,6 +56,12 @@ BEGIN_MESSAGE_MAP(CVidsendView, CView)
 	ON_UPDATE_COMMAND_UI(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_ALTERNASORGENTI, OnUpdateControlloControlloremototelecamereAlternasorgenti)
 	ON_COMMAND(ID_VISUALIZZA_VOLUME, OnVisualizzaVolume)
 	ON_WM_DESTROY()
+	ON_UPDATE_COMMAND_UI(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_SORGENTE4, OnUpdateControlloControlloremototelecamereSorgente4)
+	ON_COMMAND(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_ALTERNASORGENTI, OnControlloControlloremototelecamereAlternasorgenti)
+	ON_COMMAND(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_SORGENTE1, OnControlloControlloremototelecamereSorgente1)
+	ON_COMMAND(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_SORGENTE2, OnControlloControlloremototelecamereSorgente2)
+	ON_COMMAND(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_SORGENTE3, OnControlloControlloremototelecamereSorgente3)
+	ON_COMMAND(ID_CONTROLLO_CONTROLLOREMOTOTELECAMERE_SORGENTE4, OnControlloControlloremototelecamereSorgente4)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -60,7 +71,6 @@ END_MESSAGE_MAP()
 CVidsendView::CVidsendView() {
 	//{{AFX_DATA_INIT(CVidsendView)
 	//}}AFX_DATA_INIT
-	int i;
 
 	cliSockCtrl=new CControlCliSocket(this);
 	cliSockV=NULL;
@@ -73,6 +83,8 @@ CVidsendView::CVidsendView() {
 	theFrame=NULL;
 	waitForKeyFrame=1;
 	renderedFrameTsp=0;
+	framesPerSec=0;
+	theTimer=0;
 
 	}
 
@@ -109,7 +121,6 @@ void CVidsendView::OnDestroy() {
 	char myBuf[64];
 	
 	CView::OnDestroy();
-	
 	stopAV();
 	hWaveOut=NULL;
 	if(d->authSocket) {
@@ -138,18 +149,15 @@ void CVidsendView::OnDestroy() {
 	if(hICDe)
 		ICClose(hICDe);
 	hICDe=NULL;
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
 
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendView diagnostics
 
-void CVidsendView::initAV(BITMAPINFOHEADER *bmi,DWORD fps,EXT_WAVEFORMATEX *wf) {
+void CVidsendView::initAV(const BITMAPINFOHEADER *bmi,DWORD fps,const EXT_WAVEFORMATEX *wf) {
 	int i;
 
 	if(bmi) {
@@ -184,16 +192,18 @@ HDDerror:
 		else
 			if(!DrawDibStart(hDD,1000000/fps))
 				goto HDDerror;
-		setTimer(1000/streamInfo.fps-10 /*piccola correzione... sembra durare sempre 20mSec in + !*/);
+		setTimer(1000/fps /*-10*/ /*piccola correzione... sembra durare sempre 20mSec in + !*/);
+		// forse c'entrava la Timer Resolution?  	timeBeginPeriod(1);
+
 		}
 
 	if(wf) {
 		wfn.wFormatTag = WAVE_FORMAT_PCM;
-		wfn.nChannels = 1;
-		wfn.nSamplesPerSec = 8000;
-		wfn.nBlockAlign = 1;
-		wfn.wBitsPerSample = 8;
-		wfn.nAvgBytesPerSec = wfn.nSamplesPerSec*wfn.nChannels*(wfn.wBitsPerSample/8);
+		wfn.nChannels = wf->wf.nChannels /*1*/;
+		wfn.nSamplesPerSec = wf->wf.nSamplesPerSec /* 8000*/;
+		wfn.wBitsPerSample = wf->wf.wBitsPerSample;
+		wfn.nBlockAlign = wf->wf.nBlockAlign;
+		wfn.nAvgBytesPerSec = (wfn.nSamplesPerSec*wfn.nChannels*wfn.wBitsPerSample)/8;
 		wfn.cbSize = 0;
 		hWaveOut=NULL;
 		i=waveOutOpen(&hWaveOut,WAVE_MAPPER,&wfn,(DWORD)waveOutCallback,(DWORD)this,CALLBACK_FUNCTION);
@@ -201,13 +211,15 @@ HDDerror:
 			AfxMessageBox("Impossibile aprire periferica audio");
 	
 		wfs=*wf;
-		acmStreamOpen(&hAcm,NULL,(WAVEFORMATEX *)&wfs,&wfn,NULL,NULL,0 /*this*/,0);
-		if(hAcm)
-			acmStreamSize(hAcm,wfs.wf.nAvgBytesPerSec,&maxWaveoutSize,ACM_STREAMSIZEF_SOURCE);
-		else
-			AfxMessageBox("Impossibile aprire convertitore stream audio");
-		if(hWaveOut)
-			waveOutPause(hWaveOut);
+//		if(wfs.wf.wFormatTag != WAVE_FORMAT_PCM) {			// sarebbe da fare, ma bisogna analgoamente togliere ACM in tutti gli altri posti (2021)
+			acmStreamOpen(&hAcm,NULL,(WAVEFORMATEX *)&wfs,&wfn,NULL,NULL,0 /*this*/,0);
+			if(hAcm)
+				acmStreamSize(hAcm,wfs.wf.nAvgBytesPerSec,&maxWaveoutSize,ACM_STREAMSIZEF_SOURCE);
+			else
+				AfxMessageBox("Impossibile aprire convertitore stream audio");
+//			}
+//		if(hWaveOut)
+//			waveOutPause(hWaveOut);			// boh?? tolto 2021, v. anche restart in Sockets (con bug totbuffer)
 		}
 	((CChildFrame *)GetParent())->setStatusIcons();
 //	((CChildFrame *)GetParent())->m_wndStatusBar.GetStatusBarCtrl().SetIcon(3,wf ? ((CChildFrame *)GetParent())->iconSpk : ((CChildFrame *)GetParent())->iconSpkOff);
@@ -246,7 +258,7 @@ void CVidsendView::OnDraw(CDC* pDC) {
 	theApp.renderBitmap(pDC,IDB_MONOSCOPIO,&r);
 	}
 
-void CVidsendView::drawFrame(struct AV_PACKET_HDR *avh) {
+void CVidsendView::drawFrame(const struct AV_PACKET_HDR *avh) {
 	CVidsendDoc *d=(CVidsendDoc *)GetDocument();
 	int i;
 //	BITMAPINFO *bmi;
@@ -259,24 +271,36 @@ void CVidsendView::drawFrame(struct AV_PACKET_HDR *avh) {
 		GetClientRect(&r);
 
 		s=(BYTE *)avh->lpData;
+		//in avh->info b8 ora c'è qbox!
 		bi=(BITMAPINFOHEADER *)s;
 //		bi=&(bmi->bmiHeader);
 		if(theApp.debugMode) {
 			if(theApp.FileSpool) {
 				char myBuf[128];
-				wsprintf(myBuf,"  drawFrame: keyframe %u ",avh->info);
+				wsprintf(myBuf,"  drawFrame: keyframe+alert %x ",avh->info);
 				*theApp.FileSpool << myBuf;
 				}
 			}
 		if(!waitForKeyFrame || (avh->info & AVIIF_KEYFRAME)) {
 			waitForKeyFrame=0;
 			if(theFrame)
-				GlobalFree(theFrame);
+				HeapFree(GetProcessHeap(),0,theFrame);
 			renderedFrameTsp=avh->timestamp;
-			theFrame=(BYTE *)GlobalAlloc(GPTR,biCompDef.biWidth*biCompDef.biHeight*3 +100);
+			theFrame=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,biCompDef.biWidth*biCompDef.biHeight*biCompDef.biBitCount/8 +100);
 			i=ICDecompress(hICDe, avh->info & AVIIF_KEYFRAME ? 0 : ICDECOMPRESS_NOTKEYFRAME,
 				bi,(s+sizeof(BITMAPINFOHEADER)),&biRawDef,theFrame);
 			if(i==ICERR_OK) {
+
+				if(theApp.theServer && theApp.theServer->trasmMode==3) {			// per proxy
+/*			VIDEOHDR lpVHdr;
+			lpVHdr.lpData= (BYTE *)lParam;
+			lpVHdr.dwBytesUsed=lpVHdr.dwBufferLength=wParam;
+			lpVHdr.dwFlags=lpVHdr.dwUser=0;
+			lpVHdr.dwTimeCaptured=timeGetTime();*/
+//		m_TV->compressAFrame(&lpVHdr,m_TV->m_DShow->doPreview,v,hdd,&bmih);
+
+					}
+
 				dc=GetDC();
 //				adjustBitmap(theFrame,d->contrasto,d->luminosita,d->saturazione);
 				if(d->Opzioni & CVidsendDoc::fmt4_3) {
@@ -305,8 +329,9 @@ void CVidsendView::drawFrame(struct AV_PACKET_HDR *avh) {
 //	GlobalFree(s);
 	}
 
-void CVidsendView::playSample(struct AV_PACKET_HDR *avh) {
+void CVidsendView::playSample(const struct AV_PACKET_HDR *avh) {
 	int i;
+	WORD n;
 	BYTE *s,*smp;
 	WAVEFORMATEX *wf;
 	ACMSTREAMHEADER hhacm;
@@ -318,8 +343,10 @@ void CVidsendView::playSample(struct AV_PACKET_HDR *avh) {
 		i=syncToVideo(avh);
 		if(i) {
 			s=(BYTE *)avh->lpData;
+	//			avh->info |= AV_PACKET_USED; non usata
+
 	//		wf=(WAVEFORMATEX *)s;
-			smp=(BYTE *)GlobalAlloc(GMEM_FIXED,maxWaveoutSize);
+			smp=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,maxWaveoutSize);
 			hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
 			hhacm.fdwStatus=0;
 			hhacm.dwUser=(DWORD)0 /*this*/;
@@ -337,28 +364,76 @@ void CVidsendView::playSample(struct AV_PACKET_HDR *avh) {
 		//	AfxMessageBox(myBuf);
 				acmStreamUnprepareHeader(hAcm,&hhacm,0);
 
-				if(hWaveOut) {
-					wh=new WAVEHDR;
-					// l'ULTIMO wh al Close pare rimanere allocato... 12.18
-					wh->lpData=(char *)smp;
-					wh->dwBufferLength=hhacm.cbDstLengthUsed;
-					wh->dwFlags=0;
-					wh->dwLoops=0;
-					waveOutPrepareHeader(hWaveOut,wh,sizeof(WAVEHDR));
-					waveOutWrite(hWaveOut,wh,sizeof(WAVEHDR));
-					((CChildFrame *)GetParent())->m_VUMeter->SetWindowText((BYTE *)wh->lpData,wh->dwBufferLength);
+				if(!(GetDocument()->Opzioni & CVidsendDoc::muted)) {
+					if(hWaveOut) {
+						wh=new WAVEHDR;
+						// l'ULTIMO wh al Close pare rimanere allocato... 12.18
+						if(GetDocument()->Opzioni & CVidsendDoc::sstereo) {
+							BYTE k1,k2;
+							// bisogna forzare la WAVEOUT a stereo, innanzitutto...
+							// ... a pensarci bene, cos'è "stereo simulato"?? forse si intendeva SuperStereo come da N.E.!
+							for(i=0; i<wh->dwBufferLength; i++) {			// ovviamente solo se PCM...
+/*								k1=wh->lpData[i]/8;
+								k2=lpData2[i]/8;
+								wh->lpData[i]-=k1;
+								lpData2[i]-=k2;*/
+								}
+							}
+						if(GetDocument()->Opzioni & CVidsendDoc::mono) {
+							BYTE k1,k2;
+							for(i=0; i<wh->dwBufferLength; i++) {			// ovviamente solo se PCM...
+/*								k1=wh->lpData[i];
+								k2=lpData2[i];
+								k2=(k1+k2)/2
+								wh->lpData[i]=k1;
+								lpData2[i]=k1;*/
+								}
+							}
+
+						wh->lpData=(char *)smp;
+						wh->dwBufferLength=hhacm.cbDstLengthUsed;
+						wh->dwFlags=0;
+						wh->dwLoops=0;
+						waveOutPrepareHeader(hWaveOut,wh,sizeof(WAVEHDR));
+						waveOutWrite(hWaveOut,wh,sizeof(WAVEHDR));
+						n=measureAudio((BYTE *)wh->lpData,wh->dwBufferLength);
+						((CChildFrame *)GetParent())->m_VUMeter->SetWindowText(n);
+						}
+					else
+						HeapFree(GetProcessHeap(),0,smp);
 					}
-				else
-					GlobalFree(smp);
+				else {
+					HeapFree(GetProcessHeap(),0,smp);
+					((CChildFrame *)GetParent())->m_VUMeter->SetWindowText(0);
+					}
 				}
 			else
-				GlobalFree(smp);
+				HeapFree(GetProcessHeap(),0,smp);
 			}
 
 		}
 	}
 
-BOOL CVidsendView::syncToVideo(struct AV_PACKET_HDR *avh) {
+WORD CVidsendView::measureAudio(const BYTE *p,DWORD len) {
+	int i;
+	DWORD n,n1=len;
+	// wow, e una FFT? :) 2019
+	// v. BESTAUDIOPLAYER 2021!
+
+	n=0;
+	while(n1--) {
+		i=*p-128;
+		if(i < 0)
+			i=-i;
+		n+=i;
+		p++;
+		}
+	n /= len;
+	return sqrt(n);
+	}
+
+
+BOOL CVidsendView::syncToVideo(const struct AV_PACKET_HDR *avh) {
 // migliorare... forse e' meglio fare sync to audio (tanti frame su uno solo...)
 	if(avh->timestamp < renderedFrameTsp)		
 		return 0;
@@ -368,7 +443,7 @@ BOOL CVidsendView::syncToVideo(struct AV_PACKET_HDR *avh) {
 
 int CVidsendView::setTimer(int t) {
 
-	if(t != framesPerSec) {
+	if(!theTimer || t != framesPerSec) {
 		if(theTimer)
 			KillTimer(theTimer);
 		theTimer=SetTimer((UINT)m_hWnd,t,NULL);
@@ -387,12 +462,13 @@ void CALLBACK CVidsendView::waveOutCallback(HWAVEOUT hwo,UINT msg,DWORD dwUser,D
 		case WOM_CLOSE:
 			break;
 		case WOM_DONE:
-			myPtr->cliSockA->totBuffers--;
-			if(myPtr->cliSockA->totBuffers < myPtr->cliSockA->getLowBuffers()) {
-				waveOutPause(hwo);
-				}
+//			myPtr->cliSockA->totBuffers--;		// ma bumpOutBuffers ?? 2021
+//			myPtr->cliSockA->bumpOutBuffer();
+//			if(myPtr->cliSockA->totBuffers < myPtr->cliSockA->getLowBuffers()) {
+//				waveOutPause(hwo);
+//				}
 			waveOutUnprepareHeader(hwo,(LPWAVEHDR)dwParam1,sizeof(WAVEHDR));
-			GlobalFree(((WAVEHDR *)dwParam1)->lpData);
+			HeapFree(GetProcessHeap(),0,((WAVEHDR *)dwParam1)->lpData);
 			delete ((WAVEHDR *)dwParam1);
 			break;
 		}
@@ -422,7 +498,6 @@ CVidsendDoc *CVidsendView::GetDocument() { // non-debug version is inline
 /////////////////////////////////////////////////////////////////////////////
 // CVidsendView message handlers
 
-
 void CVidsendView::OnConnessioneConnetti() {
 	CVidsendDoc *d=GetDocument();
 	CDlgEnterURL myDlg(0,d);
@@ -439,17 +514,25 @@ void CVidsendView::OnConnessioneConnetti() {
 		}
 	if(myDlg.DoModal(prevURL,CVidsendDoc::MRU_SIZE) == IDOK) {
 		GetDocument()->srvAddress=myDlg.m_URLstring;
+		GetDocument()->wantsVideo=myDlg.m_Video;
+		GetDocument()->wantsAudio=myDlg.m_Audio;
 connetti:
-		OnConnessioneRiconnetti();
+		doConnessioneRiconnetti();
 		}
 	}
 
-int CVidsendView::doConnect(char *myAddress,struct STREAM_INFO *si) {
+int CVidsendView::doConnect(const char *myAddress,const struct STREAM_INFO *si) {
 	CVidsendDoc *d=GetDocument();
 	int i=0;
 	DWORD l;
 
 	streamInfo=*si;
+
+	if(si->versione > VIDSEND_VERSIONE) {
+		i=-1;
+		goto fine;
+		}
+
 	if(*si->authenticationWWW) {
 		CPasswordDlg myDlg;
 rifo:
@@ -552,12 +635,13 @@ auth_not_avail:
 		else {
 			goto fine;
 			}
-		cliSockCtrl->SendUserPass((char *)(LPCTSTR)myDlg.m_Nome,(char *)(LPCTSTR)myDlg.m_Pasw,d->authSocket->extraParm,d->authSocket->timedConn);
-		// ...faccio che mandare il nome del client anche se non c'e' autenticazione!
 		}
+		else
+			cliSockCtrl->SendUserPass((char *)(LPCTSTR)theApp.infoUtente.cognome,(char *)(LPCTSTR)"",0,0);
+		// ...faccio che mandare il nome del client anche se non c'e' autenticazione! 2023 modifica
 
 
-	if(si->bm.biSize) {		// il server trasmette video...
+	if(d->wantsVideo && si->bm.biSize) {		// il server trasmette video...
 		if(!(cliSockV=new CStreamVCliSocket(this,NULL,si->noBuffers ? 0 : GetDocument()->numBuffers)))
 			goto fine;
 		if(!cliSockV->Create(0,theApp.Opzioni & CVidsendApp::TCP_UDP ? SOCK_DGRAM : SOCK_STREAM))
@@ -569,7 +653,7 @@ auth_not_avail:
 		i=1;
 		}
 
-	if(si->wf.wf.wFormatTag) {		// il server trasmette audio...
+	if(d->wantsAudio && si->wf.wf.wFormatTag) {		// il server trasmette audio...
 		if(!(cliSockA=new CStreamACliSocket(this,&hWaveOut,si->noBuffers ? 0 : GetDocument()->numBuffers)))
 			goto fine;
 		if(!cliSockA->Create(0,theApp.Opzioni & CVidsendApp::TCP_UDP ? SOCK_DGRAM : SOCK_STREAM))
@@ -579,8 +663,12 @@ auth_not_avail:
 //		cliSockA->initBuffers(GetDocument()->numBuffers/4);
 		i=1;		// mettere a posto meglio...
 		}
+	else {
+		((CChildFrame *)GetParent())->m_VUMeter->ShowWindow(0);
+		}
+
 	if(si->maxTime == 0 && (d->authSocket && d->authSocket->timedConn > 0)) {
-		si->maxTime=d->authSocket->timedConn;
+		((struct STREAM_INFO *)si)->maxTime=d->authSocket->timedConn;
 		}
 	if(si->maxTime > 0) {
 		CTimedMessageBox myDlg;
@@ -610,6 +698,9 @@ void CVidsendView::OnConnessioneDisconnetti() {
 int CVidsendView::endConnect() {
 	CVidsendDoc *d=GetDocument();
 
+	if(theTimer)
+		KillTimer(theTimer);
+	theTimer=0;
 
 	((CChildFrame *)GetParent())->m_wndStatusBar.GetStatusBarCtrl().SetIcon(2,((CChildFrame *)GetParent())->iconOff);
 	((CChildFrame *)GetParent())->m_wndStatusBar.GetStatusBarCtrl().SetIcon(3,NULL);
@@ -643,6 +734,11 @@ int CVidsendView::endConnect() {
 
 
 void CVidsendView::OnConnessioneRiconnetti() {
+
+	doConnessioneRiconnetti(GetDocument()->wantsVideo,GetDocument()->wantsAudio);
+	}
+
+int CVidsendView::doConnessioneRiconnetti(BOOL wantVideo,BOOL wantAudio) {
 	char myBuf[128];
 	int i=0;
   RASDIALPARAMS rdParams;
@@ -674,6 +770,7 @@ rifo:
 			((CChildFrame *)GetParent())->m_wndStatusBar.SetPaneText(1,GetDocument()->streamTitle,TRUE);
 		else		// se vuota, al limite sbianchetta quella prec.
 			((CChildFrame *)GetParent())->m_wndStatusBar.SetPaneText(1,GetDocument()->streamTitle,TRUE);
+		return 1;
 		}
 	else {
 		if(!i && GetDocument()->Opzioni & CVidsendDoc::autoRASconnect) {
@@ -707,10 +804,11 @@ fine:
 #else
 		AfxMessageBox("Impossibile connettersi al server");
 #endif
+
+		return 0;
 		}
 
 	}
-
 
 void CVidsendView::OnUpdateConnessioneConnetti(CCmdUI* pCmdUI) {
 
@@ -730,6 +828,7 @@ void CVidsendView::OnUpdateConnessioneRiconnetti(CCmdUI* pCmdUI) {
 void CVidsendView::OnConnessioneCaratteristicheconnessione() {
 	CString S,S1;
 	CVidsendDoc *d=GetDocument();
+	SIZE r;
 
 	if(cliSockV) {
 		S1.Format("Ricezione video %ux%u pixel, %ubpp, %ufps, compressione 0x%X",	// mettere nome compressore!
@@ -737,11 +836,16 @@ void CVidsendView::OnConnessioneCaratteristicheconnessione() {
 		S=S1+"\n";
 		}
 	if(cliSockA) {
-		S1.Format("Ricezione audio frequenza %u, %u bit, %u canale(i), compressione 0x%X",
+		S1.Format("Ricezione audio %usample/sec, %ubit, %ucanale(i), formato 0x%X",
 			streamInfo.wf.wf.nSamplesPerSec,streamInfo.wf.wf.wBitsPerSample,streamInfo.wf.wf.nChannels,streamInfo.wf.wf.wFormatTag);
 		S+=S1+"\n";
 		}
-	S1.Format("Bitrate: %uKbps",0);
+	r.cx=streamInfo.bm.biWidth;
+	r.cy=streamInfo.bm.biHeight;
+	S1.Format("Bitrate: %uKbps",
+		CVidsendDoc2::calcBandWidth(TRUE,&r,streamInfo.bm.biBitCount,streamInfo.bm.biCompression,streamInfo.quality,streamInfo.fps,
+		TRUE,streamInfo.wf.wf.nSamplesPerSec,streamInfo.wf.wf.wBitsPerSample,streamInfo.wf.wf.nChannels,streamInfo.wf.wf.wFormatTag,streamInfo.quality /*è del VIDEO ma ok!*/)
+		/128 /* x8 e /1024 */);
 	S+=S1;
 	AfxMessageBox(S,MB_ICONINFORMATION);
 	}
@@ -754,38 +858,105 @@ void CVidsendView::OnUpdateConnessioneCaratteristicheconnessione(CCmdUI* pCmdUI)
 
 void CVidsendView::OnUpdateControlloControlloremototelecamereSorgente1(CCmdUI* pCmdUI) {
 	
-	pCmdUI->Enable(streamInfo.remoteCtrl & 1);
+	pCmdUI->Enable(/* cliSockV && bah potrei controllarne l'audio.. */ streamInfo.remoteCtrl & 1);
 	}
 
 void CVidsendView::OnUpdateControlloControlloremototelecamereSorgente2(CCmdUI* pCmdUI) {
 	
-	pCmdUI->Enable(streamInfo.remoteCtrl & 2);
+	pCmdUI->Enable(/* cliSockV && bah potrei controllarne l'audio.. */ streamInfo.remoteCtrl & 2);
 	}
 
 void CVidsendView::OnUpdateControlloControlloremototelecamereSorgente3(CCmdUI* pCmdUI) {
 	
-	pCmdUI->Enable(streamInfo.remoteCtrl & 3);
+	pCmdUI->Enable(/* cliSockV && bah potrei controllarne l'audio.. */ streamInfo.remoteCtrl & 4);
+	}
+
+void CVidsendView::OnUpdateControlloControlloremototelecamereSorgente4(CCmdUI* pCmdUI) {
+
+	pCmdUI->Enable(/* cliSockV && bah potrei controllarne l'audio.. */ streamInfo.remoteCtrl & 8);
+	}
+
+void CVidsendView::OnControlloControlloremototelecamereAlternasorgenti() {
+	// TODO: Add your command handler code here
+	
+	}
+
+void CVidsendView::OnControlloControlloremototelecamereSorgente1() {
+	// TODO: Add your command handler code here
+	
+	}
+
+void CVidsendView::OnControlloControlloremototelecamereSorgente2() {
+	// TODO: Add your command handler code here
+	
+	}
+
+void CVidsendView::OnControlloControlloremototelecamereSorgente3() {
+	// TODO: Add your command handler code here
+	
+	}
+
+void CVidsendView::OnControlloControlloremototelecamereSorgente4() {
+	// TODO: Add your command handler code here
+	
 	}
 
 void CVidsendView::OnUpdateControlloControlloremototelecamereAlternasorgenti(CCmdUI* pCmdUI) {
 	
-	pCmdUI->Enable(streamInfo.remoteCtrl & 128);
+	pCmdUI->Enable(/* cliSockV && bah potrei controllarne l'audio.. */ streamInfo.remoteCtrl & 128);
 	}
 
 void CVidsendView::OnEditCopy() {
 	HANDLE h;
 	BYTE *p;
 	DWORD l;
+	CVidsendDoc *d=GetDocument();
 	
 	if(OpenClipboard()) {
-		l=biRawDef.biWidth*biRawDef.biHeight*3;
- 		h=GlobalAlloc(GMEM_MOVEABLE,l+sizeof(BITMAPINFOHEADER)+32);
-		p=(BYTE *)GlobalLock(h);
-		memcpy(p,&biRawDef,sizeof(BITMAPINFOHEADER));
-		memcpy(p+sizeof(BITMAPINFOHEADER),theFrame,l);
-		GlobalUnlock(h);
-	  EmptyClipboard();
-	  SetClipboardData(CF_DIB,h);
+		if(cliSockV) {		// questo ha la priorità :)
+			l=biRawDef.biWidth*biRawDef.biHeight*3;
+ 			h=GlobalAlloc(GMEM_MOVEABLE,l+sizeof(BITMAPINFOHEADER)+32);
+			p=(BYTE *)GlobalLock(h);
+			memcpy(p,&biRawDef,sizeof(BITMAPINFOHEADER));
+			memcpy(p+sizeof(BITMAPINFOHEADER),theFrame,l);
+			GlobalUnlock(h);
+			EmptyClipboard();
+			SetClipboardData(CF_DIB,h);
+			}
+		else if(cliSockA) {
+			struct WAV_HEADER_0 wh;
+			struct WAV_HEADER_FMT wfmt;
+			struct WAV_HEADER_DATA whd;
+
+			wh.tag[0]='R'; wh.tag[1]='I'; wh.tag[2]='F'; wh.tag[3]='F';
+			wh.NumBytes=streamInfo.wf.wf.nAvgBytesPerSec -8 +
+				sizeof(struct WAV_HEADER_0)+sizeof(struct WAV_HEADER_FMT) -2 +sizeof(struct WAV_HEADER_DATA);
+			wh.tag1[0]='W'; wh.tag1[1]='A'; wh.tag1[2]='V'; wh.tag1[3]='E'; 
+			wfmt.tag[0]='f'; wfmt.tag[1]='m'; wfmt.tag[2]='t'; wfmt.tag[3]=' '; 
+			wfmt.size=sizeof(struct WAV_HEADER_FMT)-sizeof(wfmt.size)-sizeof(wfmt.tag)-2;
+			wfmt.AudioFormat=1;
+			wfmt.NumChannels=streamInfo.wf.wf.nChannels;
+			wfmt.SamplesPerSec=streamInfo.wf.wf.nSamplesPerSec;
+			wfmt.BytesPerSec=streamInfo.wf.wf.nAvgBytesPerSec;
+			wfmt.BlockAlign=streamInfo.wf.wf.nBlockAlign;
+			wfmt.BitsPerSample=streamInfo.wf.wf.wBitsPerSample;
+			wfmt.ExtraParamSize=0;			//la "scavalco" sotto :) e sottraggo size
+			whd.tag[0]='d'; whd.tag[1]='a'; whd.tag[2]='t'; whd.tag[3]='a'; 
+			whd.NumSamples=wh.NumBytes-sizeof(struct WAV_HEADER_0)-sizeof(struct WAV_HEADER_FMT) -2 -sizeof(struct WAV_HEADER_DATA);
+ 			h=GlobalAlloc(GMEM_MOVEABLE,wh.NumBytes+8);
+			p=(BYTE *)GlobalLock(h);
+			memcpy(p,&wh,sizeof(struct WAV_HEADER_0));
+			memcpy(p+sizeof(struct WAV_HEADER_0),&wfmt,sizeof(struct WAV_HEADER_FMT));
+			memcpy(p+sizeof(struct WAV_HEADER_0)+sizeof(struct WAV_HEADER_FMT) -2 ,&whd,sizeof(struct WAV_HEADER_DATA));
+
+			/* prendere i samples ... in qualche modo
+			memcpy(p+sizeof(struct WAV_HEADER_0)+sizeof(struct WAV_HEADER_FMT) -2 +sizeof(struct WAV_HEADER_DATA),
+				theApp.m_pSamples,streamInfo.wf.wf.nAvgBytesPerSec); */
+
+			GlobalUnlock(h);
+			EmptyClipboard();
+			SetClipboardData(CF_WAVE,h);
+			}
 	  CloseClipboard();
 	  }  
 	
@@ -800,13 +971,13 @@ void CVidsendView::OnFileSaveFotogramma() {
 	DWORD l,len;
 	CBitmap b;
 	CFileDialog myDlg(FALSE,"*.jpg",NULL,OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY,"File JPEG (*.jpg)|*.jpg|File Bitmap (*.bmp)|*.bmp|Tutti i file (*.*)|*.*||",this);
-	CString S;
+	CStringEx S;
 	
 	if(myDlg.DoModal() == IDOK) {
 		l=biRawDef.biWidth*biRawDef.biHeight*biRawDef.biBitCount/8;
 		CFile mF;
 		S=myDlg.GetFileName();
-		if(S.Find("jpg") != -1) {
+		if(S.FindNoCase(".jpg") != -1) {
 			CJpeg myJPEG;
 			BYTE *p;
 			if(b.CreateBitmap(biRawDef.biWidth,biRawDef.biHeight,1,biRawDef.biBitCount,NULL)) {
@@ -815,14 +986,14 @@ void CVidsendView::OnFileSaveFotogramma() {
 						if(mF.Open(myDlg.GetPathName(),CFile::modeCreate | CFile::modeReadWrite | CFile::typeBinary | CFile::shareDenyWrite)) {
 							mF.Write(p,len);
 							mF.Close();
-							GlobalFree(p);
+							HeapFree(GetProcessHeap(),0,p);
 							return;
 							}
 						}
 					}
 				}
 			}
-		else if(S.Find("bmp") != -1) {
+		else if(S.FindNoCase(".bmp") != -1) {
 			BITMAPFILEHEADER bh;
 			BITMAPINFOHEADER bi=biRawDef;
 			if(mF.Open(myDlg.GetPathName(),CFile::modeCreate | CFile::modeReadWrite | CFile::typeBinary | CFile::shareDenyWrite)) {
@@ -857,8 +1028,9 @@ void CVidsendView::OnFileSaveFotogramma() {
 
 void CVidsendView::OnUpdateFileSaveFotogramma(CCmdUI* pCmdUI) {
 	
-	pCmdUI->Enable(cliSockCtrl->m_hSocket != INVALID_SOCKET && theFrame != NULL);
+	pCmdUI->Enable(cliSockCtrl->m_hSocket != INVALID_SOCKET && cliSockV && theFrame != NULL);
 	}
+
 
 void CVidsendView::OnFileSave() {
 
@@ -874,6 +1046,7 @@ void CVidsendView::OnUpdateFileSave(CCmdUI* pCmdUI) {
 void CVidsendView::OnVisualizzaVolume() {
 
 	WinExec("sndvol32.exe",SW_SHOWNORMAL);
+	WinExec("sndvol.exe",SW_SHOWNORMAL);			// per Windows 7 !!!
 	}
 
 void CVidsendView::OnRButtonDown(UINT nFlags, CPoint point) {
@@ -901,7 +1074,7 @@ void CVidsendView::OnSize(UINT nType, int cx, int cy) {
 	}
 
 void CVidsendView::OnTimer(UINT nIDEvent) {
-	struct AV_PACKET_HDR *av;
+	const struct AV_PACKET_HDR *av;
 	char p[256];
 	DWORD n;
 	static int cnt;
@@ -918,6 +1091,8 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 			}
 		if(av) {
 			drawFrame(av);
+		//in av->info b8 ora c'è qbox!
+//			av->info |= AV_PACKET_USED; non usata
 
 
 				if(theApp.debugMode) {
@@ -934,10 +1109,13 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 			if((timeGetTime() - timeRef) > 2000) {
 				timeRef=timeGetTime();
 				n=cliSockV->getBytesReceived();
+				if(cliSockA) 
+					n+=cliSockA->getBytesReceived();
 #ifdef _LINGUA_INGLESE
 				wsprintf(p,"playback (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockV->totAvailBuffers(),cliSockV->needMoreBuffers());
 #else
-				wsprintf(p,"riproduzione (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockV->totAvailBuffers(),cliSockV->needMoreBuffers());
+				wsprintf(p,"riproduzione (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,
+					/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockV->totAvailBuffers(),cliSockV->needMoreBuffers());
 #endif
 				if(((CChildFrame *)GetParent())->m_wndStatusBar.m_hWnd)
 					((CChildFrame *)GetParent())->m_wndStatusBar.SetPaneText(1,p,TRUE);
@@ -947,6 +1125,8 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 			if((timeGetTime() - timeRef) > 2000) {
 				timeRef=timeGetTime();
 				n=cliSockV->getBytesReceived();
+				if(cliSockA) 
+					n+=cliSockA->getBytesReceived();
 #ifdef _LINGUA_INGLESE
 				wsprintf(p,"buffering (%d di %d) (@ %d.%d KB/s)...",/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockV->totAvailBuffers(),cliSockV->getMaxBuffers(),n/2000, (n % 2000)/200);
 #else
@@ -957,8 +1137,14 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 				}
 			}
 		}
+	else {
+		CDC *hdc = GetDC();
+		RECT rc;
+		GetClientRect(&rc);
+		theApp.renderBitmap(hdc,IDB_MUSIC,&rc);
+		}
 
-/*	if(cliSockA) {
+	if(cliSockA) {			// (era stato gestito direttamente da socket... boh, credo 2018)
 		av=cliSockA->getOutBuffer();
 		if(av) {
 			playSample(av);
@@ -966,8 +1152,8 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 			cliSockA->bumpOutBuffer();
 			if(cliSockA->needMoreBuffers())
 				cliSockA->Send("\x00",1);
-			if((timeGetTime() - ti) > 2000) {
-				ti=timeGetTime();
+			if((timeGetTime() - timeRef) > 2000) {
+				timeRef=timeGetTime();
 				n=cliSockA->getBytesReceived();
 	//			wsprintf(p,"riproduzione (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,cliSockV->totAvailBuffers(),cliSockV->needMoreBuffers());
 	//			if(((CChildFrame *)GetParent())->m_wndStatusBar.m_hWnd)
@@ -975,17 +1161,63 @@ void CVidsendView::OnTimer(UINT nIDEvent) {
 				}
 			}
 		else {
-			if((timeGetTime() - ti) > 2000) {
-				ti=timeGetTime();
+			if((timeGetTime() - timeRef) > 2000) {
+				timeRef=timeGetTime();
 				n=cliSockA->getBytesReceived();
 	//			wsprintf(p,"bufferizzazione (%d di %d) (@ %d.%d KB/s)...",cliSockV->totAvailBuffers(),CStreamVCliSocket::maxStreamBuffers,n/2000, (n % 2000)/200);
 	//			if(((CChildFrame *)GetParent())->m_wndStatusBar.m_hWnd)
 	//				((CChildFrame *)GetParent())->m_wndStatusBar.SetPaneText(0,p,TRUE);
 				}
 			}
-		}*/
+		}
+	if(cliSockA && !cliSockV) {			// ...quindi faccio così per vedere il bitrate!
+		if((timeGetTime() - timeRef) > 2000) {
+			timeRef=timeGetTime();
+			n=cliSockA->getBytesReceived();
+#ifdef _LINGUA_INGLESE
+			wsprintf(p,"playback (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockA->totAvailBuffers(),cliSockA->needMoreBuffers());
+#else
+			wsprintf(p,"riproduzione (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,
+				/*cliSockV->getFirstIn(),cliSockV->getLastOut()*/ cliSockA->totAvailBuffers(),cliSockA->needMoreBuffers());
+#endif
+			if(((CChildFrame *)GetParent())->m_wndStatusBar.m_hWnd)
+				((CChildFrame *)GetParent())->m_wndStatusBar.SetPaneText(1,p,TRUE);
+			}
+		}
+
 	
 	CView::OnTimer(nIDEvent);
+	}
+
+long CVidsendView::OnSoundPlayerNotify(long eventNumber) {
+//	ScopeGuardMutex guard(&m_exprMutex);  dovuto a STATIC??
+	const struct AUDIO_BUFFER *p;
+
+/* USARE DirectSound 2021!!
+	if(!theApp.bPaused) {
+		if(theApp.m_Socket.isOk2Out()) {
+//			((CMainFrame *)m_pMainWnd)->m_wndStatusBar.SetPaneText(1,"playback",TRUE);
+			p=theApp.m_Socket.getOutBuffer();
+			if(p) {
+				theApp.m_pSoundPlayer->Write(0, p->ptr, theApp.wf.nAvgBytesPerSec);
+				theApp.m_pSoundPlayer->Play(0); // 
+				}
+			theApp.m_Socket.bumpOutBuffer();
+			}
+		}
+//				theApp.m_pSoundPlayer->Write(0, (BYTE*)buff, 100);			// TRIGGERA 1°evento!
+//				theApp.m_pSoundPlayer->Play(0); // 
+
+return;	
+	try	{
+		m_pSoundPlayer->Write(((eventNumber+1) % m_nbSoundPlayerEvents)*m_soundPlayerEventSize, (unsigned char *)m_pSamples, 
+			m_soundPlayerEventSize);
+		}
+	catch( CSimpleException &e )	{
+//		OutputDebugString(e.getAllExceptionStr().c_str());		// it would be better to stop the program...
+		}			
+*/
+	return 0;
 	}
 
 
@@ -1034,6 +1266,7 @@ BEGIN_MESSAGE_MAP(CVidsendView2, CView)
 	ON_WM_GETMINMAXINFO()
 	ON_MESSAGE(WM_VIDEOFRAME_READY,OnVideoFrameReady)
 	ON_MESSAGE(WM_AUDIOFRAME_READY,OnAudioFrameReady)
+	ON_MESSAGE(WM_RAWAUDIOFRAME_READY,OnRawAudioFrameReady)
 END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1487,7 +1720,7 @@ void CVidsendView2::OnTimer(UINT nIDEvent) {
 	DWORD l,t;
 	CBitmap *b;
 	BITMAP bmp;
-	RECT r;
+	SIZE r;
 	ACMSTREAMHEADER hhacm;
 	static int divider,divider2;
 	static BOOL bInSend=0;
@@ -1505,81 +1738,24 @@ void CVidsendView2::OnTimer(UINT nIDEvent) {
 				break;
 
 			case 2:
-				SetRectEmpty(&r);
-				r.right=doc->theTV->biRawDef.bmiHeader.biWidth;
-				r.bottom=doc->theTV->biRawDef.bmiHeader.biHeight;
+				r.cx=doc->theTV->biRawDef.bmiHeader.biWidth;
+				r.cy=doc->theTV->biRawDef.bmiHeader.biHeight;
 				b=theApp.createTestBitmap(&r,&doc->theTV->biRawDef.bmiHeader,doc->pagProva.tipoVideo);
 				b->GetBitmap(&bmp);
 				bSize=bmp.bmWidthBytes*bmp.bmHeight;
 				s=(BYTE *)GlobalAlloc(GMEM_FIXED,bSize);
 				b->GetBitmapBits(bSize,s);
 
-				{
-				CDC *hdc = GetDC();
-				HDRAWDIB hdd = DrawDibOpen();
-					i=DrawDibDraw(hdd, hdc->m_hDC, 0, 0, doc->theTV->biRawDef.bmiHeader.biWidth, doc->theTV->biRawDef.bmiHeader.biHeight, 
-						&doc->theTV->biRawDef.bmiHeader, s, 0, 0, doc->theTV->biRawDef.bmiHeader.biWidth , doc->theTV->biRawDef.bmiHeader.biHeight, 0);	
-					ReleaseDC(hdc);
-				DrawDibClose(hdd);
-				}
-
-				if(doc->Opzioni & CVidsendDoc2::forceBN)
-					doc->theTV->convertColorBitmapToBN(&doc->theTV->biRawDef.bmiHeader,s);
-				if(doc->Opzioni & CVidsendDoc2::doFlip)
-					doc->theTV->flipBitmap(&doc->theTV->biRawDef.bmiHeader,s);
-				if(doc->Opzioni & CVidsendDoc2::doMirror)
-					doc->theTV->mirrorBitmap(&doc->theTV->biRawDef.bmiHeader,s);
-				if(doc->imposeDateTime)
-					doc->theTV->superImposeDateTime(&doc->theTV->biRawDef.bmiHeader,s);
-				if(doc->theTV->imposeTextPos) {
-					doc->theTV->superImposeText(&doc->theTV->biRawDef.bmiHeader,s,doc->theTV->imposeText,RGB(200,200,0));
-					}
-				if(!IsRectEmpty(&theApp.theServer->qualityBox)) {
-					i=doc->theTV->checkQualityBox(&doc->theTV->biRawDef.bmiHeader,s,&doc->qualityBox);
-					doc->theTV->superImposeBox(&doc->theTV->biRawDef.bmiHeader,s,&doc->qualityBox,i ? RGB(255,0,0) : RGB(0,255,0));
-					}
-				if(doc->theTV->theFrame == (BYTE *)-1) {
-					doc->theTV->theFrame=(BYTE *)GlobalAlloc(GMEM_FIXED,bSize);
-					memcpy(doc->theTV->theFrame,s,bSize);
-					}
 				l=t=0;
 
-				d=(BYTE *)GlobalAlloc(GMEM_FIXED,doc->theTV->maxFrameSize  +100 /*AV_PACKET_HDR_SIZE*/);
-				d2=d+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
-				avh=(struct AV_PACKET_HDR *)d;
-				i=ICCompress(doc->theTV->m_hICCo,(gdvFrameNum % doc->myQV.fps) ? 0 : ICCOMPRESS_KEYFRAME,
-					&doc->theTV->biCompDef.bmiHeader,d2+sizeof(BITMAPINFOHEADER),&doc->theTV->biRawDef.bmiHeader,s,
-					&l,&t,gdvFrameNum++,0 /*10000*/,doc->myQV.quality,
-					NULL,NULL);
-				if(i == ICERR_OK) {
-					l=GetDocument()->theTV->biCompDef.bmiHeader.biSizeImage;
-					memcpy(d2,&doc->theTV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
-					l+=sizeof(BITMAPINFOHEADER);
-#ifdef _NEWMEET_MODE
-					avh->tag=MAKEFOURCC('G','D','2','0');
-#else
-					avh->tag=MAKEFOURCC('D','G','2','0');
-#endif
-					avh->type=0;
-					avh->len=l;
-					avh->info=t;
-		//			avh.psec=500;
-					avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
-
-					if(theApp.debugMode) {
-						wsprintf(p,"VFrameT# %ld: lungo %ld (%ld)",gdvFrameNum,bSize,l); 
-						}
-					avh->reserved1=avh->reserved2=0;
-					PostMessage(WM_VIDEOFRAME_READY,(WPARAM)d,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
-					}
-				else {
-					if(theApp.debugMode) 
-						wsprintf(p,"Non mando video!"); 
-					GlobalFree(d);	
-					}
-				GlobalFree(s);
+				VIDEOHDR lpVHdr;
+				lpVHdr.lpData= (BYTE *)s;
+				lpVHdr.dwBytesUsed=lpVHdr.dwBufferLength=bSize /*0*/;
+				lpVHdr.dwFlags=lpVHdr.dwUser=0;
+				lpVHdr.dwTimeCaptured=timeGetTime();
+				doc->theTV->compressAFrame(&lpVHdr,TRUE/*doc->theTV->m_DShow->doPreview*/,this,doc->theHDD,&doc->theTV->biRawDef.bmiHeader);
+				HeapFree(GetProcessHeap(),0,s);
 				delete b;
-
 
 				if(!(divider % doc->myQV.fps)) {
 					divider2++;
@@ -1602,8 +1778,15 @@ void CVidsendView2::OnTimer(UINT nIDEvent) {
 									i=10000;
 									break;
 								}
-							d=theApp.createTestWave(&doc->theTV->wfex,&l,i,GetDocument()->pagProva.audioOpzioni & 2);
+							d=theApp.createTestWave(NULL,&doc->theTV->wfex,&l,i,GetDocument()->pagProva.audioOpzioni & 2);
 				//			l+=sizeof(WAVEFORMATEX);
+
+							// FINIRE la gestione di  / AUDIO_BUFFER_DIVIDER, servono 2 timer o boh
+
+				SendMessage(WM_RAWAUDIOFRAME_READY,(WPARAM)d,(LPARAM)l);
+	// fare mixWaves(const WORD *s,DWORD da,DWORD a,BYTE *d,DWORD l,DWORD in,short int vol) {   // se<>0 da dove a dove (nel primo) o solo la lunghezza se da=0
+// OCCHIO! serve Send o il buffer viene cimito 
+
 
 							dOut=(BYTE *)GlobalAlloc(GMEM_FIXED,doc->theTV->maxWaveoutSize +100 /*AV_PACKET_HDR_SIZE*/);
 							d2=dOut+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
@@ -1619,13 +1802,13 @@ void CVidsendView2::OnTimer(UINT nIDEvent) {
 							hhacm.cbDstLength=doc->theTV->maxWaveoutSize;
 				//			hhacm.cbDstLengthUsed=0;
 							hhacm.dwDstUser=0;
-							if(!acmStreamPrepareHeader(doc->theTV->m_hAcm,&hhacm,0)) {
+							if(doc->theTV->m_hAcm && !acmStreamPrepareHeader(doc->theTV->m_hAcm,&hhacm,0)) {
 #ifdef _NEWMEET_MODE
 								avh->tag=MAKEFOURCC('G','D','2','0');
 #else
 								avh->tag=MAKEFOURCC('D','G','2','0');
 #endif
-								avh->type=1;
+								avh->type=AV_PACKET_TYPE_AUDIO;
 			//					avh.psec=1000;
 								avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
 								avh->info=theApp.theServer->theTV->wfd.wf.wFormatTag;
@@ -1642,9 +1825,9 @@ void CVidsendView2::OnTimer(UINT nIDEvent) {
 								PostMessage(WM_AUDIOFRAME_READY,(WPARAM)dOut,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
 								}
 							else {
-								GlobalFree(dOut);
+								HeapFree(GetProcessHeap(),0,dOut);
 								}
-							GlobalFree(d);
+							HeapFree(GetProcessHeap(),0,d);
 							}
 						}
 					}
@@ -1677,14 +1860,6 @@ rewind:
 						// adattare la velocita' di playback a quella del server usando PBstreamInfo.dwscale e dwrate
 						// e anche le dimensioni??
 
-#ifdef _NEWMEET_MODE
-						avh->tag=MAKEFOURCC('G','D','2','0');
-#else
-						avh->tag=MAKEFOURCC('D','G','2','0');
-#endif
-						avh->type=0;
-						//			avh.psec=500;
-						avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
 						if(doc->PBsi->fccHandler == doc->myQV.compressor && 
 							!(doc->OpzioniSorgenteVideo & CVidsendDoc2::aviMode) /* ovvero anche (doc->Opzioni & videoType) */ ) {
 							avh->info=AVIStreamIsKeyFrame(doc->psVideo,gdvFrameNum) ? AVIIF_KEYFRAME : 0;
@@ -1742,57 +1917,18 @@ rewind:
 							if(!b) 
 								goto error2;
 
-							{
-							CDC *hdc = GetDC();
-							HDRAWDIB hdd = DrawDibOpen();
-							i=DrawDibDraw(hdd, hdc->m_hDC, 0, 0, doc->theTV->biRawDef.bmiHeader.biWidth, doc->theTV->biRawDef.bmiHeader.biHeight, 
-								&doc->theTV->biRawDef.bmiHeader, b, 0, 0, doc->theTV->biRawDef.bmiHeader.biWidth , doc->theTV->biRawDef.bmiHeader.biHeight, 0);	
-							ReleaseDC(hdc);
-							DrawDibClose(hdd);
-							}
-							if(doc->theTV->theFrame == (BYTE *)-1) {		// se richiesto...
-								doc->theTV->theFrame=(BYTE *)GlobalAlloc(GMEM_FIXED,doc->theTV->biBaseRawBitmap.biHeight*doc->theTV->biBaseRawBitmap.biWidth*3);	// prelevo e salvo il fotogramma per uso altrove (p.es. salva img)
-								memcpy(doc->theTV->theFrame,b,doc->theTV->biBaseRawBitmap.biHeight*doc->theTV->biBaseRawBitmap.biWidth*3);
-								}
-
-							if(doc->Opzioni & CVidsendDoc2::forceBN)
-								doc->theTV->convertColorBitmapToBN(&doc->theTV->biRawDef.bmiHeader,b);
-							if(doc->Opzioni & CVidsendDoc2::doFlip)
-								doc->theTV->flipBitmap(&doc->theTV->biRawDef.bmiHeader,b);
-							if(doc->Opzioni & CVidsendDoc2::doMirror)
-								doc->theTV->mirrorBitmap(&doc->theTV->biRawDef.bmiHeader,b);
-							if(doc->imposeDateTime)
-								doc->theTV->superImposeDateTime(&doc->theTV->biCompDef.bmiHeader,b);
-							if(doc->theTV->imposeTextPos) {
-								doc->theTV->superImposeText(&doc->theTV->biRawDef.bmiHeader,b,doc->theTV->imposeText,RGB(200,200,0));
-								}
-							if(!IsRectEmpty(&theApp.theServer->qualityBox)) {
-								i=doc->theTV->checkQualityBox(&doc->theTV->biRawDef.bmiHeader,b,&doc->qualityBox);
-								doc->theTV->superImposeBox(&doc->theTV->biRawDef.bmiHeader,b,&doc->qualityBox,i ? RGB(255,0,0) : RGB(0,255,0));
-								}
 							t=l=0;
-							i=ICCompress(doc->theTV->m_hICCo,(gdvFrameNum % doc->myQV.fps) ? 0 : ICCOMPRESS_KEYFRAME,
-								&doc->theTV->biCompDef.bmiHeader,d2+sizeof(BITMAPINFOHEADER),&doc->theTV->biRawDef.bmiHeader,b,
-								&l,&t,gdvFrameNum,0 ,doc->myQV.quality,
-								NULL,NULL);
-							if(i != ICERR_OK) 
-								goto error2;
-							GlobalFree(b);
-							l+=sizeof(BITMAPINFOHEADER);
-							avh->len=l /*doc->theTV->biCompDef.bmiHeader.biSizeImage*/;
-							memcpy(d2,&doc->theTV->biCompDef.bmiHeader,sizeof(BITMAPINFOHEADER));
-							avh->info=t;
-
-							if(theApp.debugMode) {
-								wsprintf(p,"VFramePB ricompresso# %ld: lungo %ld (%ld)",gdvFrameNum,bSize,l); 
-								}
-							avh->reserved1=avh->reserved2=0;
-							PostMessage(WM_VIDEOFRAME_READY,(WPARAM)d,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+							VIDEOHDR lpVHdr;
+							lpVHdr.lpData= (BYTE *)b;
+							lpVHdr.dwBytesUsed=lpVHdr.dwBufferLength=0;
+							lpVHdr.dwFlags=lpVHdr.dwUser=0;
+							lpVHdr.dwTimeCaptured=timeGetTime();
+							doc->theTV->compressAFrame(&lpVHdr,TRUE/*doc->theTV->m_DShow->doPreview*/,this,doc->theHDD,&doc->theTV->biRawDef.bmiHeader);
 							gdvFrameNum++;
 							goto fine;
 							}
 error2:
-						GlobalFree(d);
+						HeapFree(GetProcessHeap(),0,d);
 						}
 					else {
 						if(i==AVIERR_FILEREAD) {
@@ -1807,18 +1943,29 @@ error2:
 							else
 								doc->setTXMode(2);
 							}
-						GlobalFree(d);
+						HeapFree(GetProcessHeap(),0,d);
 						}
 					}
 				break;
+
+			case 3:
+				
+				break;
+
 			}
 
 		}
 fine:
 		bInSend=FALSE;
 		}
-	if(*p)
-		theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+	if(*p) {
+		if(theApp.m_pMainWnd)
+			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+		else
+			GlobalFree(p);
+		}
+	else
+		GlobalFree(p);
 	CView::OnTimer(nIDEvent);
 	}
 
@@ -1907,13 +2054,8 @@ void CVidsendView2::OnDestroy() {
 	char myBuf[64];
 	
 	CView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
 
 
@@ -1992,6 +2134,13 @@ afx_msg LRESULT CVidsendView2::OnAudioFrameReady(WPARAM wParam, LPARAM lParam) {
 
 	if(GetDocument()->streamSocketA && avh) {
 		retVal=GetDocument()->streamSocketA->Manda(avh,lParam);
+
+// GESTITO come RAW, per ora, 2021 prove 
+		/*if(GetDocument()->Opzioni & CVidsendDoc2::usaVBAN) {
+			if(GetDocument()->streamSocketVBAN)
+				GetDocument()->streamSocketVBAN->Manda(avh,lParam);
+			}*/
+
 		myTV->aFrameNum++;
 		}
 
@@ -2003,6 +2152,3116 @@ fine:
 
 	return (LRESULT)retVal;
 	}
+
+afx_msg LRESULT CVidsendView2::OnRawAudioFrameReady(WPARAM wParam, LPARAM lParam) {
+	CTV *myTV=GetDocument()->theTV;
+	int retVal=0;
+	MSG msg;
+
+	// questo evita che si crei un accavallamento di messaggi del video a scapito degli altri di Windows...
+//	if(PeekMessage(&msg,m_hWnd,WM_RAWAUDIOFRAME_READY,WM_AUDIOFRAME_READY,PM_NOREMOVE))
+//		goto fine;
+
+	if(GetDocument()->Opzioni & CVidsendDoc2::usaVBAN) {
+		if(GetDocument()->streamSocketVBAN)
+			retVal=GetDocument()->streamSocketVBAN->Manda((const void *)wParam,lParam);
+		}
+
+	// prova MP3 streaming, 2023
+	if(GetDocument()->streamSocketA2)
+		retVal=GetDocument()->streamSocketA2->Manda((const void *)wParam,lParam);
+
+
+fine:
+/*	if(avh)
+		GlobalFree(avh);
+	if(pSBuf)
+		GlobalFree(pSBuf);*/
+
+	return (LRESULT)retVal;
+	}
+
+
+BEGIN_MESSAGE_MAP(CButtonDrop, CButton)
+	//{{AFX_MSG_MAP(CButtonDrop)
+	ON_WM_DROPFILES()
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+void CButtonDrop::PreSubclassWindow() {
+
+	DragAcceptFiles(TRUE);
+	}
+
+void CButtonDrop::OnDropFiles(HDROP dropInfo) {
+  CString    sFile;
+  DWORD      nBuffer    = 0;
+  // Get the number of files dropped
+  UINT nFilesDropped    = DragQueryFile (dropInfo, 0xFFFFFFFF, NULL, 0);
+	CVidsendDoc22 *pDoc=((CVidsendView22*)GetParent())->GetDocument();
+
+  // If more than one, only use the first
+  if(nFilesDropped > 0)    {
+    // Get the buffer size for the first filename
+    nBuffer = DragQueryFile(dropInfo, 0, NULL, 0);
+    // Get path and name of the first file
+    DragQueryFile (dropInfo, 0, sFile.GetBuffer (nBuffer + 1), nBuffer + 1);
+    sFile.ReleaseBuffer();
+    // Do something with the path
+		//AfxMessageBox(sFile);
+		if(sFile.Find(".mp3")>=0) {
+			if(GetDlgCtrlID()==51)
+				pDoc->m_Canzone1=sFile;
+			else
+				pDoc->m_Canzone2=sFile;
+			GetParent()->Invalidate();
+			}
+		else
+			MessageBeep(MB_ICONERROR);
+		}
+  // Free the memory block containing the dropped-file information
+  DragFinish(dropInfo);
+	}
+
+
+
+CODBaseBtn::CODBaseBtn() : m_bMouseHover(false),m_bPressedState(false) {
+	bState=0;
+	mStyle=0;
+	}
+
+CODBaseBtn::~CODBaseBtn() {
+	}
+
+BEGIN_MESSAGE_MAP(CODBaseBtn, CButton)
+    //{{AFX_MSG_MAP(CODBaseBtn)
+    ON_WM_MOUSEMOVE()
+    ON_WM_ERASEBKGND()
+    ON_WM_LBUTTONDBLCLK()
+    ON_WM_LBUTTONUP()
+    ON_WM_RBUTTONUP()
+    //}}AFX_MSG_MAP
+    ON_MESSAGE( WM_MOUSELEAVE, OnMouseLeave )
+END_MESSAGE_MAP()
+
+void CODBaseBtn::PreSubclassWindow() {
+
+  // Initialize the flags
+  m_bMouseHover = false;
+  m_bPressedState = false;
+
+  // Update the style to owner draw
+	mStyle=GetStyle() & 0x00ff;			// i bit bassi passati a Create...
+  ModifyStyle(0, BS_OWNERDRAW);
+  CButton::PreSubclassWindow();
+	}
+
+void CODBaseBtn::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct) {
+
+  // Get the button rectangle and dimension
+  CRect rect(lpDrawItemStruct->rcItem);
+  int nWidth = rect.Width();
+  int nHeight = rect.Height();
+
+  // Prepare the main DC
+  CDC dcOrig;
+  dcOrig.Attach(lpDrawItemStruct->hDC);
+
+  // Create a memory DC for flicker free drawing
+  CDC dcMem;
+  dcMem.CreateCompatibleDC(&dcOrig);
+  CBitmap bitmap;
+  bitmap.CreateCompatibleBitmap(&dcOrig, nWidth, nHeight);
+  dcMem.SelectObject(&bitmap);
+
+  // Check the pressed state
+  bool bPressed = (0 != (lpDrawItemStruct->itemState & ODS_SELECTED));
+// no    bPressed |= ( 0 != (lpDrawItemStruct->itemState & ODS_FOCUS));
+
+	int i=lpDrawItemStruct->itemState & ODS_CHECKED;
+/*ODS_SELECTED                         equ 1h
+ODS_GRAYED                           equ 2h
+ODS_DISABLED                         equ 4h
+ODS_CHECKED                          equ 8h
+ODS_FOCUS                            equ 10h
+ODS_DEFAULT                       equ 20h
+ODS_COMBOBOXEDIT                  equ 1000h
+ODS_HOTLIGHT                      equ 40h
+ODS_INACTIVE                      equ 80h*/
+
+    // Call the appropriate functions as per the state
+    if(lpDrawItemStruct->itemState & ODS_DISABLED) // Disabled state
+    {
+        OnDrawDisabled(dcMem, rect);
+			}
+    else    {
+        if(bPressed) // Pressed state
+        {
+            OnDrawPressed(dcMem, rect);
+				  }
+        else        {
+            if(m_bMouseHover) // Mouse cursor is above the button
+            {
+                OnDrawHovered(dcMem, rect);
+					    }
+            else // Normal state
+            {
+                OnDrawNormal(dcMem, rect);
+						  }
+					}
+			}
+
+    // Copy from memory DC to original DC
+    dcOrig.BitBlt(0, 0, nWidth, nHeight, &dcMem, 0, 0, SRCCOPY);
+
+    // Detach the original DC from the CDC object
+    dcOrig.Detach();
+
+    // Pressed/Released action should be performed
+    if(m_bPressedState != bPressed)    {
+        if(bPressed) {
+            OnPressed();
+			    }
+        else {
+            OnReleased();
+		      }
+    m_bPressedState = bPressed;
+    }
+	}
+
+void CODBaseBtn::OnMouseMove(UINT nFlags, CPoint point) {
+
+    // If the flag is false then this mouse message was sending for the first time.
+    // So it can be taken as mouse entering the client area of the button
+    if(!m_bMouseHover)     {
+        // Set the flag so that next mouse move message will be neglected
+        m_bMouseHover = true;
+
+        // Invoke the call so that derived class can know this mouse hover
+        OnBeginHover();
+
+        // Track the mouse leave message
+        TRACKMOUSEEVENT stTME = { 0 };
+        stTME.cbSize    = sizeof( stTME );
+        stTME.hwndTrack = m_hWnd;
+        stTME.dwFlags   = TME_LEAVE;
+        _TrackMouseEvent( &stTME );
+
+        // Update the button
+        Invalidate( FALSE );
+    }
+
+  CButton::OnMouseMove(nFlags, point);
+	}
+
+LRESULT CODBaseBtn::OnMouseLeave(WPARAM, LPARAM) {
+
+  // Invoke the call so that derived class can know this mouse leave
+  OnEndHover();
+  // Reset the flag
+  m_bMouseHover = false;
+  // Update the button
+  Invalidate(FALSE);
+  return 0;
+	}
+
+BOOL CODBaseBtn::OnEraseBkgnd(CDC* pDC) {
+
+  // Skip it for flicker free drawing
+  return TRUE;
+	}
+
+void CODBaseBtn::OnLButtonDblClk(UINT nFlags, CPoint point) {
+  // Convert the double click to single click
+  const MSG* pstMSG = GetCurrentMessage();
+  DefWindowProc(WM_LBUTTONDOWN, pstMSG->wParam, pstMSG->lParam);
+	}
+
+void CODBaseBtn::OnLButtonUp(UINT nFlags, CPoint point) {
+	
+	if(mStyle==BS_AUTOCHECKBOX /*BS_AUTORADIOBUTTON*/)
+		bState ^= BST_CHECKED;
+	CButton::OnLButtonUp(nFlags,point);
+	}
+
+void CODBaseBtn::OnRButtonUp(UINT nFlags, CPoint point) {
+	// https://www.go4expert.com/articles/mouse-button-event-handler-t381/
+//	GetParent()->PostMessage(WM_COMMAND,GetDlgCtrlID(),0);
+//	CButton::OnRButtonUp(nFlags,point);
+
+	NMHDR hdr;
+  hdr.code = NM_RCLICK;
+  hdr.hwndFrom = GetSafeHwnd();
+  hdr.idFrom = GetDlgCtrlID();
+  TRACE("OnRButtonUp");
+  GetParent()->SendMessage(WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr);
+	}
+
+
+CRoundButton::CRoundButton(DWORD style, COLORREF fore, COLORREF fore2, COLORREF back) { 
+	
+	m_start=m_end=-1;
+
+	m_crTextColor=fore;
+	m_crOutlineColor=fore2;
+	m_crBkColor=back;
+	mStyle=style;
+	}
+
+CRoundButton::~CRoundButton() {
+	}
+
+COLORREF CRoundButton::darken(COLORREF c) {
+	COLORREF c2;
+	short int r=GetRValue(c);
+	short int g=GetGValue(c);
+	short int b=GetBValue(c);
+
+	r=max(0,r-COLOR_VARIATION);
+	g=max(0,g-COLOR_VARIATION);
+	b=max(0,b-COLOR_VARIATION);
+
+	c2=RGB(r,g,b);
+	return c2;
+	}
+COLORREF CRoundButton::lighten(COLORREF c) {
+	COLORREF c2;
+	short int r=GetRValue(c);
+	short int g=GetGValue(c);
+	short int b=GetBValue(c);
+
+	r=min(255,r+COLOR_VARIATION);
+	g=min(255,g+COLOR_VARIATION);
+	b=min(255,b+COLOR_VARIATION);
+
+	c2=RGB(r,g,b);
+	return c2;
+	}
+
+void CRoundButton::OnDrawNormal(CDC& dc, CRect rect) {
+  CString csCaption;
+	CBrush m_brBkgnd;
+	CPen m_Pen;
+	BYTE pensize;
+
+  GetWindowText(csCaption);
+	pensize=rect.Width()/24;
+	if(!pensize)
+		pensize=1;
+
+	if(bState & 1) {
+		m_brBkgnd.CreateSolidBrush(darken(m_crBkColor)); // Create the Brush Color for the Background.
+		m_Pen.CreatePen(PS_SOLID,pensize,m_crOutlineColor);
+		dc.SelectObject(m_brBkgnd);
+		}
+	else {
+		m_brBkgnd.CreateSolidBrush(m_crBkColor);
+		m_Pen.CreatePen(PS_SOLID,pensize,m_crOutlineColor);
+		dc.SelectObject(m_brBkgnd);
+		}
+//    dc.FillSolidRect( &rect, RGB( 192, 192, 192 ));
+	if(m_start<0 || m_end<0) {
+		dc.SelectObject(m_Pen);
+		dc.Ellipse(rect);
+		}
+	else {
+		POINT pt1,pt2;
+		CPen pen2(PS_SOLID,pensize,m_crBkColor);
+		dc.SelectObject(pen2);
+		dc.Ellipse(rect);
+		pt1.x=rect.right/2+sin((double)m_start/VALUES_RANGE*2*PI)*rect.right/2;
+		pt1.y=rect.bottom/2-cos((double)m_start/VALUES_RANGE*2*PI)*rect.bottom/2;
+		pt2.x=rect.right/2+sin((double)m_end/VALUES_RANGE*2*PI)*rect.right/2;
+		pt2.y=rect.bottom/2-cos((double)m_end/VALUES_RANGE*2*PI)*rect.bottom/2;
+		dc.SelectObject(m_Pen);
+		dc.Arc(rect,pt1,pt2);
+		}
+//    dc.Draw3dRect( &rect, RGB( 222, 222, 222 ), RGB( 160, 160, 160 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(m_crTextColor);
+	dc.SelectObject(GetFont());
+  dc.DrawText(csCaption,&rect,/*DT_WORDBREAK*/ DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CRoundButton::OnDrawHovered(CDC& dc, CRect rect) {
+  CString csCaption;
+	CBrush m_brBkgnd;
+	CPen m_Pen;
+	BYTE pensize;
+
+	pensize=rect.Width()/24;
+	if(!pensize)
+		pensize=1;
+
+	m_brBkgnd.CreateSolidBrush(lighten(m_crBkColor));
+	m_Pen.CreatePen(PS_SOLID,pensize,m_crOutlineColor);
+  GetWindowText(csCaption);
+
+	dc.SelectObject(m_brBkgnd);
+	dc.SelectObject(m_Pen);
+//  dc.FillSolidRect( &rect, RGB( 210, 210, 210 ));
+	if(m_start<0 || m_end<0) {
+		dc.SelectObject(m_Pen);
+		dc.Ellipse(rect);
+		}
+	else {
+		POINT pt1,pt2;
+		CPen pen2(PS_SOLID,pensize,m_crBkColor);
+		dc.SelectObject(pen2);
+		dc.Ellipse(rect);
+		pt1.x=rect.right/2+sin((double)m_start/VALUES_RANGE*2*PI)*rect.right/2;
+		pt1.y=rect.bottom/2-cos((double)m_start/VALUES_RANGE*2*PI)*rect.bottom/2;
+		pt2.x=rect.right/2+sin((double)m_end/VALUES_RANGE*2*PI)*rect.right/2;
+		pt2.y=rect.bottom/2-cos((double)m_end/VALUES_RANGE*2*PI)*rect.bottom/2;
+		dc.SelectObject(m_Pen);
+		dc.Arc(rect,pt1,pt2);
+		}
+//  dc.Draw3dRect( &rect, RGB( 232, 232, 232 ), RGB( 140, 140, 140 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB(0,0,0));
+	dc.SelectObject(GetFont());
+  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CRoundButton::OnDrawPressed(CDC& dc, CRect rect) {
+  CString csCaption;
+	CBrush m_brBkgnd;
+	CPen m_Pen;
+	BYTE pensize;
+
+	pensize=rect.Width()/24;
+	if(!pensize)
+		pensize=1;
+
+	m_Pen.CreatePen(PS_SOLID,pensize,m_crOutlineColor);
+	m_brBkgnd.CreateSolidBrush(darken(m_crBkColor));
+  GetWindowText(csCaption);
+
+	dc.SelectObject(m_brBkgnd);
+	dc.SelectObject(m_Pen);
+//  dc.FillSolidRect( &rect, RGB( 222, 222, 222 ));
+	if(m_start<0 || m_end<0) {
+		dc.SelectObject(m_Pen);
+		dc.Ellipse(rect);
+		}
+	else {
+		POINT pt1,pt2;
+		CPen pen2(PS_SOLID,pensize,m_crBkColor);
+		dc.SelectObject(pen2);
+		dc.Ellipse(rect);
+		pt1.x=rect.right/2+sin((double)m_start/VALUES_RANGE*2*PI)*rect.right/2;
+		pt1.y=rect.bottom/2-cos((double)m_start/VALUES_RANGE*2*PI)*rect.bottom/2;
+		pt2.x=rect.right/2+sin((double)m_end/VALUES_RANGE*2*PI)*rect.right/2;
+		pt2.y=rect.bottom/2-cos((double)m_end/VALUES_RANGE*2*PI)*rect.bottom/2;
+		dc.SelectObject(m_Pen);
+		dc.Arc(rect,pt1,pt2);
+		}
+//  dc.Draw3dRect( &rect, RGB( 128, 128, 128 ), RGB( 255, 255, 255 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB( 0, 0, 0));
+	dc.SelectObject(GetFont());
+  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CRoundButton::OnDrawDisabled(CDC& dc, CRect rect) {
+  CString csCaption;
+	CBrush m_brBkgnd;
+	CPen m_Pen;
+	BYTE pensize;
+
+	pensize=rect.Width()/24;
+	if(!pensize)
+		pensize=1;
+
+	m_Pen.CreatePen(PS_SOLID,pensize,m_crOutlineColor);
+	m_brBkgnd.CreateSolidBrush(m_crBkColor);
+  GetWindowText(csCaption);
+
+	dc.SelectObject(m_brBkgnd);
+	dc.SelectObject(m_Pen);
+//  dc.FillSolidRect( &rect, RGB( 160, 160, 160 ));
+	if(m_start<0 || m_end<0) {
+		dc.SelectObject(m_Pen);
+		dc.Ellipse(rect);
+		}
+	else {
+		POINT pt1,pt2;
+		CPen pen2(PS_SOLID,pensize,m_crBkColor);
+		dc.SelectObject(pen2);
+		dc.Ellipse(rect);
+		pt1.x=rect.right/2+sin((double)m_start/VALUES_RANGE*2*PI)*rect.right/2;
+		pt1.y=rect.bottom/2-cos((double)m_start/VALUES_RANGE*2*PI)*rect.bottom/2;
+		pt2.x=rect.right/2+sin((double)m_end/VALUES_RANGE*2*PI)*rect.right/2;
+		pt2.y=rect.bottom/2-cos((double)m_end/VALUES_RANGE*2*PI)*rect.bottom/2;
+		dc.SelectObject(m_Pen);
+		dc.Arc(rect,pt1,pt2);
+		}
+//  dc.Draw3dRect( &rect, RGB( 128, 128, 128 ), RGB( 128, 128, 128 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB( 128, 128, 128));
+	dc.SelectObject(GetFont());
+  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+
+CShapeButton::CShapeButton(COLORREF fore, COLORREF back) { 
+
+	m_crTextColor=fore;
+	m_crBkColor=back;
+	}
+
+CShapeButton::~CShapeButton() {
+	}
+
+void CShapeButton::OnDrawNormal( CDC& dc, CRect rect ){
+  CString csCaption;
+  GetWindowText(csCaption);
+
+//	if(bState & 1)
+//	  dc.FillSolidRect(&rect,RGB(32,32,32));
+//	else
+	  dc.FillSolidRect(&rect,m_crBkColor);
+  dc.Draw3dRect( &rect, RGB( 222, 222, 222 ), RGB( 160, 160, 160 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(m_crTextColor);
+	dc.SelectObject(GetFont());
+	if(bState & 1)
+	  dc.DrawText(csCaption,&rect,DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CShapeButton::OnDrawHovered(CDC& dc, CRect rect) {
+  CString csCaption;
+
+  GetWindowText(csCaption);
+
+  dc.FillSolidRect( &rect, RGB( 210, 210, 210 ));
+  dc.Draw3dRect( &rect, RGB( 232, 232, 232 ), RGB( 140, 140, 140 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB(0,0,0));
+	dc.SelectObject(GetFont());
+//	if(bState & 1)
+  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CShapeButton::OnDrawPressed(CDC& dc, CRect rect) {
+  CString csCaption;
+
+  GetWindowText(csCaption);
+
+  dc.FillSolidRect( &rect, RGB( 222, 222, 222 ));
+  dc.Draw3dRect( &rect, RGB( 128, 128, 128 ), RGB( 255, 255, 255 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB( 0, 0, 0));
+	dc.SelectObject(GetFont());
+//	if(bState & 1)
+  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+void CShapeButton::OnDrawDisabled(CDC& dc, CRect rect) {
+  CString csCaption;
+
+  GetWindowText(csCaption);
+
+  dc.FillSolidRect( &rect, RGB( 160, 160, 160 ));
+  dc.Draw3dRect( &rect, RGB( 128, 128, 128 ), RGB( 128, 128, 128 ));
+  dc.SetBkMode(TRANSPARENT);
+  dc.SetTextColor(RGB( 128, 128, 128));
+	dc.SelectObject(GetFont());
+	if(bState & 1)
+	  dc.DrawText(csCaption, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+	}
+
+
+BEGIN_MESSAGE_MAP(CStaticDrop, CStatic)
+	//{{AFX_MSG_MAP(CStaticDrop)
+	ON_WM_DROPFILES()
+	ON_WM_CTLCOLOR_REFLECT()
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+void CStaticDrop::PreSubclassWindow() {
+
+	m_crBkColor = RGB(24,16,16); // Initializing the Background Color to the system face color.
+	m_crTextColor = RGB(224,224,224); // Initializing the text to Black
+	m_brBkgnd.CreateSolidBrush(m_crBkColor); // Create the Brush Color for the Background.
+	DragAcceptFiles(TRUE);
+	}
+
+HBRUSH CStaticDrop::CtlColor(CDC* pDC, UINT nCtlColor) {
+	HBRUSH hbr;
+
+	hbr = (HBRUSH)m_brBkgnd; // Passing a Handle to the Brush
+	pDC->SetBkColor(m_crBkColor); // Setting the Color of the Text Background to the one passed by the Dialog
+	pDC->SetTextColor(m_crTextColor); // Setting the Text Color to the one Passed by the Dialog
+	return hbr;
+	}
+
+#if 0
+void CStaticDrop::OnPaint() {
+	CPaintDC dc(this);
+	CString s="piciu";
+	CRect rect;
+
+	CStatic::OnPaint();
+/*	GetClientRect(&rect);
+
+	CRgn ClipRgn;
+if (ClipRgn.CreateRectRgnIndirect(&rClient))
+{
+    pDC->SelectClipRgn(&ClipRgn);
+}
+
+	GetWindowText(s);
+
+	dc.SetTextColor(RGB(224,224,224));
+	dc.SetBkColor(RGB(16,8,8));
+
+	dc.SetTextAlign(TA_BASELINE | TA_CENTER);
+	dc.TextOut(rect.right / 2, rect.bottom / 2, s, s.GetLength());*/
+	}
+#endif
+
+void CStaticDrop::OnDropFiles(HDROP dropInfo) {
+  CString    sFile;
+  DWORD      nBuffer    = 0;
+  // Get the number of files dropped
+  UINT nFilesDropped    = DragQueryFile (dropInfo, 0xFFFFFFFF, NULL, 0);
+	CVidsendDoc22 *pDoc=((CVidsendView22*)GetParent())->GetDocument();
+
+  // If more than one, only use the first
+  if(nFilesDropped > 0)    {
+    // Get the buffer size for the first filename
+    nBuffer = DragQueryFile(dropInfo, 0, NULL, 0);
+    // Get path and name of the first file
+    DragQueryFile (dropInfo, 0, sFile.GetBuffer (nBuffer + 1), nBuffer + 1);
+    sFile.ReleaseBuffer();
+    // Do something with the path
+		//AfxMessageBox(sFile);
+		if(sFile.Find(".mp3")>=0 || sFile.Find(".m3u")>=0) {
+			if(GetDlgCtrlID()==30 && ((CVidsendView22*)GetParent())->buttonC1->IsWindowEnabled())
+				pDoc->m_Canzone1=sFile;
+			if(GetDlgCtrlID()==31 && ((CVidsendView22*)GetParent())->buttonC2->IsWindowEnabled())
+				pDoc->m_Canzone2=sFile;
+			GetParent()->Invalidate();
+			}
+		else
+			MessageBeep(MB_ICONERROR);
+		}
+  // Free the memory block containing the dropped-file information
+  DragFinish(dropInfo);
+	}
+
+
+BEGIN_MESSAGE_MAP(CClickableProgressCtrl, CProgressCtrl)
+    //{{AFX_MSG_MAP(CClickableProgressCtrl)
+    ON_WM_MOUSEMOVE()
+    ON_WM_LBUTTONUP()
+    ON_WM_LBUTTONDOWN()
+    //}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+int CClickableProgressCtrl::GetClickPosition() { 
+	RECT rc;
+	int m,M;
+
+	GetClientRect(&rc);
+	GetRange(m,M);
+	return (ClickPosition*(M-m))/rc.right;
+	}
+
+void CClickableProgressCtrl::OnMouseMove(UINT nFlags, CPoint point) {
+
+	CProgressCtrl::OnMouseMove(nFlags,point);
+	}
+
+void CClickableProgressCtrl::OnLButtonDown(UINT nFlags, CPoint point) {
+	
+	NMHDR hdr;
+  hdr.code = NM_CLICK;
+  hdr.hwndFrom = GetSafeHwnd();
+  hdr.idFrom = GetDlgCtrlID();
+	ClickPosition=point.x;
+  TRACE("OnLButtonDown");
+  GetParent()->SendMessage(WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr);
+	CProgressCtrl::OnLButtonDown(nFlags,point);
+	}
+
+void CClickableProgressCtrl::OnLButtonUp(UINT nFlags, CPoint point) {
+	
+/*	NMHDR hdr;
+  hdr.code = NM_LCLICK;
+  hdr.hwndFrom = GetSafeHwnd();
+  hdr.idFrom = GetDlgCtrlID();
+  TRACE("OnLButtonUp");
+  GetParent()->SendMessage(WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr);*/
+	CProgressCtrl::OnLButtonUp(nFlags,point);
+	}
+
+
+BEGIN_MESSAGE_MAP(CSliderCtrlSmart, CSliderCtrl)
+    //{{AFX_MSG_MAP(CSliderCtrlSmart)
+		ON_WM_CREATE()
+    ON_WM_LBUTTONDBLCLK()
+    ON_WM_RBUTTONUP()
+		ON_WM_MOUSEWHEEL()
+		ON_WM_MOUSEMOVE()
+    //}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+int CSliderCtrlSmart::OnCreate(LPCREATESTRUCT lpCreateStruct) {
+
+	if(CSliderCtrl::OnCreate(lpCreateStruct) == -1)
+		return -1;
+
+  DWORD dwClssStyle = GetClassLong(m_hWnd, GCL_STYLE);
+  dwClssStyle |= CS_DBLCLKS;
+  dwClssStyle = SetClassLong(m_hWnd, GCL_STYLE, (LONG)dwClssStyle);
+	return 0;
+	}
+
+CSliderCtrlSmart::CSliderCtrlSmart() {
+	}
+
+void CSliderCtrlSmart::OnLButtonDblClk(UINT nFlags, CPoint point) {
+	
+	NMHDR hdr;
+  hdr.code = NM_LDBLCLICK;
+  hdr.hwndFrom = GetSafeHwnd();
+  hdr.idFrom = GetDlgCtrlID();
+  TRACE("OnLButtonDblClk");
+  GetParent()->SendMessage(WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr);
+
+	CSliderCtrl::OnLButtonDblClk(nFlags,point);
+	}
+// bah alla fine non so quale dei 2 è meglio... dblclk rischia di prenderlo mentre ti sposti!
+void CSliderCtrlSmart::OnRButtonUp(UINT nFlags, CPoint point) {
+	
+	NMHDR hdr;
+  hdr.code = NM_RCLICK;
+  hdr.hwndFrom = GetSafeHwnd();
+  hdr.idFrom = GetDlgCtrlID();
+  TRACE("OnRButtonUp");
+  GetParent()->SendMessage(WM_NOTIFY, (WPARAM)hdr.idFrom, (LPARAM)&hdr);
+	}
+
+BOOL CSliderCtrlSmart::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt) {
+
+	if(!(nFlags & MK_MBUTTON))
+		SetPos(GetPos()+zDelta/40);
+	else
+		SetPos(GetPos()+zDelta/15);
+	return CSliderCtrl::OnMouseWheel(nFlags, zDelta, pt);
+	}
+
+void CSliderCtrlSmart::OnMouseMove(UINT nFlags, CPoint point) {
+
+	SetFocus();
+	CSliderCtrl::OnMouseMove(nFlags, point);
+	}
+
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendView22 - Finestra main audio server
+
+IMPLEMENT_DYNCREATE(CVidsendView22, CView)
+
+CVidsendView22 *CVidsendView22::pThis;
+CVidsendView22::CVidsendView22() {
+	int i;
+	
+	inClick=FALSE;
+	inSound=0;
+/*	busyAudio=CreateSemaphore(NULL,           // default security attributes
+        0,  // initial count
+        1,  // maximum count
+        NULL);          // unnamed semaphore
+				*/
+//	busyAudio=new CSingleLock(&m_CritSection);
+//	busyAudio=0;
+
+/*	PSECURITY_DESCRIPTOR psd = (PSECURITY_DESCRIPTOR) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH); 
+InitializeSecurityDescriptor(psd, SECURITY_DESCRIPTOR_REVISION);
+SetSecurityDescriptorDacl(psd, TRUE, NULL, FALSE);
+
+SECURITY_ATTRIBUTES sa = {0};
+sa.nLength = sizeof(sa);
+sa.lpSecurityDescriptor = psd;
+sa.bInheritHandle = FALSE;
+	busyAudio3=  CreateEvent(&sa, TRUE, TRUE, NULL);
+	*/
+	busyAudio3=CreateEvent(NULL, TRUE, TRUE, "porcodio");
+//	busyAudio3=  OpenEvent(EVENT_ALL_ACCESS, TRUE, "porcodio");
+
+
+	pThis=this;
+
+	maxWaveoutSize=0;
+
+	m_Mixer=NULL;
+
+	m_DSound=NULL;
+	m_DS=NULL;
+	soundSample=NULL;
+	soundLength=0;
+	soundSampleStart=NULL;
+
+	PBMP3from=PBMP3to=0;
+	PBMP3buffer=NULL;
+	PBMP3bufferSize=PBMP3bufferPointer=0;
+
+	m_MP3player[0]=m_MP3player[1]=NULL;
+	m_AudioThread=NULL;
+
+	for(i=0; i<10; i++)
+		button[i]=NULL;
+	buttonP1=buttonP2=buttonS=NULL;
+	buttonM1=buttonM2=buttonM3=buttonM4=NULL;
+	buttonPre1=buttonPre2=buttonPre3=buttonPre4=NULL;
+	buttonC1=buttonC2=NULL;
+	buttonE1=NULL;
+	volume1=volume2=volume3=volume4=fader=NULL;
+	pitch1=pitch2=NULL;
+	txtMP31=txtMP32=NULL;
+	VUMeter1=VUMeter2=VUMeter3=VUMeter4=VUMeter5=NULL;
+	progress1=progress2=NULL;
+
+	EnableToolTips(TRUE);
+	}
+
+CVidsendView22::~CVidsendView22() {
+	CVidsendDoc22 *d=GetDocument();
+	int i;
+
+/*	if(m_hWaveIn != (HWAVEIN)-1) {
+		waveInReset(m_hWaveIn);
+		waveInStop(m_hWaveIn);
+		waveInClose(m_hWaveIn);
+		}
+	m_hWaveIn=NULL;*/
+
+	delete playerPreascolto;
+
+	stopMP3(0);
+	stopMP3(1);
+	delete m_MP3player[0]; m_MP3player[0]=NULL;
+	delete m_MP3player[1]; m_MP3player[1]=NULL;
+	if(d) {
+		}
+	if(m_hAcm)
+		acmStreamClose(m_hAcm,0);
+	m_hAcm=NULL;
+	delete m_pwi;
+
+	delete soundSample;
+
+	delete m_DS;
+	delete m_DSound;
+
+	delete PBMP3buffer;
+
+	for(i=0; i<10; i++)
+		delete button[i];
+	delete buttonP1;
+	delete buttonP2;
+	delete buttonS;
+	delete buttonE1;
+	delete buttonC1;
+	delete buttonC2;
+	delete buttonM1;
+	delete buttonM2;
+	delete buttonM3;
+	delete buttonM4;
+	delete buttonPre1;
+	delete buttonPre2;
+	delete buttonPre3;
+	delete buttonPre4;
+	delete volume1;
+	delete volume2;
+	delete volume3;
+	delete volume4;
+	delete fader;
+	delete pitch1;
+	delete pitch2;
+	delete txtMP31;
+	delete txtMP32;
+	delete VUMeter1;
+	delete VUMeter2;
+	delete VUMeter3;
+	delete VUMeter4;
+	delete VUMeter5;
+	delete progress1;
+	delete progress2;
+
+	}
+
+
+BEGIN_MESSAGE_MAP(CVidsendView22, CView)
+	//{{AFX_MSG_MAP(CVidsendView22)
+	ON_WM_TIMER()
+	ON_WM_KEYDOWN()
+	ON_WM_MOUSEWHEEL()
+	ON_COMMAND(ID_EDIT_COPY, OnEditCopy)
+	ON_UPDATE_COMMAND_UI(ID_EDIT_COPY, OnUpdateEditCopy)
+	ON_COMMAND(ID_VIDEO_CONNESSIONE11, OnConnessioni11)
+	ON_UPDATE_COMMAND_UI(ID_VIDEO_CONNESSIONE11, OnUpdateConnessioni11)
+	ON_COMMAND(ID_CONNESSIONI_ELENCO, OnConnessioniElenco)
+	ON_COMMAND(ID_AUDIO_CANZONE1, OnAudioCanzone1)
+	ON_COMMAND(ID_AUDIO_CANZONE2, OnAudioCanzone2)
+	ON_COMMAND(ID_AUDIO_PLAYLIST, OnAudioPlaylist)
+	ON_COMMAND(ID_AUDIO_EQUALIZZATORE_FLAT, OnAudioEqualizzatoreflat)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EQUALIZZATORE_FLAT, OnUpdateAudioEqualizzatoreflat)
+	ON_COMMAND(ID_AUDIO_EQUALIZZATORE_ROCK, OnAudioEqualizzatorerock)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EQUALIZZATORE_ROCK, OnUpdateAudioEqualizzatorerock)
+	ON_COMMAND(ID_AUDIO_EQUALIZZATORE_POP, OnAudioEqualizzatorepop)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EQUALIZZATORE_POP, OnUpdateAudioEqualizzatorepop)
+	ON_COMMAND(ID_AUDIO_EQUALIZZATORE_DANCE, OnAudioEqualizzatoredance)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EQUALIZZATORE_DANCE, OnUpdateAudioEqualizzatoredance)
+	ON_COMMAND(ID_AUDIO_EQUALIZZATORE_CLASSICA, OnAudioEqualizzatoreclassica)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EQUALIZZATORE_CLASSICA, OnUpdateAudioEqualizzatoreclassica)
+	ON_COMMAND_RANGE(ID_AUDIO_EFFETTISONORI_1, ID_AUDIO_EFFETTISONORI_12, OnAudioEffettisonori)
+	ON_UPDATE_COMMAND_UI_RANGE(ID_AUDIO_EFFETTISONORI_1,ID_AUDIO_EFFETTISONORI_12, OnUpdateAudioEffettisonori)
+	ON_COMMAND(ID_AUDIO_EFFETTISONORI_STOP, OnAudioEffettisonoristop)
+	ON_UPDATE_COMMAND_UI(ID_AUDIO_EFFETTISONORI_STOP, OnUpdateAudioEffettisonoristop)
+	ON_COMMAND_RANGE(ID_AUDIO_EFFETTISONORI_BANCO1,ID_AUDIO_EFFETTISONORI_BANCO3, OnAudioEffettisonoriBanco)
+	ON_UPDATE_COMMAND_UI_RANGE(ID_AUDIO_EFFETTISONORI_BANCO1,ID_AUDIO_EFFETTISONORI_BANCO3, OnUpdateAudioEffettisonoriBanco)
+	ON_COMMAND(ID_AUDIO_EFFETTISONORI_IMPOSTA, OnAudioEffettisonoriImposta)
+	ON_WM_RBUTTONDOWN()
+	ON_WM_SIZE()
+	ON_WM_CREATE()
+	ON_WM_CLOSE()
+	ON_WM_DESTROY()
+	ON_WM_LBUTTONDOWN()
+	ON_WM_LBUTTONUP()
+	ON_WM_MOUSEMOVE()
+	ON_WM_ERASEBKGND()
+	ON_WM_HSCROLL()
+	//}}AFX_MSG_MAP
+	ON_CONTROL_RANGE(BN_CLICKED, 2, 10, OnAudioEffettisonori2)
+	ON_NOTIFY_RANGE(NM_RCLICK, 2, 10, OnAudioEffettisonoriImpostaBtn)
+	ON_BN_CLICKED(11, OnAudioEffettisonoriPlay1)
+	ON_BN_CLICKED(12, OnAudioEffettisonoriPlay2)
+	ON_BN_CLICKED(13, OnAudioEffettisonoriOnAir)
+	ON_BN_CLICKED(15, OnAudioEffettisonoriMute1)
+	ON_BN_CLICKED(16, OnAudioEffettisonoriMute2)
+	ON_BN_CLICKED(17, OnAudioEffettisonoriMute3)
+	ON_BN_CLICKED(18, OnAudioEffettisonoriMute4)
+	ON_BN_CLICKED(70, OnAudioEffettisonoriMutePre1)
+	ON_BN_CLICKED(71, OnAudioEffettisonoriMutePre2)
+	ON_BN_CLICKED(72, OnAudioEffettisonoriMutePre3)
+	ON_BN_CLICKED(51, OnAudioCanzone1)
+	ON_BN_CLICKED(52, OnAudioCanzone2)
+	ON_BN_CLICKED(55, OnAudioEffettisonoriImposta)
+	ON_NOTIFY(NM_LDBLCLICK, 25, OnSliderPitch1)		// 
+	ON_NOTIFY(NM_LDBLCLICK, 26, OnSliderPitch2)		// 
+	ON_NOTIFY(NM_RCLICK, 25, OnSliderPitch1)		// 
+	ON_NOTIFY(NM_RCLICK, 26, OnSliderPitch2)		// 
+	ON_NOTIFY(NM_RCLICK, 24, OnSliderFader)		// 
+	ON_NOTIFY(NM_CLICK, 60, OnProgressCanzone1)		// 
+	ON_NOTIFY(NM_CLICK, 61, OnProgressCanzone2)
+//	ON_WM_LBUTTONDOWN(61, OnProgressCanzone2)
+	ON_NOTIFY_EX(TTN_NEEDTEXT, 0, OnToolTipNotify)
+	ON_WM_GETMINMAXINFO()
+	ON_MESSAGE(WM_AUDIOFRAME_READY,OnAudioFrameReady)
+	ON_MESSAGE(WM_RAWAUDIOFRAME_READY,OnRawAudioFrameReady)
+	ON_MESSAGE(WM_MP3_FINISHED,OnMP3Finished)
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendView22 drawing
+
+BOOL CVidsendView22::OnEraseBkgnd(CDC* pDC) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	RECT r;
+
+	CWnd::OnEraseBkgnd(pDC);
+
+	GetClientRect(&r);
+	theApp.renderBitmap(pDC,IDB_MIXER,&r);
+	return 1;
+	}
+
+void CVidsendView22::OnDraw(CDC* pDC) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	RECT r;
+	char myBuf[128];
+	struct ID3_TAG id3;
+	CStringEx S;
+
+	GetClientRect(&r);
+	if(CJoshuaMP3::GetFileInfo(pDoc->m_Canzone1,&id3)>0) {
+		id3.titolo[sizeof(id3.titolo)-1]=0;
+		id3.autore[sizeof(id3.autore)-1]=0;
+		S=id3.titolo;
+		S.TrimRight(' ');
+		S+=" - ";
+		S+=id3.autore;
+		S.TrimRight(' ');
+		txtMP31->SetWindowText(S);
+		}
+	else {
+		_tcscpy(myBuf,(LPSTR)(LPCTSTR)pDoc->m_Canzone1);
+		PathStripPath(myBuf);		//
+		txtMP31->SetWindowText(myBuf);
+		}
+	if(CJoshuaMP3::GetFileInfo(pDoc->m_Canzone2,&id3)>0) {
+		id3.titolo[sizeof(id3.titolo)-1]=0;
+		id3.autore[sizeof(id3.autore)-1]=0;
+		S=id3.titolo;
+		S.TrimRight(' ');
+		S+=" - ";
+		S+=id3.autore;
+		S.TrimRight(' ');
+		txtMP32->SetWindowText(S);
+		}
+	else {
+		_tcscpy(myBuf,(LPSTR)(LPCTSTR)pDoc->m_Canzone2);
+		PathStripPath(myBuf);		//
+		txtMP32->SetWindowText(myBuf);
+		}
+
+	CFont myFont,*oldFont;
+
+	pDC->SetTextColor(RGB(222,222,222));
+	pDC->SetBkColor(RGB(0,0,0));
+
+	myFont.CreateFont(12,5,0,0,400,0,0,0,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH | FF_SWISS,"tahoma");
+
+	oldFont=(CFont *)pDC->SelectObject(&myFont);
+
+	S.Format("Banco %u",pDoc->bBanco+1);
+	pDC->TextOut(r.right/1.29,r.bottom/1.16,S);
+
+	pDC->SelectObject(oldFont);
+	}
+
+void CVidsendView22::OnEditCopy() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	HANDLE h;
+	BYTE *p;
+	DWORD l,ti;
+	
+	if(pDoc && OpenClipboard()) {
+
+	  }  
+	
+	}
+
+void CVidsendView22::OnUpdateEditCopy(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->Enable(pDoc->trasmMode>0);
+	}
+
+void CVidsendView22::OnConnessioni11() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	}
+
+void CVidsendView22::OnUpdateConnessioni11(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	}
+
+void CVidsendView22::OnConnessioniElenco() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	CString strResult;
+	CString aIP,S,S1;
+	UINT aPort;
+	CStreamSrvSocket2 *myRoot;
+
+	POSITION po,po1;
+
+	po=theApp.theServer2 ? theApp.theServer2->streamSocketA2->cSockRoot.GetHeadPosition() : NULL;
+	if(po) {
+		do {
+			po1=po;
+			myRoot=theApp.theServer2->streamSocketA2->cSockRoot.GetNext(po);
+			if(myRoot->m_hSocket != INVALID_SOCKET) {
+				myRoot->GetPeerName(aIP,aPort);
+//				S1=myRoot->connName;
+				S1.Empty();
+
+				S=aIP+"\t"+S1+"\t";
+				S1.Format("%u",myRoot);
+				S=S+S1+"\n";
+				strResult += S;
+				}
+			} while(po);
+		}
+
+	AfxMessageBox(strResult);
+
+	#if 0
+	// fare con lista..
+	int i,j,n,oldImg;
+	CTreeCtrl *v=(CTreeCtrl *)GetDlgItem(IDC_TREE1);
+	HTREEITEM tp0,tp1;
+	CString aIP,oldSel,S;
+	UINT aPort;
+	CChatSrvSocket2 *myRoot;
+
+	if(tp0=v->GetSelectedItem()) {
+		oldSel=v->GetItemText(tp0);
+		v->GetItemImage(tp0,oldImg,i);
+		}
+	v->DeleteAllItems();
+	tp0=v->InsertItem("Utenti collegati");
+	v->SetImageList(&il,TVSIL_NORMAL);
+	v->SetItemImage(tp0,0,0);
+
+	POSITION po,po1;
+
+	po=theApp.theChat->chatSocket ? theApp.theChat->chatSocket->cSockRoot.GetHeadPosition() : NULL;
+	if(po) {
+		do {
+			po1=po;
+			myRoot=theApp.theChat->chatSocket->cSockRoot.GetNext(po);
+			if(myRoot->m_hSocket != INVALID_SOCKET) {
+				myRoot->GetPeerName(aIP,aPort);
+				S=myRoot->connName+" ("+aIP+")";
+				tp1=v->InsertItem(S,tp0);
+				v->SetItemImage(tp1,4,4);
+				v->SetItemData(tp1,(DWORD)myRoot);
+				}
+			} while(po);
+		}
+		
+
+	v->Expand(tp0,TVE_EXPAND);
+	if(!oldSel.IsEmpty()) {
+		tp1=v->GetChildItem(tp0);
+		while(tp1) {
+			int l1,l2;
+			S=v->GetItemText(tp1);
+			v->GetItemImage(tp1,l1,l2);
+			if(S == oldSel && l1 == oldImg) {
+				v->SelectItem(tp1/*,TVGN_CARET | TVGN_FIRSTVISIBLE*/);
+				break;
+				}
+			tp1=v->GetNextSiblingItem(tp1);
+			}
+		}
+#endif
+
+	}
+
+void CVidsendView22::OnAudioCanzone1() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	CFileDialog myDlg(TRUE,"*.mp3",pDoc->m_Canzone1,OFN_HIDEREADONLY,"File audio (*.mp3)|*.mp3|Playlist (*.m3u)|*.m3u|Tutti i file (*.*)|*.*||",this);
+
+	if(myDlg.DoModal() == IDOK) {
+		pDoc->m_Canzone1=myDlg.GetPathName();
+		Invalidate();
+		}
+	}
+
+void CVidsendView22::OnAudioCanzone2() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	CFileDialog myDlg(TRUE,"*.mp3",pDoc->m_Canzone2,OFN_HIDEREADONLY,"File audio (*.mp3)|*.mp3|Playlist (*.m3u)|*.m3u|Tutti i file (*.*)|*.*||",this);
+
+	if(myDlg.DoModal() == IDOK) {
+		pDoc->m_Canzone2=myDlg.GetPathName();
+		Invalidate();
+		}
+	}
+
+void CVidsendView22::OnAudioPlaylist() {
+	SHELLEXECUTEINFO sei;
+	int i,j;
+	CString m_strURL;
+	char szDocPath[256];
+
+	m_strURL ="c:\\user\\public\\my music";
+//	FOLDERID_Music
+
+//https://docs.microsoft.com/it-it/windows/desktop/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath
+	{
+	typedef HRESULT (WINAPI * FN_SHGETFOLDER)(HWND,LPTSTR,int,BOOL);
+	const WORD CSIDL_MYMUSIC = 0x000D;
+	HINSTANCE hinstLib;
+	HMODULE hshell32;
+	hinstLib = LoadLibrary("C:\\WINDOWS\\system32\\shell32.dll");
+	if(hinstLib)
+		hshell32 = GetModuleHandle("SHELL32.DLL");
+
+	// SHGetFolderPath questa non la compila, qua... v. MSDN & O7FUNCGD
+	if(hshell32) {
+		FN_SHGETFOLDER fGetFolder = (FN_SHGETFOLDER)GetProcAddress(hshell32, "SHGetSpecialFolderPathA");
+		if(fGetFolder) {
+			if(fGetFolder(NULL,szDocPath,CSIDL_MYMUSIC,
+				0))
+				;
+			else
+				goto no_get_folder;
+			}
+		else {
+no_get_folder:
+			_tcscpy(szDocPath,"c:\\");
+				}
+			}
+		else {
+			_tcscpy(szDocPath,"c:\\");
+			}
+
+	}
+
+	m_strURL=szDocPath;
+
+	::ZeroMemory(&sei,sizeof(SHELLEXECUTEINFO));
+	sei.cbSize = sizeof( SHELLEXECUTEINFO );		// Set Size
+	sei.lpVerb = TEXT( "open" );					// Set Verb
+	sei.lpFile = m_strURL;							// Set Target To Open
+	sei.nShow = SW_SHOWNORMAL;						// Show Normal
+	ShellExecuteEx(&sei);
+	}
+
+void CVidsendView22::OnAudioEqualizzatoreflat() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pDoc->m_Equalizzatore=0;
+	if(m_MP3player[0])
+		;
+	if(m_MP3player[1])
+		;
+	}
+
+void CVidsendView22::OnUpdateAudioEqualizzatoreflat(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->SetCheck(	pDoc->m_Equalizzatore==0);
+	}
+
+void CVidsendView22::OnAudioEqualizzatorerock() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pDoc->m_Equalizzatore=1;
+	if(m_MP3player[0])
+		;
+	if(m_MP3player[1])
+		;
+	}
+
+void CVidsendView22::OnUpdateAudioEqualizzatorerock(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->SetCheck(	pDoc->m_Equalizzatore==1);
+	}
+
+void CVidsendView22::OnAudioEqualizzatorepop() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pDoc->m_Equalizzatore=2;
+	if(m_MP3player[0])
+		;
+	if(m_MP3player[1])
+		;
+	}
+
+void CVidsendView22::OnUpdateAudioEqualizzatorepop(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->SetCheck(	pDoc->m_Equalizzatore==2);
+	}
+
+void CVidsendView22::OnAudioEqualizzatoredance() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pDoc->m_Equalizzatore=3;
+	if(m_MP3player[0])
+		;
+	if(m_MP3player[1])
+		;
+	}
+
+void CVidsendView22::OnUpdateAudioEqualizzatoredance(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->SetCheck(	pDoc->m_Equalizzatore==3);
+	}
+
+void CVidsendView22::OnAudioEqualizzatoreclassica() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pDoc->m_Equalizzatore=4;
+	if(m_MP3player[0])
+		;
+	if(m_MP3player[1])
+		;
+	}
+
+void CVidsendView22::OnUpdateAudioEqualizzatoreclassica(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	
+	pCmdUI->SetCheck(	pDoc->m_Equalizzatore==4);
+	}
+
+void CVidsendView22::OnAudioEffettisonori(UINT nID) {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+//  bRtn = sndPlaySound(lpRes, SND_MEMORY | SND_ASYNC | SND_NODEFAULT | (bStop ? 0 : SND_NOSTOP));
+  playSound(pDoc->WAVFiles[pDoc->bBanco][nID-ID_AUDIO_EFFETTISONORI_1],100/*volume4->GetPos()*/,nID-ID_AUDIO_EFFETTISONORI_1);
+//  playSound(nID-ID_AUDIO_EFFETTISONORI_1,volume4->GetPos());
+
+	// USARE convertTo22K8(const BYTE *pIn,DWORD dIn,const WAVEFORMATEX *wIn,const WAVEFORMATEX *wOut,BYTE *pOut,DWORD *dOut) {	 // converte da wIn (8 bit 8KHz) a 8 bit 22050, PCM
+	// fare mixWaves(const BYTE *s,DWORD da,DWORD a,BYTE *d,DWORD l,DWORD in,short int vol) {   // se<>0 da dove a dove (nel primo) o solo la lunghezza se da=0
+	}
+
+void CVidsendView22::OnUpdateAudioEffettisonori(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+	pCmdUI->Enable(!pDoc->WAVFiles[pDoc->bBanco][pCmdUI->m_nID-ID_AUDIO_EFFETTISONORI_1].IsEmpty());
+	}
+
+void CVidsendView22::OnAudioEffettisonori2(UINT nID) {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+  playSound(pDoc->WAVFiles[pDoc->bBanco][nID-2],100 /*volume4->GetPos()*/,nID-2);
+	}
+
+
+void CVidsendView22::OnAudioEffettisonoristop() {
+	CVidsendDoc22 *pDoc=GetDocument();
+
+  playSound((const BYTE *)NULL,0);
+//  PlaySound(NULL,NULL,SND_ASYNC | SND_NODEFAULT);
+	}
+
+void CVidsendView22::OnUpdateAudioEffettisonoristop(CCmdUI* pCmdUI) {
+		// attivare solo se sta suonando...
+//	pCmdUI->SetCheck( );
+	}
+
+void CVidsendView22::OnAudioEffettisonoriBanco(UINT nID) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	RECT rc;
+
+	GetClientRect(&rc);
+	rc.left=rc.right/1.5;		// vabbe' ;)
+	rc.top=rc.bottom/1.5;
+
+  pDoc->bBanco=nID-ID_AUDIO_EFFETTISONORI_BANCO1;
+
+	UpdateBanco();
+
+	InvalidateRect(&rc);
+	}
+
+void CVidsendView22::OnUpdateAudioEffettisonoriBanco(CCmdUI* pCmdUI) {
+	CVidsendDoc22 *pDoc=GetDocument();
+		
+	pCmdUI->SetCheck(pDoc->bBanco==pCmdUI->m_nID-ID_AUDIO_EFFETTISONORI_BANCO1);
+	}
+
+void CVidsendView22::UpdateBanco() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	int i,n;
+	
+	TCHAR path[MAX_PATH];
+	// così si sposta nella cartella di lavoro! se non è specificato path nei suoni
+	// v. anche playSound
+	GetModuleFileName(NULL, path, MAX_PATH);
+	PathRemoveFileSpec(path);
+	SetCurrentDirectory(path);
+
+ 	for(i=0; i<12; i++) {
+		CWave w(pDoc->WAVFiles[pDoc->bBanco][i]);
+		n=w.GetSeconds();
+
+		// aggiornare testo/label
+		}
+	}
+
+
+void CVidsendView22::OnAudioEffettisonoriImposta() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	CImpostaEffettiSonoriDlg myDlg(this);
+	CString S;
+	int i,j;
+	
+	if(myDlg.DoModal() == IDOK) {		// 
+//		i=myDlg.m_Tab.GetCurSel();
+  	for(j=0; j<3; j++) {
+  		for(i=0; i<12; i++) {
+				pDoc->WAVFiles[j][i]=myDlg.m_Wavs[j][i];
+				}
+			}
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriImpostaBtn(UINT nID,NMHDR* p_notify_msg_ptr,LRESULT* p_result_ptr) {
+	CVidsendDoc22 *pDoc=GetDocument();
+	CFileDialog myDlg(TRUE,"*.wav",pDoc->WAVFiles[pDoc->bBanco][nID-2],OFN_HIDEREADONLY,"File audio (*.wav)|*.wav|Tutti i file (*.*)|*.*||",this);
+	
+	if(myDlg.DoModal() == IDOK) {
+		pDoc->WAVFiles[pDoc->bBanco][nID-2]=myDlg.GetFileName();
+		}
+	}
+
+double CVidsendView22::getVolumeFader(BYTE w) {
+	int n;
+
+	if(!w) {
+		n=volume1->GetPos();
+		if(fader->GetPos() > 0)
+			n=(n*(50-fader->GetPos()))/50;
+		}
+	else {
+		n=volume2->GetPos();
+		if(fader->GetPos() < 0)
+			n=(n*(50+fader->GetPos()))/50;
+		}
+	return n/100.0;
+	}
+
+void CVidsendView22::OnAudioEffettisonoriPlay1() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	char *p;
+
+	if(!m_MP3player[0]) {
+		if(p=(char *)malloc(256)) {
+			stopMP3(0);
+			*(DWORD *)p=(DWORD)this;
+			*(p+4)=0;
+			_tcscpy(p+6,(LPSTR)(LPCTSTR)pDoc->m_Canzone1);
+			*(p+5)=/*getVolumeFader(0)* */100;
+			AfxBeginThread(CVidsendView22::suonaMP3,p);
+			buttonP1->SetWindowText("II");
+			buttonC1->EnableWindow(FALSE);
+			pitch1->SetPos(0);
+			pitch1->EnableWindow(TRUE);
+			// m_MP3player[0]->totSec
+			}
+		}
+	else {
+		stopMP3(0);
+		buttonP1->SetWindowText(">");
+		VUMeter1->SetWindowText(0);
+		progress1->SetPos(0);
+		buttonC1->EnableWindow(TRUE);
+		pitch1->SetPos(0);
+		pitch1->EnableWindow(FALSE);
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriPlay2() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	char *p;
+
+	if(!m_MP3player[1]) {
+		if(p=(char *)malloc(256)) {
+			stopMP3(1);
+			*(DWORD *)p=(DWORD)this;
+			*(p+4)=1;
+			*(p+5)=/*getVolumeFader(1)**/100;
+			_tcscpy(p+6,(LPSTR)(LPCTSTR)pDoc->m_Canzone2);
+			AfxBeginThread(CVidsendView22::suonaMP3,p);
+			buttonP2->SetWindowText("II");
+			buttonC2->EnableWindow(FALSE);
+			pitch2->SetPos(0);
+			pitch2->EnableWindow(TRUE);
+			// m_MP3player[1]->totSec
+			}
+		}
+	else {
+		stopMP3(1);
+		buttonP2->SetWindowText(">");
+		VUMeter2->SetWindowText(0);
+		progress2->SetPos(0);
+		buttonC2->EnableWindow(TRUE);
+		pitch2->SetPos(0);
+		pitch2->EnableWindow(FALSE);
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMute1() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		}
+	else {
+		}
+/*	if(m_MP3player[0]) {
+		m_MP3player[0]->volume(buttonM1->GetState() & BST_CHECKED ? 0.0 : 
+			getVolumeFader(0));
+		} gestito in mixwaves/WIM_DATA*/
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMute2() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		}
+	else {
+		}
+/*	if(m_MP3player[1]) {
+		m_MP3player[1]->volume(buttonM2->GetState() & BST_CHECKED ? 0.0 : 
+			getVolumeFader(1));
+		} gestito in mixwaves/WIM_DATA*/
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMute3() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		}
+	else {
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMute4() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		}
+	else {
+		}
+/*	if(m_DS) {
+		m_DS->SetVolume(buttonM4->GetState() & BST_CHECKED ? DSBVOLUME_MIN : 
+			volume4->GetPos()*40 +DSBVOLUME_MIN+6000);
+		}*/
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMutePre1() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		if(m_MP3player[0]) 
+			m_MP3player[0]->HWvolume((signed char)0,DSBVOLUME_MIN);
+		}
+	else {
+		if(m_MP3player[0]) 
+			m_MP3player[0]->HWvolume((signed char)0,!(buttonPre1->GetState() & BST_CHECKED) ? DSBVOLUME_MIN : 
+				DSBVOLUME_MAX /*getVolumeFader(0)*/);
+// no per non perdere il sync		m_MP3player[0]->enableOutput(1 /**/,buttonPre1->GetState() & BST_CHECKED ? FALSE : TRUE);
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMutePre2() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		if(m_MP3player[1]) 
+			m_MP3player[1]->HWvolume((signed char)0,DSBVOLUME_MIN);
+		}
+	else {
+		if(m_MP3player[1]) 
+			m_MP3player[1]->HWvolume((signed char)0,!(buttonPre2->GetState() & BST_CHECKED) ? DSBVOLUME_MIN : 
+				DSBVOLUME_MAX /*getVolumeFader(1)*/);
+		}
+	//idem
+	}
+
+void CVidsendView22::OnAudioEffettisonoriMutePre3() {
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+			m_DS->SetVolume(DSBVOLUME_MIN);
+		}
+	else {
+		if(m_DS)
+			m_DS->SetVolume(!(buttonPre3->GetState() & BST_CHECKED) ? DSBVOLUME_MIN : 
+				DSBVOLUME_MAX /*volume4->GetPos()*40 +DSBVOLUME_MIN  +6000*/);
+		}
+	}
+
+void CVidsendView22::OnProgressCanzone1(NMHDR* pNotifyStruct, LRESULT* result) {
+
+	if(m_MP3player[0]) 
+		m_MP3player[0]->goTo(((CClickableProgressCtrl*)GetDlgItem(pNotifyStruct->idFrom))->GetClickPosition(),0);
+	}
+
+void CVidsendView22::OnProgressCanzone2(NMHDR* pNotifyStruct, LRESULT* result) {
+
+	if(m_MP3player[1]) 
+		m_MP3player[1]->goTo(((CClickableProgressCtrl*)GetDlgItem(pNotifyStruct->idFrom))->GetClickPosition(),0);
+	}
+
+void CVidsendView22::OnSliderFader(NMHDR* pNotifyStruct, LRESULT* result) {
+	((CSliderCtrlSmart*)GetDlgItem(pNotifyStruct->idFrom))->SetPos(0);
+/*	if(m_MP3player[0])
+		m_MP3player[0]->volume(getVolumeFader(0));
+	if(m_MP3player[1])
+		m_MP3player[1]->volume(getVolumeFader(1));*/
+	}
+
+void CVidsendView22::OnSliderPitch1(NMHDR* pNotifyStruct, LRESULT* result) {
+	((CSliderCtrlSmart*)GetDlgItem(pNotifyStruct->idFrom))->SetPos(0);
+	if(m_MP3player[0]) {
+		m_MP3player[0]->setPitch(1.0);
+		}
+	}
+
+void CVidsendView22::OnSliderPitch2(NMHDR* pNotifyStruct, LRESULT* result) {
+	((CSliderCtrlSmart*)GetDlgItem(pNotifyStruct->idFrom))->SetPos(0);
+	if(m_MP3player[1]) {
+		m_MP3player[1]->setPitch(1.0);
+		}
+	}
+
+void CVidsendView22::OnAudioEffettisonoriOnAir() {
+	CVidsendDoc22 *pDoc=GetDocument();
+	pDoc->bPaused = !pDoc->bPaused;
+			//	buttonS->GetState & BST_CHECKED
+	((CChildFrame22 *)GetParent())->setStatusIcons();
+	}
+
+void CVidsendView22::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar) {
+	
+//	if(nSBCode == SB_THUMBPOSITION) {
+//		}
+	if(pScrollBar == (CScrollBar*)volume1) {
+		if(m_MP3player[0]) {
+//			m_MP3player[0]->volume(getVolumeFader(0));
+			}
+		}
+	else if(pScrollBar == (CScrollBar*)volume2) {
+		if(m_MP3player[1]) {
+//			m_MP3player[1]->volume(getVolumeFader(1));
+			}
+		}
+	else if(pScrollBar == (CScrollBar*)volume3) {
+// non va		m_Mixer->SetVolume(
+//			MIXERLINE_COMPONENTTYPE_SRC_ANALOG /*MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED*/ /*MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY*/,
+//			volume3->GetPos()*650,volume3->GetPos()*650,MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE /*MIXERLINE_COMPONENTTYPE_SRC_LINE*/);
+// gestito in WIM_DATA volWaves
+		}
+	else if(pScrollBar == (CScrollBar*)volume4) {
+		if(m_DS) {
+//			m_DS->SetVolume(buttonPre3->GetState() & BST_CHECKED ? 0 : 
+//				volume4->GetPos()*40 +DSBVOLUME_MIN  +6000);
+			}
+		}
+	else if(pScrollBar == (CScrollBar*)fader) {
+/*		if(m_MP3player[0])
+			m_MP3player[0]->volume(getVolumeFader(0));
+		if(m_MP3player[1])
+			m_MP3player[1]->volume(getVolumeFader(1));*/
+		}
+	else if(pScrollBar == (CScrollBar*)pitch1) {
+		if(m_MP3player[0]) {
+			m_MP3player[0]->setPitch(pitch1->GetPos()>0 ? log10(pitch1->GetPos())/8+1 : 
+				(pitch1->GetPos()<0 ? 1-log10(-pitch1->GetPos())/8 : 1.0));
+			}
+		}
+	else if(pScrollBar == (CScrollBar*)pitch2) {
+		if(m_MP3player[1]) {
+			m_MP3player[1]->setPitch(pitch2->GetPos()>0 ? log10(pitch2->GetPos())/8+1 : 
+				(pitch2->GetPos()<0 ? 1-log10(-pitch2->GetPos())/8 : 1.0));
+			}
+		}
+
+	CView::OnHScroll(nSBCode, nPos, pScrollBar);
+	}
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendView22 diagnostics
+
+#ifdef _DEBUG
+void CVidsendView22::AssertValid() const {
+	
+	CView::AssertValid();
+	}
+
+void CVidsendView22::Dump(CDumpContext& dc) const {
+	
+	CView::Dump(dc);
+	}
+
+CVidsendDoc22 *CVidsendView22::GetDocument() // non-debug version is inline
+{
+	ASSERT(m_pDocument->IsKindOf(RUNTIME_CLASS(CVidsendDoc22)));
+	return (CVidsendDoc22 *)m_pDocument;
+	}
+
+#endif //_DEBUG
+
+/////////////////////////////////////////////////////////////////////////////
+// CVidsendView22 message handlers
+
+BOOL CVidsendView22::Create(LPCTSTR lpszClassName, LPCTSTR lpszWindowName, DWORD dwStyle, const RECT& rect, CWnd* pParentWnd, UINT nID, CCreateContext* pContext) {
+	int i;
+	int x,y,xs,ys;
+	CVidsendDoc22 *d;
+	RECT rc,myRect;
+
+	if(i=CView::Create(lpszClassName, lpszWindowName, dwStyle, rect, pParentWnd, nID, pContext)) {
+
+//		m_Mixer=new CAudioMixer(this /*m_pMainWnd*/);
+		// METTERE in theApp !!
+//		m_Mixer->SetVolume(MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE,58000,-1,MIXERLINE_COMPONENTTYPE_DST_WAVEIN);
+		// scheda audio HD (XP) 2009!!!
+//		m_Mixer->Choose(MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE);
+//		non va su windows 7 ecc... 
+
+		GetClientRect(&rc);		// qua non è ancora valido... v. OnSize
+		x=0;y=0; xs=1; ys=1;
+		for(i=0; i<10; i++) {
+			char myBuf[2];
+			button[i]=new CRoundButton;
+			myBuf[0]=i+'0'; myBuf[1]=0;
+			button[i]->Create(myBuf,WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,
+				CRect(100+(i%3)*x,100+(i/3)*y,100+(i%3)*x+xs,100+(i/3)*y+ys),this,i+1);
+			}
+		buttonP1=new CRoundButton;
+		buttonP1->Create(">",WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,CRect(10,200,10+20,220),this,11);
+		buttonP2=new CRoundButton;
+		buttonP2->Create(">",WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,CRect(50,200,50+20,220),this,12);
+		buttonS=new CRoundButton(RGB(220,220,220),RGB(255,0,0),RGB(200,0,0));
+		buttonS->Create("ON AIR",WS_CHILD|WS_VISIBLE|BS_MULTILINE|BS_AUTOCHECKBOX|BS_PUSHLIKE,
+			CRect(100,10,100+40,30),this,13);
+		buttonS->SetCheck(BST_CHECKED);
+		buttonM1=new CShapeButton;
+		buttonM1->Create("x",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,15);
+		buttonM2=new CShapeButton;
+		buttonM2->Create("x",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,16);
+		buttonM3=new CShapeButton;
+		buttonM3->Create("x",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,17);
+		buttonM4=new CShapeButton;
+		buttonM4->Create("x",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,18);
+		buttonPre1=new CShapeButton(RGB(240,240,0));
+		buttonPre1->Create("o",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,70);
+		buttonPre2=new CShapeButton(RGB(240,240,0));
+		buttonPre2->Create("o",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,71);
+		buttonPre3=new CShapeButton(RGB(240,240,0));
+		buttonPre3->Create("o",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,72);
+		buttonPre4=new CShapeButton(RGB(240,240,0));
+		buttonPre4->Create("o",WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX/*|BS_PUSHLIKE*/,CRect(10,200,10+20,220),this,73);
+		buttonC1=new CButtonDrop;
+		buttonC1->Create("+",WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,CRect(10,200,10+20,220),this,51);
+		buttonC2=new CButtonDrop;
+		buttonC2->Create("+",WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,CRect(10,200,10+20,220),this,52);
+		buttonE1=new CButton;
+		buttonE1->Create("Edit",WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,CRect(10,200,10+20,220),this,55);
+		volume1=new CSliderCtrlSmart;
+		volume1->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_BOTTOM|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,20);
+		volume1->SetRange(0,100);
+		volume1->SetPos(70);
+		volume1->SetTicFreq(10);
+		volume2=new CSliderCtrlSmart;
+		volume2->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_BOTTOM|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,21);
+		volume2->SetRange(0,100);
+		volume2->SetPos(70);
+		volume2->SetTicFreq(10);
+		volume3=new CSliderCtrlSmart;
+		volume3->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_BOTTOM|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,22);
+		volume3->SetRange(0,100);
+		volume3->SetPos(100
+//			m_Mixer->GetVolume(MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE /*MIXERLINE_COMPONENTTYPE_SRC_LINE*/)*655 
+			);
+		volume3->SetTicFreq(10);
+		volume4=new CSliderCtrlSmart;
+		volume4->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_BOTTOM|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,23);
+		volume4->SetRange(0,100);
+		volume4->SetPos(75);
+		volume4->SetTicFreq(10);
+		fader=new CSliderCtrlSmart;
+		fader->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_BOTH|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,24);
+		fader->SetRange(-50,50);
+		fader->SetPos(0);
+		fader->SetTicFreq(5);
+		pitch1=new CSliderCtrlSmart;
+		pitch1->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_TOP|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,25);
+		pitch1->SetRange(-10,10);
+		pitch1->SetPos(0);
+		pitch1->SetTicFreq(2);
+		pitch1->EnableWindow(FALSE);
+		pitch2=new CSliderCtrlSmart;
+		pitch2->Create(WS_CHILD|WS_VISIBLE|TBS_HORZ|TBS_TOP|TBS_AUTOTICKS,CRect(100,310,100+40,330),this,26);
+		pitch2->SetRange(-10,10);
+		pitch2->SetPos(0);
+		pitch2->SetTicFreq(2);
+		pitch2->EnableWindow(FALSE);
+#define SS_EDITCONTROL 0x00002000
+		txtMP31=new CStaticDrop;
+		txtMP31->Create("Brano 1",WS_CHILD|WS_VISIBLE|SS_EDITCONTROL,CRect(100,310,100+40,330),this,30);
+		txtMP32=new CStaticDrop;
+		txtMP32->Create("Brano 2",WS_CHILD|WS_VISIBLE|SS_EDITCONTROL,CRect(100,310,100+40,330),this,31);
+		VUMeter1=new CVUMeter;
+		VUMeter1->Create("A1",WS_VISIBLE | WS_CHILD /*|CVUMeter::dotOrBar */ /*CVUMeter::digitalOrAnalog*/ | CVUMeter::linearOrLogarithmic ,
+			CRect(100,110,100+80,130),
+			this,40,0,40);
+		VUMeter2=new CVUMeter;
+		VUMeter2->Create("A2",WS_VISIBLE | WS_CHILD | CVUMeter::linearOrLogarithmic,
+			CRect(100,110,100+80,130),this,41,0,40);
+		VUMeter3=new CVUMeter;
+		VUMeter3->Create("A3",WS_VISIBLE | WS_CHILD | CVUMeter::linearOrLogarithmic,
+			CRect(100,110,100+80,130),this,42,0,40);
+		VUMeter4=new CVUMeter;
+		VUMeter4->Create("A4",WS_VISIBLE | WS_CHILD | CVUMeter::linearOrLogarithmic,
+			CRect(100,110,100+80,130),this,43,0,40);
+		VUMeter5=new CVUMeter;
+		VUMeter5->Create("A5",WS_VISIBLE | WS_CHILD | CVUMeter::linearOrLogarithmic,
+			CRect(100,110,100+80,130),this,44,0,40);
+		progress1=new CClickableProgressCtrl;
+		progress1->Create(WS_VISIBLE | WS_CHILD,CRect(100,140,100+80,160),this,60);
+		progress2=new CClickableProgressCtrl;
+		progress2->Create(WS_VISIBLE | WS_CHILD,CRect(100,140,100+80,160),this,61);
+
+		i=doConnect();
+		}
+	return i;
+	}
+
+int CVidsendView22::doConnect() {
+	CVidsendDoc22 *d;
+
+	d=GetDocument();
+	if(d) {			// tanto per sicurezza...
+
+		if(d->Opzioni & CVidsendDoc22::registerServer) {
+			MSG msg;
+			DWORD l;
+
+			if(d->Opzioni & CVidsendDoc2::needAuthenticateServer && !d->directoryWWW.IsEmpty()) {
+				CPasswordDlg myDlg;
+rifo:
+				d->authSocket=new CAuthCliSocket(d);
+				if(!d->authSocket)
+					return FALSE;
+				myDlg.m_Nome=d->directoryWWWLogin;
+				if(myDlg.DoModal() == IDOK) {
+					char myBuf[128];
+
+					if(!d->authSocket->Create())
+						goto auth_not_avail;
+					if(!d->authSocket->Connect(d->directoryWWW,AUTHENTICATION_SOCKET))
+						goto auth_not_avail;
+					d->myLogin=myDlg.m_Nome;
+					d->myPassword=myDlg.m_Pasw;
+
+					OSVERSIONINFO osvi;
+					DWORD mySerNum;
+					osvi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO);
+					GetVersionEx(&osvi);
+					GetVolumeInformation("C:\\",NULL,0,&mySerNum,NULL,NULL,NULL,0);
+					d->authSocket->SendUserPass((char *)(LPCTSTR)d->myLogin,(char *)(LPCTSTR)d->myPassword,1,0,
+						theApp.getVersione(),MAKELONG(osvi.dwMinorVersion,osvi.dwMajorVersion),mySerNum);
+					l=timeGetTime()+30000;			// 30sec timeout
+					while(!d->authSocket->response && timeGetTime() < l) {
+						if(::PeekMessage(&msg,NULL,0,0,PM_NOREMOVE)) {
+							if(!theApp.PumpMessage()) { 
+								}
+							}
+						}
+					d->myID=d->authSocket->IDutente;
+					d->myTimedConn=d->authSocket->timedConn;
+					// se si vuole limitare il tempo di trasmissione, inserire un msg qua
+					switch(d->authSocket->response) {
+						case 0:
+auth_not_avail:
+#ifdef _LINGUA_INGLESE
+							AfxMessageBox("Authentication not available");
+#else
+							AfxMessageBox("Autenticazione non disponibile");
+#endif
+auth_failed:
+							d->authSocket->Close();
+							delete d->authSocket;
+							d->authSocket=NULL;
+							return FALSE;
+							break;
+						case -5:
+#ifdef _LINGUA_INGLESE
+							AfxMessageBox("User not authorized.");
+#else
+							AfxMessageBox("Utente non autorizzato.");
+#endif
+							goto auth_failed;
+							break;
+						case -4:
+#ifdef _LINGUA_INGLESE
+							AfxMessageBox("User is already connected!\nExit and try again.");
+#else
+							AfxMessageBox("Utente già connesso!\nUscire e ritentare l'operazione.");
+#endif
+							goto auth_failed;
+							break;
+						case -3:
+#ifdef _LINGUA_INGLESE
+							if(MessageBox("User unknown! Retry?",NULL,MB_ICONQUESTION | MB_YESNO) == IDYES) {
+#else
+							if(MessageBox("Utente non riconosciuto! Ritentare?",NULL,MB_ICONQUESTION | MB_YESNO) == IDYES) {
+#endif
+								d->authSocket->Close();
+								delete d->authSocket;
+								d->authSocket=NULL;
+								goto rifo;
+								}
+							else
+								goto auth_failed;
+							break;
+						case -2:
+#ifdef _LINGUA_INGLESE
+							if(MessageBox("Wrong password! Retry?",NULL,MB_ICONQUESTION | MB_YESNO) == IDYES) {
+#else
+							if(MessageBox("Password errata! Ritentare?",NULL,MB_ICONQUESTION | MB_YESNO) == IDYES) {
+#endif
+								d->authSocket->Close();
+								delete d->authSocket;
+								d->authSocket=NULL;
+								goto rifo;
+								}
+							else
+								goto auth_failed;
+							break;
+						case -1:
+#ifdef _LINGUA_INGLESE
+							AfxMessageBox("Unknown user!");
+#else
+							AfxMessageBox("Utente non riconosciuto!");
+#endif
+							goto auth_failed;
+							break;
+						case 1:
+							_tcscpy(theApp.infoUtente.login,(LPCTSTR)myDlg.m_Nome);
+							_tcscpy(theApp.infoUtente.pasw,(LPCTSTR)myDlg.m_Pasw);
+							d->directoryWWWLogin=myDlg.m_Nome;
+							AfxMessageBox("Login OK!");
+							break;
+						default:		// ERRORE!
+							goto auth_failed;
+							break;
+						}
+
+					}			// if myDlg.DoModal...
+				else {
+					goto auth_failed;
+					}
+	//				cliSockCtrl->SendUserPass((char *)(LPCTSTR)myDlg.m_Nome,(char *)(LPCTSTR)myDlg.m_Pasw,myAuthClient.extraParm);
+				}
+
+			}
+
+		if(d->Opzioni & CVidsendDoc22::openAudioOnConnect) {
+			}
+		else {
+			d->openAudio(this);
+			}
+		}
+
+	return 1;
+	}
+
+int CVidsendView22::endConnect() {
+	CVidsendDoc22 *d;
+
+	d=GetDocument();
+	if(d && d->authSocket) {			// tanto per sicurezza...
+		d->authSocket->Close();
+		delete d->authSocket;
+		d->authSocket=NULL;
+		}
+	return 1;
+	}
+
+void CVidsendView22::OnTimer(UINT nIDEvent) {
+#if 0			// messo in WAVE callback!
+	CVidsendDoc22 *doc=GetDocument();
+  struct AV_PACKET_HDR *avh;
+	char *p;
+	BYTE *d,*d2,*s,*dOut;
+	int i;
+	long bSize;
+	DWORD l,t;
+	ACMSTREAMHEADER hhacm;
+	static int divider2;
+	static BOOL bInSend=0;
+
+	p=(char *)GlobalAlloc(GPTR,1024);
+	if(!bInSend) {
+		bInSend=TRUE;
+	if(!doc->bPaused) {
+		switch(doc->trasmMode) {
+			case 0:
+				if(doc->alternaSource) {
+
+					}
+				break;
+
+			case 2:
+
+				if(1 /*!(divider % 2   )*/) {
+					divider2++;
+					if(!(GetDocument()->pagProva.audioOpzioni & 1) || (divider2 & 1)) {
+						if(GetDocument()->bAudio) {
+							switch(GetDocument()->pagProva.tipoAudio) {
+								case 0:
+									i=100;
+									break;
+								case 1:
+									i=440;
+									break;
+								case 2:
+									i=1000;
+									break;
+								case 3:
+									i=5000;
+									break;
+								case 4:
+									i=10000;
+									break;
+								}
+							if(GetDocument()->Opzioni & CVidsendDoc22::sstereo) {
+								}
+							if(GetDocument()->Opzioni & CVidsendDoc22::mono) {
+								}
+
+							d=theApp.createTestWave(NULL,&wfex,&l,i,GetDocument()->pagProva.audioOpzioni & 2,
+								!(GetDocument()->Opzioni & CVidsendDoc22::mono));
+				//			l+=sizeof(WAVEFORMATEX);
+
+							// FINIRE la gestione di  / AUDIO_BUFFER_DIVIDER, servono 2 timer o boh
+
+				SendMessage(WM_RAWAUDIOFRAME_READY,(WPARAM)d,(LPARAM)l);
+// OCCHIO! serve Send o il buffer viene cimito 
+
+
+							dOut=(BYTE *)GlobalAlloc(GMEM_FIXED,doc->maxWaveoutSize +100 /*AV_PACKET_HDR_SIZE*/);
+							d2=dOut+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
+							avh=(struct AV_PACKET_HDR *)dOut;
+							hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
+							hhacm.fdwStatus=0;
+							hhacm.dwUser=(DWORD)0 /*this*/;
+							hhacm.pbSrc=d;
+							hhacm.cbSrcLength=l;
+				//			hhacm.cbSrcLengthUsed=0;
+							hhacm.dwSrcUser=0;
+							hhacm.pbDst=d2;
+							hhacm.cbDstLength=doc->maxWaveoutSize;
+				//			hhacm.cbDstLengthUsed=0;
+							hhacm.dwDstUser=0;
+							if(m_hAcm && !acmStreamPrepareHeader(m_hAcm,&hhacm,0)) {
+								avh->tag=MAKEFOURCC('D','G','2','0');
+								avh->type=AV_PACKET_TYPE_AUDIO;
+			//					avh.psec=1000;
+								avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+								avh->info=wfd.wf.wFormatTag;
+
+								i=acmStreamConvert(m_hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
+						//	wsprintf(myBuf,"convertito: %d, %d bytes",i,l);
+						//	AfxMessageBox(myBuf);
+								acmStreamUnprepareHeader(m_hAcm,&hhacm,0);
+
+								avh->len=hhacm.cbDstLengthUsed;
+								if(theApp.debugMode) 
+									wsprintf(p,"AFrameT# %ld: lungo %ld (%ld)",gdaFrameNum++,hhacm.cbDstLengthUsed,l); 
+								avh->reserved1=avh->reserved2=0;
+								PostMessage(WM_AUDIOFRAME_READY,(WPARAM)dOut,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+								}
+							else {
+								HeapFree(GetProcessHeap(),0,dOut);
+								}
+							HeapFree(GetProcessHeap(),0,d);
+							}
+						}
+					}
+				break;
+
+			case 1:
+				if(doc->psAudio) {
+					d=(BYTE *)GlobalAlloc(GMEM_FIXED,2048+AV_PACKET_HDR_SIZE  +100 /*AV_PACKET_HDR_SIZE*/);
+					d2=d+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
+					if(doc->psAudio->Read(d,2048)) {
+
+						gdaFrameNum++;
+						HeapFree(GetProcessHeap(),0,d);
+						}
+					else {
+						gdaFrameNum=0;
+						if(doc->OpzioniSorgenteVideo & CVidsendDoc22::mp3Loop) {
+							doc->psAudio->Seek(0,CFile::begin);
+							}
+						else
+							doc->setTXMode(2);
+						HeapFree(GetProcessHeap(),0,d);
+						}
+					}
+				break;
+
+			}
+
+		}
+fine:
+		bInSend=FALSE;
+		}
+	if(*p) {
+		if(theApp.m_pMainWnd)
+			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+		else
+			GlobalFree(p);
+		}
+	else
+		GlobalFree(p);
+#endif
+	CView::OnTimer(nIDEvent);
+	}
+
+#if 0			// messo in WAVE callback!
+UINT CVidsendView22::audioProva(LPVOID ptr) {
+	CVidsendView22 *v=(CVidsendView22*)ptr;
+	CVidsendDoc22 *doc=v->GetDocument();
+
+	// strattona lo stesso... strano (al posto di Timer)
+
+	char myBuf[256];
+
+  struct AV_PACKET_HDR *avh;
+	char *p;
+	BYTE *d,*d2,*s,*dOut;
+	BYTE myWAVbuf[44100L*2*2/AUDIO_BUFFER_DIVIDER];
+	int i;
+	long bSize;
+	DWORD l,t;
+	ACMSTREAMHEADER hhacm;
+	static int divider2;
+
+	v->m_AudioThread=AfxGetThread();
+	while(1) {
+	if(!doc->bPaused) {
+		switch(doc->trasmMode) {
+			case 0:
+				if(doc->alternaSource) {
+
+					}
+				break;
+
+			case 2:
+
+				if(1 /*!(divider % 2   )*/) {
+					divider2++;
+					if(!(doc->pagProva.audioOpzioni & 1) || (divider2 & 1)) {
+						if(doc->bAudio) {
+							switch(doc->pagProva.tipoAudio) {
+								case 0:
+									i=100;
+									break;
+								case 1:
+									i=440;
+									break;
+								case 2:
+									i=1000;
+									break;
+								case 3:
+									i=5000;
+									break;
+								case 4:
+									i=10000;
+									break;
+								}
+							if(doc->Opzioni & CVidsendDoc22::sstereo) {
+								}
+							if(doc->Opzioni & CVidsendDoc22::mono) {
+								}
+
+							d=theApp.createTestWave(NULL,&v->wfex,&l,i,doc->pagProva.audioOpzioni & 2,
+								40,!(doc->Opzioni & CVidsendDoc22::mono));
+				//			l+=sizeof(WAVEFORMATEX);
+
+							// [FINIRE la gestione di  / AUDIO_BUFFER_DIVIDER, servono 2 timer o boh]
+							i=v->measureAudio((short int *)d,l/2);
+							v->VUMeter3->SetWindowText(i/2);
+
+				v->SendMessage(WM_RAWAUDIOFRAME_READY,(WPARAM)d,(LPARAM)l);
+// OCCHIO! serve Send o il buffer viene cimito 
+
+
+							dOut=(BYTE *)GlobalAlloc(GMEM_FIXED,doc->maxWaveoutSize +100 /*AV_PACKET_HDR_SIZE*/);
+							d2=dOut+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
+							avh=(struct AV_PACKET_HDR *)dOut;
+							hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
+							hhacm.fdwStatus=0;
+							hhacm.dwUser=(DWORD)0 /*this*/;
+							hhacm.pbSrc=d;
+							hhacm.cbSrcLength=l;
+				//			hhacm.cbSrcLengthUsed=0;
+							hhacm.dwSrcUser=0;
+							hhacm.pbDst=d2;
+							hhacm.cbDstLength=doc->maxWaveoutSize;
+				//			hhacm.cbDstLengthUsed=0;
+							hhacm.dwDstUser=0;
+							if(v->m_hAcm && !acmStreamPrepareHeader(v->m_hAcm,&hhacm,0)) {
+								avh->tag=MAKEFOURCC('D','G','2','0');
+								avh->type=AV_PACKET_TYPE_AUDIO;
+			//					avh.psec=1000;
+								avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+								avh->info=v->wfd.wf.wFormatTag;
+
+								i=acmStreamConvert(v->m_hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
+						//	wsprintf(myBuf,"convertito: %d, %d bytes",i,l);
+						//	AfxMessageBox(myBuf);
+								acmStreamUnprepareHeader(v->m_hAcm,&hhacm,0);
+
+								avh->len=hhacm.cbDstLengthUsed;
+								avh->reserved1=avh->reserved2=0;
+								v->PostMessage(WM_AUDIOFRAME_READY,(WPARAM)dOut,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+								}
+							else {
+								HeapFree(GetProcessHeap(),0,dOut);
+								}
+//							HeapFree(GetProcessHeap(),0,d);
+							}
+						}
+					}
+				break;
+
+			case 1:
+				if(doc->psAudio) {
+					if(doc->nomeMP3_PB.FindNoCase(".mp3") != -1) {
+						d=(BYTE *)GlobalAlloc(GMEM_FIXED,44100L*2*2/AUDIO_BUFFER_DIVIDER+AV_PACKET_HDR_SIZE  +100 /*AV_PACKET_HDR_SIZE*/);
+						d2=d+AV_PACKET_HDR_SIZE;			// indirizzo del buffer DOPO la struct header!
+
+						l=44100L*2*2/AUDIO_BUFFER_DIVIDER;
+						if(!v->PBMP3bufferSize) {
+							CJoshuaMP3 myMP3((DWORD)0);
+//no							v->PBMP3to+=576*2  *10;		// (mi dà 82944 byte in output @44100/2/16)
+							if(myMP3.suona(doc->psAudio, v->PBMP3buffer, v->PBMP3from, ++v->PBMP3to,0,0,0.7)) {
+								v->PBMP3from=v->PBMP3to;
+								v->PBMP3bufferPointer=0 /*myMP3.getBuffer()*/;
+								v->PBMP3bufferSize=myMP3.getBufferPos();
+								memcpy(myWAVbuf,v->PBMP3buffer+v->PBMP3bufferPointer,l);
+								v->PBMP3bufferPointer+=l;
+								}
+							else
+								l=0;			// fine brano..
+							}
+						else if(v->PBMP3bufferPointer+l >= v->PBMP3bufferSize) {
+							CJoshuaMP3 myMP3((DWORD)0);
+							memcpy(myWAVbuf,v->PBMP3buffer+v->PBMP3bufferPointer,
+								v->PBMP3bufferSize-v->PBMP3bufferPointer);
+							v->PBMP3bufferPointer += l;
+							v->PBMP3bufferPointer %= v->PBMP3bufferSize;
+
+//							v->PBMP3to+=576*2 *10;
+							if(myMP3.suona(doc->psAudio, v->PBMP3buffer, v->PBMP3from, ++v->PBMP3to,0,0,0.7)) {
+								v->PBMP3from=v->PBMP3to;
+//								v->PBMP3bufferPointer=0 /*myMP3.getBuffer()*/;
+								memcpy(myWAVbuf+l-v->PBMP3bufferPointer,v->PBMP3buffer,v->PBMP3bufferPointer);
+								v->PBMP3bufferSize=myMP3.getBufferPos();
+//								v->PBMP3bufferPointer+=l;
+								}
+							else
+								l=0;			// fine brano..
+
+//							v->PBMP3bufferSize=0;
+							}
+						else {
+							memcpy(myWAVbuf,v->PBMP3buffer+v->PBMP3bufferPointer,l);
+							v->PBMP3bufferPointer+=l;
+							}
+						}
+					else {
+						}
+
+					if(l) {
+						memcpy(d2,myWAVbuf,l);
+						i=v->measureAudio((short int *)d2,l/2);
+						v->VUMeter3->SetWindowText(i/2);
+
+							// NO bisogna decomprimere e ricomprimere...
+						v->SendMessage(WM_RAWAUDIOFRAME_READY,(WPARAM)myWAVbuf,(LPARAM)l);
+
+#if 0 // fare volendo!
+							avh=(struct AV_PACKET_HDR *)dOut;
+							hhacm.cbStruct=sizeof(ACMSTREAMHEADER);
+							hhacm.fdwStatus=0;
+							hhacm.dwUser=(DWORD)0 /*this*/;
+							hhacm.pbSrc=d;
+							hhacm.cbSrcLength=l;
+				//			hhacm.cbSrcLengthUsed=0;
+							hhacm.dwSrcUser=0;
+							hhacm.pbDst=d2;
+							hhacm.cbDstLength=doc->maxWaveoutSize;
+				//			hhacm.cbDstLengthUsed=0;
+							hhacm.dwDstUser=0;
+							if(v->m_hAcm && !acmStreamPrepareHeader(v->m_hAcm,&hhacm,0)) {
+								avh->tag=MAKEFOURCC('D','G','2','0');
+								avh->type=AV_PACKET_TYPE_AUDIO;
+			//					avh.psec=1000;
+								avh->timestamp=*((DWORD *)&CTime::GetCurrentTime());
+								avh->info=v->wfd.wf.wFormatTag;
+
+								i=acmStreamConvert(v->m_hAcm,&hhacm,ACM_STREAMCONVERTF_BLOCKALIGN);
+						//	wsprintf(myBuf,"convertito: %d, %d bytes",i,l);
+						//	AfxMessageBox(myBuf);
+								acmStreamUnprepareHeader(v->m_hAcm,&hhacm,0);
+
+								avh->len=hhacm.cbDstLengthUsed;
+								avh->reserved1=avh->reserved2=0;
+								v->PostMessage(WM_AUDIOFRAME_READY,(WPARAM)dOut,(LPARAM)avh->len+AV_PACKET_HDR_SIZE);
+								}
+							else {
+								HeapFree(GetProcessHeap(),0,dOut);
+								}
+//							HeapFree(GetProcessHeap(),0,d);
+							}
+#endif
+
+
+						v->gdaFrameNum++;
+						HeapFree(GetProcessHeap(),0,d);
+						}
+					else {
+						v->gdaFrameNum=0;
+						if(doc->OpzioniSorgenteVideo & CVidsendDoc22::mp3Loop) {
+							doc->psAudio->Seek(0,CFile::begin);
+							v->PBMP3from=v->PBMP3to=0;
+							v->PBMP3bufferSize=v->PBMP3bufferPointer=0;
+							}
+						else
+							doc->setTXMode(2);
+						HeapFree(GetProcessHeap(),0,d);
+						}
+					}
+				break;
+
+			}
+		}
+
+
+		Sleep(1000/AUDIO_BUFFER_DIVIDER);
+		}
+
+	return 1;
+	}
+#endif
+
+void CVidsendView22::OnSize(UINT nType, int cx, int cy) {
+	int i,x,y,xs,ys;
+	CVidsendDoc22 *d=GetDocument();
+	RECT rc;
+
+	CView::OnSize(nType, cx, cy);
+
+	GetClientRect(&rc);
+
+	xs=rc.right/36; ys=rc.bottom/20;
+	m_Font1.DeleteObject();
+	m_Font1.CreateFont(ys,xs,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH | FF_SWISS,"Arial");
+	xs=rc.right/60; ys=rc.bottom/30;
+	m_Font2.DeleteObject();
+	m_Font2.CreateFont(ys,xs,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH | FF_SWISS,"Arial");
+
+	xs=rc.right/13.3; ys=rc.bottom/9.7;
+	x=xs*1.56; y=ys*1.66;
+	for(i=1; i<10; i++) {
+		if(button[i]) {
+			button[i]->MoveWindow(rc.right/1.51+((i-1)%3)*x,rc.bottom/2.63+((i-1)/3)*y,xs,ys,TRUE);
+			button[i]->SetFont(&m_Font1);
+			}
+		}
+
+	if(buttonS) {
+		buttonS->MoveWindow(rc.right/2.25,rc.bottom/38,xs*1.6,ys*1.2,TRUE);
+		buttonS->SetFont(&m_Font2);
+		}
+	xs=rc.right/17; ys=rc.bottom/12.5;
+	if(buttonP1) {
+		buttonP1->MoveWindow(rc.right/43,rc.bottom/2.3,xs,ys,TRUE);
+		buttonP1->SetFont(&m_Font2);
+		}
+	if(buttonP2) {
+		buttonP2->MoveWindow(rc.right/1.83,rc.bottom/2.3,xs,ys,TRUE);
+		buttonP2->SetFont(&m_Font2);
+		}
+	if(buttonC1) {
+		buttonC1->MoveWindow(rc.right/45,rc.bottom/3.91,xs,ys,TRUE);
+		buttonC1->SetFont(&m_Font2);
+		}
+	if(buttonC2) {
+		buttonC2->MoveWindow(rc.right/3.1,rc.bottom/3.91,xs,ys,TRUE);
+		buttonC2->SetFont(&m_Font2);
+		}
+	if(buttonE1) {
+		buttonE1->MoveWindow(rc.right/1.09,rc.bottom/3.7,xs,ys/1.7,TRUE);
+		buttonE1->SetFont(&m_Font2);
+		}
+	xs=rc.right/32; ys=rc.bottom/28;
+	if(buttonM1) {
+		buttonM1->MoveWindow(rc.right/3.7,rc.bottom/2.31,xs,ys,TRUE);
+		buttonM1->SetFont(&m_Font2);
+		}
+	if(buttonM2) {
+		buttonM2->MoveWindow(rc.right/3.1,rc.bottom/2.31,xs,ys,TRUE);
+		buttonM2->SetFont(&m_Font2);
+		}
+	if(buttonM3) {
+		buttonM3->MoveWindow(rc.right/3.15,rc.bottom/1.29,xs,ys,TRUE);
+		buttonM3->SetFont(&m_Font2);
+		}
+	if(buttonM4) {
+		buttonM4->MoveWindow(rc.right/1.26,rc.bottom/3.6,xs,ys,TRUE);
+		buttonM4->SetFont(&m_Font2);
+		}
+	//spostare SOPRA CUFFIE in grafica e sistemare con iconette!
+	if(buttonPre1) {
+		buttonPre1->MoveWindow(rc.right/12.5,rc.bottom/1.59,xs,ys,TRUE);
+		buttonPre1->SetFont(&m_Font2);
+		buttonPre1->SetColors(RGB(240,240,0),RGB(100,100,100));
+		buttonPre1->SetCheck(TRUE);
+		}
+	if(buttonPre2) {
+		buttonPre2->MoveWindow(rc.right/1.81,rc.bottom/1.59,xs,ys,TRUE);
+		buttonPre2->SetFont(&m_Font2);
+		buttonPre2->SetColors(RGB(240,240,0),RGB(100,100,100));
+		buttonPre2->SetCheck(TRUE);
+		}
+	if(buttonPre3) {
+		buttonPre3->MoveWindow(rc.right/1.14,rc.bottom/3.6,xs,ys,TRUE);
+		buttonPre3->SetFont(&m_Font2);
+		buttonPre3->SetColors(RGB(240,240,0),RGB(100,100,100));
+		buttonPre3->SetCheck(TRUE);
+		}
+	if(buttonPre4) {
+		buttonPre4->MoveWindow(rc.right/1.7,rc.bottom/1.29,xs,ys,TRUE);
+		buttonPre4->SetFont(&m_Font2);
+		buttonPre4->SetColors(RGB(240,240,0),RGB(100,100,100));
+// questo no... Mic		buttonPre4->SetCheck(TRUE);
+		}
+	xs=rc.right/7; ys=rc.bottom/15;
+	if(volume1)
+		volume1->MoveWindow(rc.right/9.7,rc.bottom/2.4,xs,ys,TRUE);
+	if(volume2)
+		volume2->MoveWindow(rc.right/2.7,rc.bottom/2.4,xs,ys,TRUE);
+	if(volume3)
+		volume3->MoveWindow(rc.right/2.5,rc.bottom/1.31,xs,ys,TRUE);
+	if(volume4)
+		volume4->MoveWindow(rc.right/1.55,rc.bottom/4,xs,ys,TRUE);
+	xs=rc.right/9; ys=rc.bottom/18;
+	if(pitch1)
+		pitch1->MoveWindow(rc.right/20,rc.bottom/1.85,xs,ys,TRUE);
+	if(pitch2)
+		pitch2->MoveWindow(rc.right/2.1,rc.bottom/1.85,xs,ys,TRUE);
+	xs=rc.right/4.5; ys=rc.bottom/13;
+	if(fader)
+		fader->MoveWindow(rc.right/4.8,rc.bottom/1.75,xs,ys*1.40,TRUE);
+	xs=rc.right/5; ys=rc.bottom/14;
+	if(txtMP31) {
+		txtMP31->MoveWindow(rc.right/12.2,rc.bottom/3.9,xs,ys,TRUE);
+		txtMP31->SetFont(&m_Font2);
+		txtMP31->SetWindowText(d->m_Canzone1);
+		}
+	if(txtMP32) {
+		txtMP32->MoveWindow(rc.right/2.6,rc.bottom/3.9,xs,ys,TRUE);
+		txtMP32->SetFont(&m_Font2);
+		txtMP32->SetWindowText(d->m_Canzone2);
+		}
+	xs=rc.right/7; ys=rc.bottom/19;
+	if(VUMeter1)
+		VUMeter1->MoveWindow(rc.right/9.7,rc.bottom/2.07,xs,ys,TRUE);
+	if(VUMeter2)
+		VUMeter2->MoveWindow(rc.right/2.7,rc.bottom/2.07,xs,ys,TRUE);
+	if(VUMeter3)
+		VUMeter3->MoveWindow(rc.right/2.5,rc.bottom/1.2,xs,ys,TRUE);
+	if(VUMeter4)
+		VUMeter4->MoveWindow(rc.right/1.55,rc.bottom/3.25,xs,ys,TRUE);
+	if(VUMeter5)
+		VUMeter5->MoveWindow(rc.right/3,rc.bottom/1.055,xs,ys,TRUE);
+	xs=rc.right/3.8; ys=rc.bottom/24;
+	if(progress1)
+		progress1->MoveWindow(rc.right/40,rc.bottom/2.9,xs,ys,TRUE);
+	if(progress2)
+		progress2->MoveWindow(rc.right/3.05,rc.bottom/2.9,xs,ys,TRUE);
+	}
+
+void CVidsendView22::OnRButtonDown(UINT nFlags, CPoint point) {
+	CMenu myMenu;
+	
+	myMenu.LoadMenu(IDR_VIDSENTYPE22);
+	CMenu *myMenu2=myMenu.GetSubMenu(2);
+	myMenu2->AppendMenu(MF_SEPARATOR);
+#ifdef _LINGUA_INGLESE
+	myMenu2->AppendMenu(MF_STRING,ID_FILE_PROPRIETA,"Properties...");
+#else
+	myMenu2->AppendMenu(MF_STRING,ID_FILE_PROPRIETA,"Proprietà...");
+#endif
+
+
+	ClientToScreen(&point);
+	myMenu2->TrackPopupMenu(TPM_LEFTBUTTON | TPM_LEFTALIGN, point.x, point.y, GetParent());
+	
+	CView::OnRButtonDown(nFlags, point);
+	}
+
+
+
+void CVidsendView22::OnLButtonDown(UINT nFlags, CPoint point) {
+	
+	inClick=TRUE;
+	CView::OnLButtonDown(nFlags, point);
+	}
+
+void CVidsendView22::OnLButtonUp(UINT nFlags, CPoint point) {
+	
+	inClick=FALSE;
+	CView::OnLButtonUp(nFlags, point);
+	}
+
+void CVidsendView22::OnMouseMove(UINT nFlags, CPoint point) {
+	
+//gestire spostamento dell'intera finestra, clickandoci dentro!
+	// e magari anche il posizionamento del quality box??
+	CView::OnMouseMove(nFlags, point);
+	}
+
+void CVidsendView22::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags) {
+	CVidsendDoc22 *d=GetDocument();
+
+	switch(nChar) {
+		case VK_SPACE:
+			if(d->bPaused)
+//				d->OnAudioTrasmissioneRiprendi();
+				PostMessage(WM_COMMAND,ID_CONNESSIONE_RIPRENDI,0);
+			else
+				PostMessage(WM_COMMAND,ID_CONNESSIONE_PAUSA,0);
+			break;
+		}
+
+	CView::OnKeyDown(nChar, nRepCnt, nFlags);
+	}
+
+BOOL CVidsendView22::OnMouseWheel(UINT nFlags, short zDelta, CPoint pt) {
+	CVidsendDoc22 *d=GetDocument();
+
+#if 0
+	// si potrebbe cambiare a seconda di "dove" si trova il mouse...
+	if(!(nFlags & MK_CONTROL)) {
+		volume3->SetPos(volume3->GetPos()+zDelta/10);
+		}
+	else {
+		fader->SetPos(fader->GetPos()+zDelta/10);
+		}
+#endif
+
+	return CView::OnMouseWheel(nFlags, zDelta, pt);
+	}
+						
+BOOL CVidsendView22::OnToolTipNotify(UINT /*id*/, NMHDR *pNMHDR, LRESULT * /*pResult*/) {
+	TOOLTIPTEXT *pTTT = (TOOLTIPTEXT *)pNMHDR;
+	TOOLTIPTEXTA* pTTTA = (TOOLTIPTEXTA*)pNMHDR;
+	CString strTipText = "";
+	CString rString = "";
+	UINT nID = pNMHDR->idFrom;
+	CVidsendDoc22 *d=GetDocument();
+
+	ASSERT(pNMHDR->code == TTN_NEEDTEXTA || pNMHDR->code == TTN_NEEDTEXTW);
+
+// if there is a top level routing frame then let it handle the message
+	if(GetRoutingFrame() != NULL) 
+		return FALSE;
+
+
+// to be through we will need to handle UNICODE versions of the message also !!
+	if(pNMHDR->code == TTN_NEEDTEXTA && (pTTTA->uFlags & TTF_IDISHWND)) {
+		// idFrom is actually the HWND of the tool
+		UINT nIdentifier = ::GetDlgCtrlID((HWND)pNMHDR->idFrom);
+
+		if(nIdentifier>=2  && nIdentifier<=10) {
+//			pTTT->lpszText = " hallo - this is a tool tip text "; //m_oStrToolTip.GetBuffer(m_oStrToolTip.GetLength()) ;
+			pTTT->lpszText = (LPSTR)(LPCTSTR)d->WAVFiles[d->bBanco][nIdentifier-2];
+				// or directly set : pTTT->lpszText = " hallo - this is a tool tip text ";
+			}
+		else
+			pTTT->lpszText = NULL;
+
+		CWnd *p = CWnd::FromHandle(pNMHDR->hwndFrom);
+		p->SendMessage(TTM_SETDELAYTIME, TTDT_AUTOPOP, 30000);
+		//forced multiline
+		p->SendMessage(TTM_SETDELAYTIME, TTDT_INITIAL, 0);
+		p->SendMessage(TTM_SETMAXTIPWIDTH, 0, 100);
+		//forced various time to show
+		if(pTTT->lpszText)
+			return TRUE ; // there is text to display
+			}
+
+		//set tooltips for toolbar
+		if(nID != 0) {		// will be zero on a separator
+			strTipText.LoadString(nID);
+
+		if (pNMHDR->code == TTN_NEEDTEXTA) {
+			lstrcpyn(pTTTA->szText, strTipText, sizeof(pTTTA->szText));
+			}
+
+		// bring the tooltip window above other popup windows
+		::SetWindowPos(pNMHDR->hwndFrom, HWND_TOP, 0, 0, 0, 0,SWP_NOACTIVATE|
+		SWP_NOSIZE|SWP_NOMOVE|SWP_NOOWNERZORDER); return TRUE;
+		}
+
+	return FALSE;
+	} 
+
+void CVidsendView22::OnClose() {		// non lo esegue mai...??
+		int i=GetWindowLong(m_hWnd,GWL_STYLE);
+		int j=IsZoomed();
+		CView::OnClose();
+	}
+void CVidsendView22::OnDestroy() {
+	CVidsendDoc22 *d=GetDocument();
+	RECT rc;
+	char myBuf[64];
+	
+	if(m_pwi)
+		m_pwi->StopRecord();
+
+	CView::OnDestroy();
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
+/*	if(theApp.Opzioni & CVidsendApp::saveLayout) {
+		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
+		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una in mezzo...
+//		if(!IsIconic() && !IsZoomed()) {		// NON VANNO PORCODIO
+		if(rc.left>0 && rc.top>0 && (rc.right-rc.left)>100 && (rc.bottom-rc.top)>50) {		// cagata quando qualsiasi MDI child maximized...@#$%
+			wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
+			d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
+			}
+		}*/
+	}
+
+// viene INTERROTTA da altri eventi, mouse ecc... e questo incula i semafori. Provo thread
+//void CALLBACK waveCallback(HWAVEIN hwi,UINT uMsg,DWORD_PTR dwInstance,DWORD_PTR dwParam1,DWORD_PTR dwParam2) {
+
+int CVidsendView22::initCapture(const WAVEFORMATEX *preferredWf, BOOL bVerbose) {
+	char myBuf[128];
+	int i,bWarning=0;
+	CVidsendDoc22 *d=GetDocument();
+
+	aFrameNum=0;
+
+
+	if(preferredWf) {
+		memcpy(&wfex,preferredWf,sizeof(WAVEFORMATEX));
+		memcpy(&wfd,preferredWf,sizeof(WAVEFORMATEX));
+		}
+	else {
+		wfex.wFormatTag = WAVE_FORMAT_PCM;
+		wfex.nChannels = 2 /*1*/;
+		wfex.nSamplesPerSec = 44100 /*8000*/ /*FREQUENCY*/;
+		wfex.nBlockAlign = 4 /*1*/;
+		wfex.wBitsPerSample = 16 /*8*/;
+		wfex.nAvgBytesPerSec = wfex.nSamplesPerSec*wfex.nChannels*(wfex.wBitsPerSample/8);
+		wfex.cbSize = 0;
+
+		// FINIRE con compressore scelto, 2021-23
+
+		GSM610WAVEFORMAT mywfx;
+		mywfx.wfx.wFormatTag = WAVE_FORMAT_GSM610;
+		mywfx.wfx.nChannels = wfex.nChannels /*1*/;
+		mywfx.wfx.nSamplesPerSec = wfex.nSamplesPerSec /*8000*/;
+		mywfx.wfx.nAvgBytesPerSec = 1625;
+		mywfx.wfx.nBlockAlign = 65;
+		mywfx.wfx.wBitsPerSample = 0;
+		mywfx.wfx.cbSize = 2;
+		mywfx.wSamplesPerBlock = 320;
+		memcpy(&wfd,&mywfx,sizeof(GSM610WAVEFORMAT));
+		// e occhio, se il formato non è valido l'acm è nullo!
+		}
+
+// mettere anche dopo dialog config...	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+	playerPreascolto = new Player(this->m_hWnd);
+	if(playerPreascolto->Init(0)) {
+
+		SOUNDFORMAT myFormat;
+		myFormat.NbBitsPerSample = 16;
+		myFormat.NbChannels = 2;
+		myFormat.SamplingRate = 44100;
+
+		playerPreascolto->CreateSoundBuffer(myFormat, 44100L*2*2);
+
+		playerPreascolto->SetNotificationPositions(44100L*2*2,AUDIO_BUFFER_DIVIDER);
+
+		}
+
+
+	m_pwi = (CWaveIn*)AfxBeginThread(
+		RUNTIME_CLASS(CWaveIn),
+		THREAD_PRIORITY_HIGHEST, 0, CREATE_SUSPENDED);
+	m_pwi->tag=(DWORD)this;		// non so come fare a usare un costruttore con parm in RUNTIME_CLASS...
+	m_pwi->m_wfx=wfex;
+	m_pwi->ResumeThread();
+#if 0
+	i=waveInOpen(&m_hWaveIn,WAVE_MAPPER,&wfex,(DWORD)waveCallback,(DWORD)this,CALLBACK_FUNCTION);
+
+	if(i == MMSYSERR_NOERROR) {
+		DWORD ti;
+		IWaveHdr1.lpData=(char *)m_AudioBuffer1;
+		IWaveHdr1.dwBufferLength=wfex.nAvgBytesPerSec /*176400*/ /*8000*/ / AUDIO_BUFFER_DIVIDER;
+#pragma warning AUDIO dwBufferLength
+		IWaveHdr1.dwBytesRecorded=0;
+		IWaveHdr1.dwUser=(DWORD)this;
+		IWaveHdr1.dwFlags=0;
+		IWaveHdr1.dwLoops=0;
+		IWaveHdr1.lpNext=NULL;
+		IWaveHdr1.reserved=0;
+		IWaveHdr2.lpData=(char *)m_AudioBuffer2;
+		IWaveHdr2.dwBufferLength=wfex.nAvgBytesPerSec /*176400*/ /*8000*/ / AUDIO_BUFFER_DIVIDER;
+		IWaveHdr2.dwBytesRecorded=0;
+		IWaveHdr2.dwUser=(DWORD)this;
+		IWaveHdr2.dwFlags=0;
+		IWaveHdr2.dwLoops=0;
+		IWaveHdr2.lpNext=NULL;
+		IWaveHdr2.reserved=0;
+		i=waveInPrepareHeader(m_hWaveIn,&IWaveHdr1,sizeof(WAVEHDR));
+		ti=timeGetTime()+500;
+		while(!(IWaveHdr1.dwFlags & WHDR_PREPARED) && timeGetTime()<ti);
+		i=waveInPrepareHeader(m_hWaveIn,&IWaveHdr2,sizeof(WAVEHDR));
+		ti=timeGetTime()+500;
+		while(!(IWaveHdr2.dwFlags & WHDR_PREPARED) && timeGetTime()<ti);
+		i=waveInStart(m_hWaveIn);
+		waveInAddBuffer(m_hWaveIn,&IWaveHdr1,sizeof(WAVEHDR));
+		waveInAddBuffer(m_hWaveIn,&IWaveHdr2,sizeof(WAVEHDR));
+		theApp.theServer2->Opzioni |= CVidsendDoc2::sendAudio;
+		}
+	else {
+#ifdef _DEBUG
+		AfxMessageBox("impossibile aprire audio");
+#endif
+		}
+#endif
+
+	acmStreamOpen(&m_hAcm,NULL,&wfex,(WAVEFORMATEX *)&wfd,NULL,NULL,(DWORD)this,0);
+	if(m_hAcm)
+		acmStreamSize(m_hAcm,wfex.nAvgBytesPerSec,&maxWaveoutSize,ACM_STREAMSIZEF_SOURCE);
+
+fine:
+	return i;
+	}
+
+LRESULT CVidsendView22::OnAudioFrameReady(WPARAM wParam, LPARAM lParam) {
+	AV_PACKET_HDR *avh=(AV_PACKET_HDR *)wParam;
+	int retVal=0;
+	MSG msg;
+
+	// questo evita che si crei un accavallamento di messaggi del video a scapito degli altri di Windows...
+//	if(PeekMessage(&msg,m_hWnd,WM_AUDIOFRAME_READY,WM_AUDIOFRAME_READY,PM_NOREMOVE))
+//		goto fine;
+	if(!HIWORD(wParam))		// questa patch serve perche' aprendo la finestra proprieta' della sorgente video (p.es. Logitech) arriva un messaggio identico e ovviamente crasha! l'alternativa era cambiare #messaggio WM_VIDEOFRAME_READY
+		goto fine;					// (ma anche nell'audio??)
+
+	if(GetDocument()->streamSocketA && avh) {
+		retVal=GetDocument()->streamSocketA->Manda(avh,lParam);
+
+// GESTITO come RAW, per ora, 2021 prove 
+		/*if(GetDocument()->Opzioni & CVidsendDoc2::usaVBAN) {
+			if(GetDocument()->streamSocketVBAN)
+				GetDocument()->streamSocketVBAN->Manda(avh,lParam);
+			}*/
+
+//		myTV->aFrameNum++;
+		}
+
+fine:
+/*	if(avh)
+		GlobalFree(avh);
+	if(pSBuf)
+		GlobalFree(pSBuf);*/
+
+	return (LRESULT)retVal;
+	}
+
+LRESULT CVidsendView22::OnRawAudioFrameReady(WPARAM wParam, LPARAM lParam) {
+	int retVal=0;
+	MSG msg;
+
+	// questo evita che si crei un accavallamento di messaggi del video a scapito degli altri di Windows...
+//	if(PeekMessage(&msg,m_hWnd,WM_RAWAUDIOFRAME_READY,WM_AUDIOFRAME_READY,PM_NOREMOVE))
+//		goto fine;
+
+	if(GetDocument()->Opzioni & CVidsendDoc2::usaVBAN) {
+		if(GetDocument()->streamSocketVBAN)
+			retVal=GetDocument()->streamSocketVBAN->Manda((const void *)wParam,lParam);
+		}
+
+	// prova MP3 streaming, 2023
+	if(GetDocument()->streamSocketA2)
+		retVal=GetDocument()->streamSocketA2->Manda((const void *)wParam,lParam);
+
+
+fine:
+/*	if(avh)
+		GlobalFree(avh);
+	if(pSBuf)
+		GlobalFree(pSBuf);*/
+
+	return (LRESULT)retVal;
+	}
+
+LRESULT CVidsendView22::OnMP3Finished(WPARAM wParam, LPARAM lParam) {
+
+	if(wParam) {
+		buttonP2->SetWindowText(">");
+		buttonC2->EnableWindow(lParam);
+		VUMeter2->SetWindowText(0);
+		progress2->SetPos(0);
+		}
+	else {
+		buttonP1->SetWindowText(">");
+		buttonC1->EnableWindow(lParam);
+		VUMeter1->SetWindowText(0);
+		progress1->SetPos(0);
+		}
+	return 1;
+	}
+
+
+WORD CVidsendView22::measureAudio(const short int *p,DWORD len) {
+	int i;
+	DWORD n,n1=len;
+	// wow, e una FFT? :) 2019
+	// v. BESTAUDIOPLAYER 2021!
+
+	n=0;
+	while(n1--) {
+		if(*p < 0)
+			n-=*p;
+		else
+			n+=*p;
+		p++;
+		}
+	n /= len;
+	return sqrt(n);
+	}
+
+
+UINT CVidsendView22::suonaMP3(LPVOID ptr) {
+	CVidsendView22 *v=(CVidsendView22*)*(DWORD*)ptr;
+	BYTE w=*((char *)ptr+4);
+	BYTE vol=*((BYTE *)ptr+5);
+	char *n=((char *)ptr+6);
+	CString S;
+	CJoshuaMP3Equalizer::EQUALIZER equalizer; 
+	CVidsendDoc22 *d=v->GetDocument();
+
+	char myBuf[256];
+
+//	EnterCriticalSection(&m_cs);
+	try {
+
+	if(!v->m_MP3player[w]) {
+
+		if(v->m_MP3player[w]=new CJoshuaMP3((DWORD)v)) {
+			v->m_MP3Thread[w]=AfxGetThread();
+//      v->m_MP3Thread[w]->m_bAutoDelete = FALSE;		// boh
+//	SetThreadPriority(v->m_MP3Thread[w],/*THREAD_PRIORITY_ABOVE_NORMAL*/ THREAD_PRIORITY_HIGHEST);
+
+			switch(d->m_Equalizzatore) {
+				default:		// non deve accadere!
+				case 0:
+					equalizer=CJoshuaMP3Equalizer::passaFlat;
+					break;
+				case 1:
+					equalizer=CJoshuaMP3Equalizer::equal_rock;
+					break;
+				case 2:
+					equalizer=CJoshuaMP3Equalizer::equal_pop;
+					break;
+				case 3:
+					equalizer=CJoshuaMP3Equalizer::equal_dance;
+					break;
+				case 4:
+					equalizer=CJoshuaMP3Equalizer::equal_classica;
+					break;
+				}
+
+//			v->m_MP3player[w]->suona(n,0,0,0,0, ,equalizer,vol/100.0,0);
+//			v->m_MP3player[w]->suonaDX(n,0,0,0,0,equalizer,vol/100.0 /*,1.0,0*/);
+			v->m_MP3player[w]->Suona2(n,d->Opzioni2 & CVidsendDoc22::attivaSchedaAudio2 ? 2 : 1,
+				equalizer,vol/100.0 /*,1.0*/);
+
+			v->PostMessage(WM_MP3_FINISHED,w,TRUE);
+/*			if(w) {// puttana la madonna non posso chiamare funzioni windows da qua o fa cagare
+				v->buttonP2->SetWindowText(">");
+				v->buttonC2->EnableWindow(TRUE);
+				v->VUMeter2->SetWindowText(0);
+				v->progress2->SetPos(0);
+				}
+			else {
+				v->buttonP1->SetWindowText(">");
+				v->buttonC1->EnableWindow(TRUE);
+				v->VUMeter1->SetWindowText(0);
+				v->progress1->SetPos(0);
+				}*/
+
+			/*v->busyAudio->Lock();
+			delete v->m_MP3player[w];
+			v->m_MP3player[w]=NULL;
+			v->busyAudio->Unlock();*/
+//porcamadonna			while(v->busyAudio2) ;
+		WaitForSingleObject(v->busyAudio3, 1000 /*INFINITE*/);
+			delete v->m_MP3player[w];
+			v->m_MP3player[w]=NULL;
+			}
+
+		}
+	if(ptr)		// memoria allocata con malloc o tcsdup
+		free(ptr);
+//	myMP3Thread=NULL;		// rischia di far saltare la stop() che lo controlla!
+
+
+
+		}
+	catch(...) {
+//			AfxMessageBox("exception");
+			CSimpleException e;
+		e.GetErrorMessage(myBuf, 127);
+		theApp.FileSpool->print(CLogFile::flagError,"Exception in MP3");
+		theApp.FileSpool->print(CLogFile::flagError,myBuf);
+
+/*		v->busyAudio->Lock();
+		delete v->m_MP3player[w];
+		v->m_MP3player[w]=NULL;
+		v->busyAudio->Unlock();*/
+//		while(v->busyAudio2) ;
+		WaitForSingleObject(v->busyAudio3, 1000 /*INFINITE*/);
+		delete v->m_MP3player[w];
+		v->m_MP3player[w]=NULL;
+		}
+		
+	//AfxEndThread(1);
+
+	return 1;
+	}
+
+int CVidsendView22::stopMP3(BYTE w) {
+	int i=-1;
+	MSG msg;
+	BOOL bWait;
+
+//	EnterCriticalSection(&m_cs);
+
+	if(m_MP3player[w]) {
+		m_MP3player[w]->stop();
+
+		if(m_MP3Thread[w]) {
+			bWait=TRUE;
+			while(bWait) {
+				switch(MsgWaitForMultipleObjects(1, &m_MP3Thread[w]->m_hThread,		// serve perché ci vengono postati messaggi dal thread WAVEIN...
+														 FALSE, INFINITE, QS_ALLINPUT)) {
+					case WAIT_OBJECT_0:
+						bWait=FALSE;
+						break;
+					case WAIT_OBJECT_0+1:
+						if(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+							TranslateMessage(&msg);
+							DispatchMessage(&msg);
+							}
+						break;
+					default:
+			//      return FALSE; // unexpected failure ovvero thread terminato di suo
+						bWait=FALSE;
+						}
+					}
+//			i=MsgWaitForMultipleObjects(1,&m_MP3Thread[w]->m_hThread,FALSE,2000,QS_ALLINPUT);		// usare questa se il thread usa window ecc..
+// [non viene mai segnalato... 2023]
+/*			DWORD ti=timeGetTime()+3000,i;
+			do {
+				i=WaitForSingleObject(m_MP3Thread[w]->m_hThread,3000);
+//				PumpMessage(); no! cazzo!! rientra
+				} while(i != WAIT_OBJECT_0 && i != 0xffffffff && ti>timeGetTime());*/
+			if(i != WAIT_OBJECT_0 && i != 0xffffffff /* handle invalidato se il thread si è chiuso!*/) {
+				TerminateThread(m_MP3Thread[w]->m_hThread,-1);
+//				delete m_MP3Canzoni;
+//				m_MP3Canzoni=NULL;
+				}
+			}
+		m_MP3Thread[w]=NULL;
+
+/*		busyAudio->Lock();
+		delete m_MP3player[w];
+		m_MP3player[w]=NULL;
+		busyAudio->Unlock();*/
+//PORCODIO		while(busyAudio2) Sleep(50);
+
+//		WaitForSingleObject(busyAudio3, 1000 /*INFINITE*/);		// porcospiritos
+
+		bWait=TRUE;
+		while(bWait) {
+			switch(MsgWaitForMultipleObjects(1, &busyAudio3,		// serve perché ci vengono postati messaggi dal thread WAVEIN...
+													 FALSE, INFINITE, QS_ALLINPUT)) {
+				case WAIT_OBJECT_0:
+					bWait=FALSE;
+					break;
+				case WAIT_OBJECT_0+1:
+					if(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+						TranslateMessage(&msg);
+						DispatchMessage(&msg);
+						}
+					break;
+				default:
+		//      return FALSE; // unexpected failure
+					bWait=FALSE;
+					}
+				}
+
+		delete m_MP3player[w];
+		m_MP3player[w]=NULL;
+
+		i=1;
+		}
+	else
+		i=0;
+
+
+	return i;
+	}
+
+
+int CVidsendView22::playSound(BYTE q,BYTE volume) {
+	CVidsendDoc22 *pDoc=GetDocument();
+  return playSound(pDoc->WAVFiles[pDoc->bBanco][q],volume,q);
+	}
+int CVidsendView22::playSound(const char *sndFile,BYTE volume,BYTE q) {
+	BOOL fOk;
+	CWave wave;
+	TCHAR path[MAX_PATH];
+	// così si sposta nella cartella di lavoro! se non è specificato path nei suoni
+	// ..perché le dialog file lo cambiano!
+	GetModuleFileName(NULL, path, MAX_PATH);
+	PathRemoveFileSpec(path);
+	SetCurrentDirectory(path);
+
+//	busyAudio->Lock();
+//	while(busyAudio2) ;
+	WaitForSingleObject(busyAudio3, 1000 /*INFINITE*/);
+	m_DS->Destroy();
+//	busyAudio->Unlock();
+
+	if(GetDocument()->Opzioni2 & CVidsendDoc22::preascoltoMono) {
+		wave.Create(sndFile);
+		soundLength=wave.GetDataLen();
+		wave.GetFormat(soundWf.wf);
+		if(soundSample)
+			delete soundSample;
+		soundSample=new BYTE[soundLength];
+		wave.GetData(soundSample,soundLength);
+		}
+	else {
+		fOk = m_DS->Create(m_DSound, sndFile, wave, DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_REGULAR);
+//		int i=GetLastError();
+
+		if(fOk) {
+			if(q>=0 && q<9) {
+				m_DS->SetNotifyFunction(soundNotifyCallback,(DWORD)button[q+1]);
+		//		DWORD dwOffset[] = { 0, DSBPN_OFFSETSTOP };
+		//		m_DS->SetNotificationPositions(dwOffset, 2);
+				m_DS->SetAutoNotificationPositions(20);
+				}
+
+			m_DS->SetCurrentPosition(0);
+			m_DS->SetVolume(!(buttonPre3->GetState() & BST_CHECKED) ? DSBVOLUME_MIN : volume*40 +DSBVOLUME_MIN  +6000 /*DSVOLUME_TO_DB(volume)*/);
+			m_DS->Play(0);
+
+//			soundLength=m_DS->m_DSBuffer.m_dwImageLen;
+			soundLength=wave.GetDataLen();
+//			m_DS->m_DSBuffer.m_pDSBuffer->GetFormat(&soundWf.wf,sizeof(soundWf.wf),NULL);
+			wave.GetFormat(soundWf.wf);
+// forse serve? o abbiam tempo da sopra?	WaitForSingleObject(busyAudio3, 1000 /*INFINITE*/);
+			if(soundSample)
+				delete soundSample;
+			soundSampleStart=NULL;
+			soundSample=new BYTE[soundLength];
+			wave.GetData(soundSample,soundLength);
+			}
+		else {
+	//		theApp.FileSpool->print(CLogFile::flagInfo,"errore: IMPOSSIBILE SUONARE -%s-",sndFile);
+			}
+		}
+
+	return fOk;
+	}
+
+int CVidsendView22::playSound(const BYTE *sndSample,BYTE volume) {
+	BOOL fOk =TRUE;
+
+	m_DS->Destroy();
+	if(sndSample) {
+		fOk = m_DS->Create(m_DSound, sndSample, 22050, NULL, DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_REGULAR);
+		if(fOk) {
+			m_DS->SetNotifyFunction(soundNotifyCallback,0);
+			DWORD dwOffset[] = { 0, DSBPN_OFFSETSTOP };
+			m_DS->SetNotificationPositions(dwOffset, 2);
+
+			m_DS->SetCurrentPosition(0);
+			m_DS->SetVolume(volume*40 +DSBVOLUME_MIN  +6000 /*DSVOLUME_TO_DB(volume)*/);
+			m_DS->Play(0);
+			}
+		else {
+//		theApp.FileSpool->print(CLogFile::flagInfo,"errore: IMPOSSIBILE SUONARE sample/-11000");
+			}
+		}
+	else {
+//		fOk=m_DSound->Stop();
+		}
+
+	return fOk;
+	}
+
+LONG CVidsendView22::soundNotifyCallback(void *v,LONG f, LONG f2) { // static function
+	CRoundButton *btn=(CRoundButton *)v;
+
+//	TRACE("- CSound::NotifyCallback: %d\n", f);
+
+	//	ScopeGuardMutex guard(&m_exprMutex);		dovuto a STATIC??
+	const BYTE *p;
+	BYTE p1;
+
+	theApp.FileSpool->print(CLogFile::flagInfo,"- CSound::NotifyCallback: %d\n", f);
+
+	switch(f) {
+		case -3:			// totale secondi .. fare
+			f2;
+			break;
+		case DSBPN_OFFSETSTOP:
+//		case 20:
+			CVidsendView22::pThis->inSound=0;
+//		CSound::pThis->SetDlgItemText(IDC_STATIC_EVENT, TEXT("stopped"));
+//		CSound::pThis->GetDlgItem(IDC_PLAYSTOP)->SetWindowText("Play");
+//		CSound::pThis->GetDlgItem(IDC_CHECK_REPEAT)->EnableWindow();
+//		CSound::pThis->m_bRunning = FALSE;
+			btn->SetColors(RGB(192,192,192),RGB(96,96,96),RGB(64,64,64));
+			btn->SetValues();
+//			((CVidsendView22*)btn->GetParent())->VUMeter4->SetWindowText(0);		
+//strano... restituisce pattume..
+			break;
+		case -2:
+//			v->m_DS->Destroy();
+			btn->SetColors(RGB(192,192,192),RGB(96,96,96),RGB(64,64,64));
+			btn->SetValues();		// serve se si fa partire un suono mentre ne gira un altro!
+			break;
+		case 1:
+			btn->SetColors(RGB(192,192,192),RGB(210,190,80),RGB(64,64,64)); 
+		default:	
+//		CSound::pThis->SetDlgItemText(IDC_STATIC_EVENT, TEXT("started"));
+			btn->SetValues(f*(CRoundButton::VALUES_RANGE/20)); 
+			CVidsendView22* v2=(CVidsendView22*)(btn->GetParent());
+//strano... restituisce pattume..
+
+//			((CVidsendView22*)btn->GetParent())->VUMeter4->SetWindowText(15   );		// fare!
+			break;
+		}
+
+	return 0;
+	}
+
+LONG CVidsendView22::mp3NotifyCallback(void *p, DWORD p1, DWORD p2, DWORD p3) { // static function
+	CJoshuaMP3 *m=(CJoshuaMP3 *)p;
+	CVidsendView22 *v=(CVidsendView22*)m->tag;
+
+	switch(p1) {
+		case 1:			// vumeter-value
+			if(p==v->m_MP3player[0])
+				v->VUMeter1->SetWindowText(p2/5);
+			else
+				v->VUMeter2->SetWindowText(p2/5);
+			break;
+		case 2:			// totale frame/secondi
+			if(p==v->m_MP3player[0])
+				v->progress1->SetRange(0,p2);
+			else
+				v->progress2->SetRange(0,p2);
+			break;
+		case 3:			// frame attualmente suonato
+			if(p==v->m_MP3player[0])
+				v->progress1->SetPos(p2);
+			else
+				v->progress2->SetPos(p2);
+			break;
+		}
+	return 0;
+	}
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2306,13 +5565,9 @@ void CVidsendView3::OnDestroy() {
 	char myBuf[64];
 	
 	CListView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
 
 
@@ -2487,7 +5742,7 @@ connetti:
 		}
 	}
 
-int CVidsendView4::doConnect(char *myAddress,struct CHAT_INFO *si) {
+int CVidsendView4::doConnect(const char *myAddress,struct CHAT_INFO *si) {
 	CVidsendDoc4 *d=GetDocument();
 	int i=0;
 	char myBuf[128];
@@ -2584,6 +5839,7 @@ int CVidsendView4::endConnect() {
 
 
 void CVidsendView4::OnUpdateConnessioneDisconnetti(CCmdUI* pCmdUI) {
+	
 	pCmdUI->Enable(cliSock->m_hSocket != INVALID_SOCKET);
 	}
 
@@ -3828,13 +7084,8 @@ void CVidsendView4::OnDestroy() {
 	char myBuf[64];
 	
 	CFormView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
 
 
@@ -4055,7 +7306,7 @@ void CVidsendView5::OnNavigazionePaginainiziale() {
 
 void CVidsendView5::OnNavigazioneCerca() {
 
-	Navigate("http://www.altavista.com");		// fare di meglio!
+	Navigate("http://www.google.com");		// fare di meglio! :) 2023
 	// anche GoSearch();
 	}
 
@@ -4068,14 +7319,14 @@ void CVidsendView5::OnNavigazioneInterrompi() {
 void CVidsendView5::OnUpdateNavigazioneInterrompi(CCmdUI* pCmdUI) {
 //	int i=GetReadyState();
 //	pCmdUI->Enable(i==READYSTATE_LOADING || i==READYSTATE_LOADED || i==READYSTATE_INTERACTIVE);
-	pCmdUI->Enable(GetBusy());
+	pCmdUI->Enable(GetBusy() ? TRUE : FALSE);
 	}
 
 void CVidsendView5::OnRButtonDown(UINT nFlags, CPoint point) {
 	// TODO: Add your message handler code here and/or call default
 	
 	CHtmlView::OnRButtonDown(nFlags, point);
-}
+	}
 
 void CVidsendView5::OnDestroy() {
 	CVidsendDoc5 *d=GetDocument();
@@ -4083,15 +7334,9 @@ void CVidsendView5::OnDestroy() {
 	char myBuf[64];
 	
 	CHtmlView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
-
 
 
 
@@ -4123,6 +7368,10 @@ BEGIN_MESSAGE_MAP(CVidsendView6, CTreeView)
 	ON_COMMAND(ID_CONNESSIONI_MANDAMESSAGGIO, OnConnessioniMandamessaggio)
 	ON_UPDATE_COMMAND_UI(ID_CONNESSIONI_MANDAMESSAGGIO, OnUpdateConnessioniMandamessaggio)
 	ON_COMMAND(ID_CONNESSIONI_MANDAMESSAGGIOATUTTI, OnConnessioniMandamessaggioatutti)
+	ON_COMMAND(ID_VISUALIZZA_ANCHEDIRECTORYSERVER, OnVisualizzaAncheDirectoryServer)
+	ON_UPDATE_COMMAND_UI(ID_VISUALIZZA_ANCHEDIRECTORYSERVER, OnUpdateVisualizzaAncheDirectoryServer)
+	ON_COMMAND(ID_VISUALIZZA_IPLOOKUP, OnVisualizzaIpLookup)
+	ON_UPDATE_COMMAND_UI(ID_VISUALIZZA_IPLOOKUP, OnUpdateVisualizzaIpLookup)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -4164,16 +7413,9 @@ void CVidsendView6::OnDestroy() {
 	char myBuf[64];
 	
 	CTreeView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
-
-
 
 
 int CVidsendView6::update() {
@@ -4182,6 +7424,7 @@ int CVidsendView6::update() {
 	CString aIP,S;
 	UINT aPort;
 	DWORD oldSel=0;
+	CVidsendDoc6 *d=GetDocument();
 	CWebSrvSocket2_base *myRoot;
 
 	if(tp0=GetTreeCtrl().GetSelectedItem()) {
@@ -4215,6 +7458,7 @@ int CVidsendView6::update() {
 		}
 	if(theApp.theServer) {
 		CControlSrvSocket2 *myRoot;
+		CStreamSrvSocket2 *myRoot2;
 		POSITION po,po1;
 
 		po=theApp.theServer->controlSocket->cSockRoot.GetHeadPosition();
@@ -4237,6 +7481,81 @@ int CVidsendView6::update() {
 
 
 
+
+					tp1=GetTreeCtrl().InsertItem(S,tp0);
+					GetTreeCtrl().SetItemImage(tp1,1,1);
+					GetTreeCtrl().SetItemData(tp1,(DWORD)myRoot);
+					}
+				} while(po);
+			}
+		
+
+		po=theApp.theServer->streamSocketA2->cSockRoot.GetHeadPosition();		// mp3 stream, 2023
+		if(po) {
+			do {
+				po1=po;
+				myRoot2=theApp.theServer->streamSocketA2->cSockRoot.GetNext(po);
+				if(myRoot2->m_hSocket != INVALID_SOCKET) {
+					myRoot2->GetPeerName(aIP,aPort);
+					S=aIP;
+
+					tp1=GetTreeCtrl().InsertItem(S,tp0);
+					GetTreeCtrl().SetItemImage(tp1,1,1);
+					GetTreeCtrl().SetItemData(tp1,(DWORD)myRoot);
+					}
+				} while(po);
+			}
+		}
+	if(theApp.theServer2) {
+		POSITION po;
+		CStreamSrvSocket2 *myRoot;
+
+		po=theApp.theServer2->streamSocketA2->cSockRoot.GetHeadPosition(); // mp3 stream, 2023
+		if(po) {
+			do {
+				myRoot=theApp.theServer2->streamSocketA2->cSockRoot.GetNext(po);
+				if(myRoot->m_hSocket != INVALID_SOCKET) {
+					myRoot->GetPeerName(aIP,aPort);
+					S=aIP;
+
+					char iploc[200];
+					*iploc=0;
+/*					aIP="5.5.5.5";
+							theApp.subGetIPLocation(aIP,iploc); 
+							if(*iploc) {
+								char *s;
+								i=5;
+								s=strtok(iploc,",");
+								if(s) {
+									while(i--)
+										s=strtok(NULL,",");
+									}
+								S+=" (";
+								S+=s;
+								S+=')';
+								}*/
+					if(!CSocketEx::IsLocalAddress((LPCTSTR)aIP)) {
+						if(d->Opzioni & CVidsendDoc6::visualizzaIpLookup) {
+							if(myRoot->IPlocation.IsEmpty()) {
+								theApp.subGetIPLocation(aIP,iploc); 
+								if(*iploc) {
+									char *s;
+									i=5;
+									s=strtok(iploc,",");
+//									if(s) {
+										while(i-- && s)
+											s=strtok(NULL,",");
+//										}
+									myRoot->IPlocation=s;
+									}
+								}
+							if(!myRoot->IPlocation.IsEmpty()) {
+								S+=" (";
+								S+=myRoot->IPlocation;
+								S+=')';
+								}
+							}
+						}
 
 					tp1=GetTreeCtrl().InsertItem(S,tp0);
 					GetTreeCtrl().SetItemImage(tp1,1,1);
@@ -4341,7 +7660,7 @@ int CVidsendView6::update() {
 							myRoot->cliTimeOut=timeGetTime()+AUTHSOCK_TIMEOUT;		// 2min...
 						else {
 							if(myRoot->cliTimeOut < timeGetTime()) {
-								myRoot->myParent->doDelete(myRoot);
+								myRoot->m_Parent->doDelete(myRoot);
 								if(theApp.FileSpool) {
 									theApp.FileSpool->print(CLogFile::flagInfo2,"  cancellazione socket Dir che non risponde: %s",(LPCTSTR)aIP);
 									}
@@ -4605,7 +7924,31 @@ void CVidsendView6::OnUpdateConnessioniInseriscinegliindesiderati(CCmdUI* pCmdUI
 void CVidsendView6::OnConnessioniMandamessaggioatutti() {
 	// TODO: Add your command handler code here
 	
-}
+	}
+
+void CVidsendView6::OnVisualizzaIpLookup() {
+	CVidsendDoc6 *d=GetDocument();
+
+	d->Opzioni ^= CVidsendDoc6::visualizzaIpLookup;
+	}
+
+void CVidsendView6::OnUpdateVisualizzaIpLookup(CCmdUI* pCmdUI) {
+	CVidsendDoc6 *d=GetDocument();
+
+	pCmdUI->SetCheck(d->Opzioni & CVidsendDoc6::visualizzaIpLookup ? 1 : 0);
+	}
+
+void CVidsendView6::OnVisualizzaAncheDirectoryServer() {
+	CVidsendDoc6 *d=GetDocument();
+
+	d->Opzioni ^= CVidsendDoc6::mostraAncheDirSrv;
+	}
+
+void CVidsendView6::OnUpdateVisualizzaAncheDirectoryServer(CCmdUI* pCmdUI) {
+	CVidsendDoc6 *d=GetDocument();
+
+	pCmdUI->SetCheck(d->Opzioni & CVidsendDoc6::mostraAncheDirSrv ? 1 : 0);
+	}
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4724,7 +8067,7 @@ int CVidsendView7::update() {
 						myRoot->cliTimeOut=timeGetTime()+AUTHSOCK_TIMEOUT;		// 1.5min...
 					else {
 						if(myRoot->cliTimeOut < timeGetTime()) {
-							myRoot->myParent->doDelete(myRoot);
+							myRoot->m_Parent->doDelete(myRoot);
 							if(theApp.FileSpool) {
 								theApp.FileSpool->print(2,"  cancellazione socket Dir che non risponde: %s",(LPCTSTR)aIP);
 								}
@@ -4825,40 +8168,30 @@ void CVidsendView7::OnDestroy() {
 	char myBuf[64];
 	
 	CTreeView::OnDestroy();
-	
-	if(theApp.Opzioni & CVidsendApp::saveLayout) {
-		GetParent()->GetWindowRect(&rc);	// coord. schermo della mia MDIChildFrmae...
-		GetParent()->GetParent()->ScreenToClient(&rc);	// ... diventano coord. client rispetto al MDI padre (che NON e' theApp.m_pMainWnd !! ce n'è una un mezzo...
-		wsprintf(myBuf,"%d,%d,%d,%d",rc.left,rc.top,rc.right,rc.bottom);
-		d->WritePrivateProfileString(IDS_COORDINATE,myBuf);
-		}
+	if(theApp.Opzioni & CVidsendApp::saveLayout)
+		d->savelayout();
 	}
 
 
 
-
-
-void CVidsendView7::OnComputerDisconnetti() 
-{
-	// TODO: Add your command handler code here
+void CVidsendView7::OnComputerDisconnetti() {
 	
-}
-
-void CVidsendView7::OnUpdateComputerDisconnetti(CCmdUI* pCmdUI) 
-{
-	// TODO: Add your command update UI handler code here
 	
-}
+	}
 
-void CVidsendView7::OnComputerMandamessaggio() 
-{
-	// TODO: Add your command handler code here
+void CVidsendView7::OnUpdateComputerDisconnetti(CCmdUI* pCmdUI) {
 	
-}
+	
+	}
 
-void CVidsendView7::OnUpdateComputerMandamessaggio(CCmdUI* pCmdUI) 
-{
-	// TODO: Add your command update UI handler code here
+void CVidsendView7::OnComputerMandamessaggio() {
 	
-}
+	
+	}
+
+void CVidsendView7::OnUpdateComputerMandamessaggio(CCmdUI* pCmdUI) {
+	
+	
+	}
+
 

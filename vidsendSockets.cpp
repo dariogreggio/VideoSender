@@ -14,6 +14,7 @@
 #include <iphlpapi.h>
 #include "qarray.h"
 #include <winsock.h>
+#include "MP3Coder.h"
 
 #ifndef _NEWMEET_MODE
 #include "ping.h"
@@ -106,6 +107,7 @@ rifo2:
 // metodo che legge da whatsmyip.com...
 //	srv=_T("www.whatismyip.org");			// anche http://checkip.dyndns.org/
 	srv=_T("checkip.dyndns.com");			// anche http://checkip.dyndns.org/ o checkip.net, porta 80 o 8245
+// anche, 2021: http://rl.ammyy.com/
 
 
 	if(theApp.debugMode)
@@ -369,16 +371,43 @@ char *CSocketEx::getMyMACAddress(char *s,int q) {
 	return s;
 	}
 
+WORD CSocketEx::getPort() {
+	struct sockaddr_in sin;
+	int addrlen = sizeof(sin);
+
+	if(getsockname(m_hSocket, (struct sockaddr *)&sin, &addrlen) == 0 &&
+		sin.sin_family == AF_INET &&
+		addrlen == sizeof(sin)) {
+		int local_port = ntohs(sin.sin_port);
+		return local_port;
+		}
+	else
+			; // handle error
+	return 0;
+	}
+
+
 int CSocketEx::IsLocalAddress(const char *s) {
 	int n;
 
 	n=atoi(s);
-	if(n==192 || n==127 || n==10)	// migliorare...
+	if(n==192) {	// migliorare...
+		n=atoi(s+4);
+		if(n==168)
+			return 1;
+		else
+			return 0;
+		}
+	else if(n==127 || n==10)	// migliorare...
 		return 1;
 	else
 		return 0;
 	}
 
+int CSocketEx::IsBroadcastAddress(const char *ip) {
+
+  return !_tcsncmp(ip + _tcslen(ip) - 3, "255", 3);
+	}
 
 // ---------------------------------------------------------------------------------------
 void CTimeSocket::OnAccept(int nErr) {
@@ -542,6 +571,7 @@ void CWebSrvSocket::sincronizzaSessioni(CWebSrvSocket2_base *r) {
 
 
 /* -------------------------------------------------------------------*/
+// https://en.wikipedia.org/wiki/List_of_HTTP_header_fields
 const TCHAR *CHTTPHeader::tagHttp=_T("HTTP/");
 const TCHAR *CHTTPHeader::tagServer=_T("Server:");
 const TCHAR *CHTTPHeader::tagDate=_T("Date:");
@@ -553,6 +583,7 @@ const TCHAR *CHTTPHeader::tagContentLength=_T("Content-Length:");
 const TCHAR *CHTTPHeader::tagContentDisposition=_T("Content-Disposition:");
 const TCHAR *CHTTPHeader::tagContentLocation=_T("Content-Location:");
 const TCHAR *CHTTPHeader::tagConnection=_T("Connection:");
+const TCHAR *CHTTPHeader::tagUpgrade=_T("Upgrade:");
 const TCHAR *CHTTPHeader::tagAccept=_T("Accept:");
 const TCHAR *CHTTPHeader::tagAcceptLanguage=_T("Accept-Language:");
 const TCHAR *CHTTPHeader::tagAcceptCharset=_T("Accept-Charset:");
@@ -561,6 +592,7 @@ const TCHAR *CHTTPHeader::tagTransferEncoding=_T("Transfer-Encoding:");		//gesti
 const TCHAR *CHTTPHeader::tagCacheControl=_T("Cache-Control:");
 const TCHAR *CHTTPHeader::tagExpires=_T("Expires:");
 const TCHAR *CHTTPHeader::tagKeepAlive=_T("Keep-Alive:");
+const TCHAR *CHTTPHeader::tagClose=_T("close");
 const TCHAR *CHTTPHeader::tagEtag=_T("Etag:");
 const TCHAR *CHTTPHeader::tagLocation=_T("Location:");
 const TCHAR *CHTTPHeader::tagModified=_T("Last-Modified:");
@@ -574,6 +606,7 @@ const TCHAR *CHTTPHeader::tagPragma=_T("Pragma:");
 const TCHAR *CHTTPHeader::tagNoCache=_T("No-Cache:");
 const TCHAR *CHTTPHeader::tagIfModifiedSince=_T("If-Modified-Since:");
 const TCHAR *CHTTPHeader::tagProxyConnection=_T("Proxy-Connection:");
+const TCHAR *CHTTPHeader::tagDeprecatedWarning=_T("Deprecated-Warning:");
 
 CHTTPHeader::CHTTPHeader() {
 
@@ -582,7 +615,7 @@ CHTTPHeader::CHTTPHeader() {
 //CHTTPHeader::~CHTTPHeader() {
 //	}
 
-const char *CHTTPHeader::AddToken(int t,const char *s1,const char *s2,CTime t1,DWORD n1) {
+const char *CHTTPHeader::getTagString(enum HEADER_TAG t) {
 	const char *p=NULL;
 	
 	switch(t) {
@@ -615,6 +648,9 @@ const char *CHTTPHeader::AddToken(int t,const char *s1,const char *s2,CTime t1,D
 		case TAG_CONNECTION:
 			p=tagConnection;
 			break;
+		case TAG_UPGRADE:
+			p=tagUpgrade;
+			break;
 		case TAG_CACHE_CONTROL:
 			p=tagCacheControl;
 			break;
@@ -643,6 +679,7 @@ const char *CHTTPHeader::AddToken(int t,const char *s1,const char *s2,CTime t1,D
 			p=tagAuthorization;
 			break;
 		case TAG_ALLOW:
+			p=_T("Allow: ");
 			break;
 		case TAG_ACCEPT:
 			p=tagAccept;
@@ -662,18 +699,31 @@ const char *CHTTPHeader::AddToken(int t,const char *s1,const char *s2,CTime t1,D
 		case TAG_SET_COOKIE:
 			p=tagSetCookie;
 			break;
-		case 0:			// per passare stringhe extra...
+		case TAG_DEPRECATED_WARNING:
+			p=tagDeprecatedWarning;
+			break;
+		case TAG_NULL:			// per passare stringhe extra...
 			break;
 		default:
 			ASSERT(FALSE);
 			break;
 		}
 
+	return p;
+	}
+
+#if 0 //2022
+const char *CHTTPHeader::AddToken(enum HEADER_TAG t,const char *s1,const char *s2,CTime t1,DWORD n1) {
+	const char *p;
+	
+	p=getTagString(t);
+
 	if(p) {
 		m_Buffer+=p;
 		m_Buffer+=_T(" ");
 		}
-	m_Buffer+=s1;
+	if(s1)
+		m_Buffer+=s1;
 	if(s2)
 		m_Buffer+=s2;
 	if(n1) {
@@ -694,6 +744,66 @@ const char *CHTTPHeader::AddToken(int t,const char *s1,const char *s2,CTime t1,D
 
 	return m_Buffer;
 	}
+#endif
+
+const char *CHTTPHeader::AddToken(enum HEADER_TAG t,const char *s1,const char *s2) {
+	const char *p;
+	
+	p=getTagString(t);
+
+	if(p) {
+		m_Buffer+=p;
+		m_Buffer+=_T(" ");
+		}
+	m_Buffer+=s1;
+	if(s2)
+		m_Buffer+=s2;
+
+	m_Buffer+=CWebSrvSocket2_base::CRLF;
+
+	return m_Buffer;
+	}
+
+const char *CHTTPHeader::AddToken(const char *s) {
+
+	m_Buffer+=s;
+	m_Buffer+=CWebSrvSocket2_base::CRLF;
+	return m_Buffer;
+	}
+
+const char *CHTTPHeader::AddToken(enum HEADER_TAG t,DWORD n1) {
+	const char *p;
+	
+	p=getTagString(t);
+
+	if(p) {
+		m_Buffer+=p;
+		m_Buffer+=_T(" ");
+		}
+	CString S;
+	S.Format(_T("%u"),n1);
+	m_Buffer+=S;
+
+	m_Buffer+=CWebSrvSocket2_base::CRLF;
+
+	return m_Buffer;
+	}
+
+const char *CHTTPHeader::AddToken(enum HEADER_TAG t,CTime t1) {
+	const char *p;
+	
+	p=getTagString(t);
+
+	if(p) {
+		m_Buffer+=p;
+		m_Buffer+=_T(" ");
+		}
+	m_Buffer+=asctime(t1.GetLocalTm());
+
+	m_Buffer+=CWebSrvSocket2_base::CRLF;
+
+	return m_Buffer;
+	}
 
 void CHTTPHeader::Finalize() {
 	
@@ -701,6 +811,14 @@ void CHTTPHeader::Finalize() {
 //	m_Buffer+=CWebSrvSocket2_base::CRLF;
 	}
 
+
+const TCHAR *CHTTPBody::CRLF=_T("\r\n");
+CHTTPBody::CHTTPBody() {
+
+	isInFile=0;
+	forcedLength=0;
+	fileName.Empty();
+	}
 
 int CHTTPBody::dumpToFile(LPCTSTR nomefile) {
 	int lenSoFar=GetLength();
@@ -739,7 +857,6 @@ int CHTTPBody::dumpToFile(LPCTSTR nomefile) {
 #endif
 		return 0;
 		}
-
 
 	}
 
@@ -790,29 +907,76 @@ void CWebSrvSocket2_base::OnClose(int nErr) {
 
 void CWebSrvSocket2_base::OnReceive(int nErr) {
 	BYTE myBuf[2048];
-	char string[2048],header[512],*p1,*s,*s1,*parms;
+	char string[2048],*s,*s1,*parms;
 	int i,n;
-	DWORD len;
+
+
+/*	da W3MFC di PJNaughter: la lettura viene fatta con
+BOOL CHttpSocket::ReadResponse(LPSTR pszBuffer, int nInitialBufSize, LPSTR pszTerminator, LPSTR* ppszOverFlowBuffer, DWORD dwTimeout, int nGrowBy)
+
+	che loopa fino a un dato timeout, e aspetta di vedere il terminatore
+	*/
+
+/*	...invece, da sorgente terminale USB di Ktronic...
+
+  // Note that since we've been called from the OnReceive notification
+  // handler, then if bytesToRead is zero, it must mean the client
+  // has closed the connection.
+  DWORD  bytesToRead;
+  IOCtl(FIONREAD, &bytesToRead);    // Anything to get?
+  if(bytesToRead == 0)
+    // Delete me.
+    pServer->KillSocket(this);
+  else
+  {
+    INT req;
+
+    if(Receive(&req, sizeof(req), 0) == SOCKET_ERROR)
+    {
+      INT err = GetLastError();
+      if(err == WSAECONNRESET)        // Remote has terminated (gracefully).
+      {
+        STRACE("CServerClient::ProcessPendingRead - WSAECONNERESET.\n");
+        // Delete me.
+        pServer->KillSocket(this);
+      }
+    }
+    // Send request off for processing.
+    ProcessReq(req);
+  }
+*/
+
 
 	if((i=Receive(myBuf,1000)) >= 0) {
 		m_Parent->recvBytes+=i;
 
 		ZeroMemory(&Msg,sizeof(Msg));
-		m_LineText->handleReadData((BYTE *)myBuf,i);
+		m_LineText->handleReadData(myBuf,i);
 		myBuf[1000]=0;
 
-		if(theApp.debugMode>2)
-			theApp.FileSpool->print(CLogFile::flagInfo,(char *)myBuf);
+
+	/*	CFile pppf;
+		pppf.Open("\\post.txt",CFile::modeCreate | CFile::modeWrite);
+		pppf.Write(myBuf,i);
+		pppf.Close();*/
+
+
+//		theApp.FileSpool->print(CLogFile::flagInfo,myBuf);
 		if(m_LineText->indexOf(CRLF2)) {
 			m_LineText->readText((char *)myBuf);
 			s=(char *)myBuf;
 //GET Retrieve data specified in the URL
-//head Return HTTP server response header informationonly
+//HEAD Return HTTP server response header information only
 //POST Send information to the HTTP server for further action
 //PUT Send information to the HTTP server for storage
 //DELETE Delete the resource specified in the URL
 //LINK  Establish one or more link relationships between specified URLs
  
+
+//				theApp.FileSpool->print(CLogFile::flagInfo,"  COMANDO HTTP: %s",s);
+
+
+
 			if(!_tcsnicmp((char *)myBuf,_T("get"),3)) {
 				s+=4;			// inizio nome host
 				Msg.cmd=200;
@@ -834,7 +998,19 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 				s+=7;			// inizio nome host
 				Msg.cmd=204;
 				}
-			else {			// WEBDAV (per esempio) finisce qui
+			else if(!_tcsnicmp((char *)myBuf,_T("options"),7)) {
+				s+=8;			// inizio nome host
+				Msg.cmd=205;
+				}
+			else if(!_tcsnicmp((char *)myBuf,_T("propfind"),8)) {
+				s+=9;			// inizio nome host
+				Msg.cmd=210;
+				}
+			else if(!_tcsnicmp((char *)myBuf,_T("webdav"),6)) {
+				s+=7;			// inizio nome host
+				Msg.cmd=211;
+				}
+			else {			// [WEBDAV (per esempio) finisce qui]
 				Msg.cmd=400;
 				}
 
@@ -844,8 +1020,6 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 			while(*s1!=' ' && *s1)
 				s1++;
 			*s1=0;
-			_tcscpy(string,s);
-			parseQuery(m_LineText,&Msg);
 
 			s1++;
 			if(tolower(*s1) == 'h')
@@ -855,36 +1029,43 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 				_tcsncpy(s1u,s1,127);
 				s1u[127]=0;
 				_tcsupr(s1u);
-				if(s2=_tcsstr(s1u,_T("HTTP")))			// fare case-insensitive
+				if(s2=(char *)stristr(s1u,_T("HTTP")))			// uso case-insensitive
 					Msg.protocolVersion=MAKELONG(s2[7]-'0',s2[5]-'0');		// 
 				else
 					Msg.protocolVersion=MAKELONG(0,0);			// non trovato...
 				// bisognerebbe forse mettere 0.9 e forzare l'uso del solo "GET"...
 				}
 
-			_tcscpy(string,s);
+			_tcsncpy(string,s,2047);
+			string[2047]=0;
 			*m_LineText->commLogin=0;
 			*m_LineText->commPswd=0;
 			parseQuery(m_LineText,&Msg);
 			if(*m_LineText->commLogin) {
 				//AfxMessageBox(m_LineText->commLogin);
-				// con GUEST non passa... perché le sue caratteristiche sono "0"... che facciamo???
+				// con GUEST non passa... perch le sue caratteristiche sono "0"... che facciamo???
 				if(!(proprieta & (loggedAsUser | loggedAsSupervisor))) {
-#ifdef USA_AUTENTICAZIONE 
-					doLogin(m_LineText->commLogin,m_LineText->commPswd,NULL);
-#endif
+//					doLogin(m_LineText->commLogin,m_LineText->commPswd,NULL);
 					}	
 				}
 
-			/*if(Msg.cmd == 201) {			// gestisco i parametri del "post" NON + 2017, v. di là
+			/*if(Msg.cmd == 201) {			// gestisco i parametri del "post" NON + 2017, v. di l
 				n=1;
-				myLineText->readTextRaw((BYTE *)myBuf,&n);
+				m_LineText->readTextRaw((BYTE *)myBuf,&n);
 				n=Msg.contentLength;
-				myLineText->readTextRaw((BYTE *)myBuf,&n);
-				_tcscat(string,"?");
-				strncat(string,(char *)myBuf,n);
+				n=min(n,10000);			// protezione :)
+				m_LineText->readTextRaw((BYTE *)myBuf,&n);
+
+				_tcscat(string,_T("?"));
+				_tcsncat(string,(char *)myBuf,n);
 				}*/
 
+// https://www.askapache.com/online-tools/request-method-scanner/
+
+			if((sessionLastAct+CWebSrvSocket::sessionRefresh) < timeGetTime()) {
+//				refreshSession();			// finch c' attivit, azzero time-out
+				// MA NON FARLO TROPPO FREQUENTE!! o LEGARLO a Msg.referer?
+				}
 			sessionLastAct=timeGetTime();
 			if(m_Parent->opzioni & CWebSrvSocket::createLog) {		// in questo metto tutto...
 				// usare logFormat... "%h %l %u %t "%r" %>s %b" Apache
@@ -900,45 +1081,78 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s legge %s (v.%u.%u) (con %s)"),
 							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
 							Msg.userAgent);
-#ifdef USA_AUTENTICAZIONE 
-						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"apre pagina",
-							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
-#endif
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"apre pagina",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
 
 						if(theApp.m_pMainWnd) {
-//							char *p2=_tcsdup(string);
+							char buf[2048];
+							_tcscpy(buf,(LPSTR)(LPCTSTR)m_Peer);
+							_tcscat(buf,": ");
+							_tcsncat(buf,string,2000);
+							char *p2=_tcsdup(buf);
 //							theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE2,0,(DWORD)p2);
-							// tolto.. crasha?? ! 9/2011
 							}
 						break;
 						case 202:	//differenziare?
-						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s legge %s (v.%u.%u) (con %s)"),
+						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s legge2 %s (v.%u.%u) (con %s)"),
 							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
 							Msg.userAgent);
-#ifdef USA_AUTENTICAZIONE 
-						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"apre pagina",
-							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
-#endif
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"apre pagina",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
 						break;
 
 						case 203:	// PUT
 						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s scrive %s (v.%u.%u) (con %s)"),
 							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
 							Msg.userAgent);
-#ifdef USA_AUTENTICAZIONE 
-						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"scrive file",
-							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
-#endif
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"scrive file",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
 						break;
 
 						case 204:	// DELETE
-						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s scrive %s (v.%u.%u) (con %s)"),
+						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s canc %s (v.%u.%u) (con %s)"),
 							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
 							Msg.userAgent);
-#ifdef USA_AUTENTICAZIONE 
-						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"cancella file",
-							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
-#endif
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"cancella file",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
+						break;
+
+						case 205:	// OPTIONS
+						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s usa %s (v.%u.%u) (con %s)"),
+							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
+							Msg.userAgent);
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"options",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
+						break;
+
+						case 210:	// PROPFIND
+/* v. https://docs.microsoft.com/en-us/previous-versions/office/developer/exchange-server-2003/aa142960(v%3Dexchg.65)
+	HTTP/1.1 207 Multi-Status
+Content-Type: text/xml
+Content-Length: 310
+
+<?xml version="1.0"?>
+<a:multistatus
+  xmlns:b="urn:uuid:c2f41010-65b3-11d1-a29f-00aa00c14882/"
+  xmlns:a="DAV:">
+ <a:response>
+   <a:href>http://server/public/test2/item1.txt</a:href>
+   <a:propstat>
+    <a:status>HTTP/1.1 200 OK</a:status>
+       <a:prop>
+        <a:getcontenttype>text/plain</a:getcontenttype>
+        <a:getcontentlength b:dt="int">33</a:getcontentlength>
+       </a:prop>
+   </a:propstat>
+ </a:response>
+</a:multistatus>
+*/
+						case 211:	// WEBDAV
+						theApp.FileSpool->print(CLogFile::flagInfo,_T("  %s spia %s (v.%u.%u) (con %s)"),
+							(LPCTSTR)m_Peer,string,HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),
+							Msg.userAgent);
+//						theApp.sendToAccessLog(CJoshuaLogSet::accessTypeInternet,(LPCTSTR)m_Peer,"propfind",
+//							proprieta & loggedOn ? (LPCTSTR)m_Parent->m_Set->m_codice : NULL);
 						break;
 						}
 					}
@@ -953,6 +1167,8 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 		try {
 
 #endif
+
+
 //			char *ptr=NULL;
 //			i=*(char *)ptr;
 			// NON la vede... fanculo Bill 11/2005
@@ -963,7 +1179,7 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 				m_Body->Reset();
 				m_Body->WriteString(Html4String);
 				m_Body->WriteString("<title>Non disponibile</title>\n<body>410 Non disponibile: disabilitato<br>\n");
-				int bBinary=mimeTypeHtml;
+				enum mimeTypes bBinary=mimeTypeHtml;
 				Msg.status=410;
 				char *statMsg="Non disponibile";
 				prepareHTTPHeader(statMsg,bBinary,0);
@@ -998,7 +1214,6 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 		
 #endif
 
-
 			if(m_Parent->opzioni & CWebSrvSocket::createLog) {		// in questo metto tutto...
 				const char *cc;
 				static char oldPeer[20];
@@ -1012,7 +1227,7 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 						cc=_T("POST");
 						break;
 					case 202:
-						cc=_T("head");
+						cc=_T("HEAD");
 						break;
 					case 203:
 						cc=_T("PUT");
@@ -1020,28 +1235,39 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 					case 204:
 						cc=_T("DELETE");
 						break;
+					case 205:
+						cc=_T("OPTIONS");
+						break;
+					case 210:
+						cc=_T("PROPFIND");
+						break;
+					case 211:
+						cc=_T("WEBDAV");
+						break;
+					default:
+						cc=_T("altro");
+						break;
 					}
 
 				*iploc=0;
 				if(_tcscmp((LPCTSTR)m_Peer,oldPeer)) {
-					if(_tcsncmp((LPCTSTR)m_Peer,"192.",4) && _tcsncmp((LPCTSTR)m_Peer,"10.",3)) {
-						theApp.subGetIPLocation(m_Peer,iploc); 
+					if(!IsLocalAddress((LPCTSTR)m_Peer)) {
+//						if(theApp.bIPlookup)
+//							theApp.subGetIPLocation(m_Peer,iploc); 
 						}
 //					if(*iploc)
 //						theApp.FileSpool->print(CLogFile::flagInfo,(char *)iploc);
 					_tcscpy(oldPeer,(LPCTSTR)m_Peer);
 					}
-/*				theApp.FileSpoolWebServer->print(0,_T("%s - %s [%s] \"%s %s HTTP/%u.%u\" %u %u \"%s\" \"%s\"; \"%s\""),
-					(LPCTSTR)m_Peer,*m_LineText->commLogin ? m_LineText->commLogin : "-",(LPCTSTR)CLogFile::getNowApache(),
-					cc,string,
-					HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),Msg.status,m_Body->GetLength(),
-					*Msg.referer ? Msg.referer : "-",*Msg.userAgent ? Msg.userAgent : "-", iploc);
+//				theApp.FileSpoolWebServer->print(0,_T("%s - %s [%s] \"%s %s HTTP/%u.%u\" %u %u \"%s\" \"%s\"; \"%s\""),
+//					(LPCTSTR)m_Peer,*m_LineText->commLogin ? m_LineText->commLogin : "-",(LPCTSTR)CLogFile::getNowApache(),
+//					cc,string,
+//					HIWORD(Msg.protocolVersion),LOWORD(Msg.protocolVersion),Msg.status,m_Body->isInFile ? m_Body->forcedLength : m_Body->GetLength(),
+//					*Msg.referer ? Msg.referer : "-",*Msg.userAgent ? Msg.userAgent : "-", iploc);
 				// OCCHIO! Quando referer e user-agent son vuoti, il "-" risultante NON deve essere tra apici...
-				*/
 
-				if(theApp.debugMode)
-					theApp.FileSpool->print(CLogFile::flagInfo,"  ...risponde %u",
-						Msg.status);
+//				theApp.FileSpoolWebServer->print(CLogFile::flagInfo,"  ...risponde %u",
+//					Msg.status);
 				}
 //			if(m_Body->GetLength() > 0) {
 				if(Msg.protocolVersion > MAKELONG(1, 1)) {//2.0 non accettato!
@@ -1051,7 +1277,7 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 			  if(Msg.protocolVersion > MAKELONG(9, 0)) //No header sent for HTTP v0.9
 					SendHeader();
 				if(Msg.cmd != 202 && Msg.status != 304)	{			// se status = 304 (NOT MODIFIED), niente body...
-																											// se head (202), non manda body
+																											// se HEAD (202), non manda body
 /*					DWORD lenSoFar=len,startPos=0;
 
 					while(lenSoFar > 0) {
@@ -1089,16 +1315,13 @@ void CWebSrvSocket2_base::OnReceive(int nErr) {
 
 				// se no, non esce qua...
 				myBuf[9]=0;
-#ifdef WEBLOG				
-				theApp.FileSpoolWebServer->print(0,_T("%s - %s [%s] \"%s\" %u - - -"),
-					(LPCTSTR)m_Peer,"-",(LPCTSTR)myBufHex,/*myBuf*/ CLogFile::getNowApache(),
-					400);
-#endif
+//				theApp.FileSpoolWebServer->print(0,_T("%s - %s [%s] \"%s\" %u - - -"),
+//					(LPCTSTR)m_Peer,"-",(LPCTSTR)myBufHex,/*myBuf*/ CLogFile::getNowApache(),
+//					400);
 			}
 			m_LineText->clearAll();
 			}
 		}
-
 	}
 
 int CWebSrvSocket2_base::parseQuery(CLineText *l,MSG_HEADER *h) {
@@ -1113,13 +1336,16 @@ int CWebSrvSocket2_base::parseQuery(CLineText *l,MSG_HEADER *h) {
 			if(!_tcsnicmp(myBuf,CHTTPHeader::tagKeepAlive,10)) {
 				h->keepAliveS=TRUE;
 				}
-			else if(!_tcsnicmp(myBuf,CHTTPHeader::tagConnection,11)) {		// boh? non capisco... è giusto quello prima...!
+			else if(!_tcsnicmp(myBuf,CHTTPHeader::tagConnection,11)) {		// boh? non capisco...  giusto quello prima...!
 				if(!_tcsnicmp(myBuf+12,CHTTPHeader::tagKeepAlive,10))
 					h->keepAliveR=TRUE;
-				else if(!_tcsnicmp(myBuf+12,_T("close"),5))
+				else if(!_tcsnicmp(myBuf+12,CHTTPHeader::tagClose,5))
 					/* Close() */;	//boh...
+				else if(!_tcsnicmp(myBuf+12,_T("upgrade"),7))
+					/*  */;	//boh...
 				}
 			// c'e' anche "connection: close (in genere in risposta dal server)... GESTIRE!!
+			// e c'e' anche "connection: upgrade 2020 da virus russo... GESTIRE!!
 			else if(!_tcsnicmp(myBuf,CHTTPHeader::tagHost,5)) {						// questo e' il solo IP o nome del client
 				_tcsncpy(h->host,myBuf+6,127);
 				h->host[127]=0;
@@ -1135,7 +1361,7 @@ int CWebSrvSocket2_base::parseQuery(CLineText *l,MSG_HEADER *h) {
 			else if(!_tcsnicmp(myBuf,CHTTPHeader::tagAccept,7)) {
 				_tcsncpy(h->accept,myBuf+8,127);
 				h->accept[127]=0;
-				if(_tcsstr(h->accept,_T("wap"))) {
+				if(stristr(h->accept,_T("wap"))) {
 					h->WML=TRUE;		// un po' porcata, da migliorare!
 					}
 				}
@@ -1182,13 +1408,13 @@ int CWebSrvSocket2_base::parseQuery(CLineText *l,MSG_HEADER *h) {
 				_tcslwr(myBufL);
 				if(p) {
 					h->userAgentVersion=MAKELONG(p[3]-'0',p[1]-'0');
-					if(p2=_tcsstr(myBufL,"msie")) {		// caso particolare...
+					if(p2=(char *)stristr(myBufL,"msie")) {		// caso particolare...
 						p2=_tcschr(p2,' ');
 						h->userAgentType=BROWSER_EXPLORER;
 						if(p2)
 							h->userAgentVersion=MAKELONG(p2[3]-'0',p2[1]-'0');
 						}
-					else if(p2=_tcsstr(myBufL,"mspie")) {		// caso particolare 2 ...
+					else if(p2=(char *)stristr(myBufL,"mspie")) {		// caso particolare 2 ...
 						p2=_tcschr(p2,' ');
 						h->userAgentType=BROWSER_EXPLORER;
 						if(p2)
@@ -1244,18 +1470,18 @@ int CWebSrvSocket2_base::subBuildPageExt(const char *path, const char *s,
 			*myTime=cfst.m_mtime;
 		if(cfst.m_mtime > myMsg->ifModifiedSince) {
 			if(len < 201000000) {		// più di questo non va... boh e poi causa eccezione e rimane allocato!
-				p=(BYTE *)GlobalAlloc(GPTR,len+4);
+				p=(BYTE *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,len+4);
 				if(p) {
 					if(mF.Open(myBuf,CFile::modeRead | CFile::shareDenyNone)) {
 						i=mF.Read(p,len);
 	//					m_Body->Attach(p,len,0); non va
 						m_Body->Write(p,len);
 						mF.Close();
-						GlobalFree(p);
+						HeapFree(GetProcessHeap(),0,p);
 						myMsg->status=200;
 						}
 					else {
-						GlobalFree(p);
+						HeapFree(GetProcessHeap(),0,p);
 						goto fine_errore;
 						}
 					}
@@ -1525,14 +1751,14 @@ int CWebSrvSocket2_base::buildWMLPage(int cmd,const char *s,const char *parms) {
 	m_HTTPHeader->Reset();
 	wsprintf(header,"HTTP/%u.%u %03u %s\r\nServer: Joshua/%u.%02u\r\nDate: %sAccept-Ranges: bytes\r\nContent-length: %u\r\nContent-type: %s\r\n",
 		HIWORD(m_Parent->HTTPVer),LOWORD(m_Parent->HTTPVer),cmd,statMsg,HIWORD(theApp.getVersione()),LOWORD(theApp.getVersione()),(LPCTSTR)S,m_Body->GetLength(),getMimeTypeDescr(bBinary));
-	m_HTTPHeader->AddToken(0,header);
-// non è finito... controllare!
+	m_HTTPHeader->AddToken(CHTTPHeader::TAG_NULL,header);
+// non  finito... controllare!
 
   return 1;
 	}
 
 int CWebSrvSocket2_base::buildCGIPage(const char *s,const char *parms,
-																			int *bBinary,int *bAddBottom,int isWML) {
+																			enum mimeTypes *bBinary,int *bAddBottom,BOOL isWML) {
 
 	Msg.status=404;
 	return 1;
@@ -1545,7 +1771,7 @@ int CWebSrvSocket2_vidsend::buildWMLPage(int cmd,const char *s,const char *parms
 	}
 
 int CWebSrvSocket2_vidsend::buildCGIPage(const char *s,const char *parms,
-																				int *bBinary,int *bAddBottom,int isWML) {
+																				enum mimeTypes *bBinary,int *bAddBottom,int isWML) {
 	char *p2=NULL,*statMsg,myBuf1[512],myBuf2[512],*s1;
 	static char *autoRefreshedPage=isWML ?
 		"<meta http-equiv='refresh' content='1; url=http://%s/casa_1.wml'></head>\n" :
@@ -1593,7 +1819,7 @@ int CWebSrvSocket2_vidsend::buildCGIPage(const char *s,const char *parms,
 
 				BYTE *p1=myGIF.buildGIF(pBitmap,NULL,&len);
 				m_Body->Write(p1,len);
-				GlobalFree(p1);
+				HeapFree(GetProcessHeap(),0,p1);
 				delete pBitmap;
 				}
 			else
@@ -1656,9 +1882,88 @@ non_trovato:
 	}
 
 
+int CWebSrvSocket2_base::subBuildPageStatus(int *myAddBottom) {
+	MEMORYSTATUS ms;
+	SYSTEM_INFO si;
+	OSVERSIONINFO osvi;
+//	char *CPUTypes[6]={"386","486","Pentium","Pentium II","Pentium III"};
+	ULARGE_INTEGER l1,l2,l3;
+	__int64 _l2,_l3;
+	char myBuf[512],myBuf2[128];
+	int i,n;
+	CTimeSpan ct;
+	CString S;
+	const char *stringaSi="s",*stringaNo="NO";
+
+//	if(Msg.WML) {			// FARE??
+
+
+	m_Body->WriteString("<head><title>Situazione generale del server</title></head>\n");
+	m_Body->WriteString(getBodyString());
+	m_Body->WriteString("<font size=-1>");
+	wsprintf(myBuf,"Il tuo browser : %s.<br>",Msg.userAgent);
+	m_Body->WriteString(myBuf);
+  theApp.getVersione(myBuf2);
+#ifdef _DEBUG
+	wsprintf(myBuf,"Versione dell'applicazione server: %s; [DEBUG]",myBuf2);
+#else
+	wsprintf(myBuf,"Versione dell'applicazione server: %s; ",myBuf2);
+#endif
+	m_Body->WriteString(myBuf);
+	GetModuleFileName(NULL,myBuf2,128);
+	CFileStatus cf;
+	CFile::GetStatus(myBuf2,cf);
+	m_Body->WriteString((LPCTSTR)cf.m_mtime.Format(" (%d/%m/%Y %H:%M)"));
+	m_Body->WriteString("<br>\n");
+	wsprintf(myBuf,"Versione del Web-Server: %u.%02u; ",
+		HIWORD(m_Parent->WWWVer),LOWORD(m_Parent->WWWVer));
+	m_Body->WriteString(myBuf);
+	m_Body->WriteString("<br>\n");
+
+	m_Body->WriteString("[");
+	m_Body->WriteString((LPCTSTR)CTimeEx::getNowGMT());
+	m_Body->WriteString("]<br>\n");
+
+	osvi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO);
+	GetVersionEx(&osvi);
+	wsprintf(myBuf,"Versione di Windows: %u.%02u.%u<br>\n<br>\n",osvi.dwMajorVersion,osvi.dwMinorVersion,osvi.dwBuildNumber);
+	m_Body->WriteString(myBuf);
+	GetSystemInfo(&si);
+	wsprintf(myBuf,"Tipo di microprocessore: n.%u %s %u, livello 0x%x, revisione %04x<br>",
+		si.dwNumberOfProcessors,
+		si.wProcessorArchitecture==PROCESSOR_ARCHITECTURE_INTEL ? "Intel" : "Altro",
+		si.dwProcessorType,
+		si.wProcessorLevel,
+		si.wProcessorRevision);
+	m_Body->WriteString(myBuf);
+	ms.dwLength=sizeof(MEMORYSTATUS);
+	GlobalMemoryStatus(&ms);
+	wsprintf(myBuf,"Memoria RAM: totale fisica=%uKB, disponibile=%uKB, %% usata=%u; totale pagefile=%uKB, pagefile disponibile=%uKB; totale virtuale=%uKB, virtuale disponibile=%uKB.<br>\n",
+		ms.dwTotalPhys/1024,ms.dwAvailPhys/1024,ms.dwMemoryLoad,ms.dwTotalPageFile/1024,ms.dwAvailPageFile/1024,ms.dwTotalVirtual/1024,ms.dwAvailVirtual/1024);
+	m_Body->WriteString(myBuf);
+//	GetFreeSystemResources
+	i=GetDiskFreeSpaceEx("C:\\",&l1,&l2,&l3);
+	_l2=l2.QuadPart;
+	_l3=l3.QuadPart;
+	wsprintf(myBuf,"Spazio disponibile sull'hard disk=%u KBytes (su %u KBytes totali).<br>\n",(DWORD)(_l3/1024),(DWORD)(_l2/1024));
+	m_Body->WriteString(myBuf);
+	i=GetDiskFreeSpaceEx("D:\\",&l1,&l2,&l3);
+	_l2=l2.QuadPart;
+	_l3=l3.QuadPart;
+	wsprintf(myBuf," spazio disponibile sull'hard disk 2=%u KBytes (su %u KBytes totali).<br>\n",(DWORD)(_l3/1024),(DWORD)(_l2/1024));
+	m_Body->WriteString(myBuf);
+
+
+	m_Body->WriteString("</font><br>\n");
+
+	*myAddBottom=3;
+	return 1;
+	}
+
 int CWebSrvSocket2_base::buildHTMLPage(int cmd,const char *s,const char *parms) {
 	char *statMsg;
-	int i,bBinary,bAddBottom;
+	int i,bAddBottom;
+	enum mimeTypes bBinary;
 
 	m_Body->Reset();
 	m_Body->WriteString(Html4String);
@@ -1678,15 +1983,19 @@ int CWebSrvSocket2_base::buildHTMLPage(int cmd,const char *s,const char *parms) 
 			statMsg="OK";
 			Msg.status=200;
 			break;
+		default:
+			Msg.status=405;			// not allowed
+			break;
 		}
 	prepareHTTPHeader(statMsg,bBinary,0);
-// non è finito... controllare!
+// non  finito... controllare!
 	return 1;
 	}
 
 int CWebSrvSocket2_vidsend::buildHTMLPage(int cmd,const char *s,const char *parms) {
 	char *p2=NULL,*statMsg,myBuf1[1024],myBuf2[1024],*s1;
-	int i,n,bBinary,bAddBottom;
+	int i,n,bAddBottom;
+	enum mimeTypes bBinary;
 	DWORD len2;
 	CTime lastModTime;
 	const char *okPage="<html><title>OK</title></head>\n<body>200 OK<br>\n";
@@ -1891,7 +2200,7 @@ int CWebSrvSocket2_vidsend::buildHTMLPage(int cmd,const char *s,const char *parm
 				bAddBottom=1;
 				}
 #endif
-			else if(!stricmp(s,"webcam1.jpg")) {
+			else if(!_tcsicmp(s,"webcam1.jpg")) {
 				CJpeg myJPEG;
 				CBitmap b;
 				BYTE *p1;
@@ -1907,8 +2216,9 @@ int CWebSrvSocket2_vidsend::buildHTMLPage(int cmd,const char *s,const char *parm
 									if(b.SetBitmapBits(theApp.theServer->theTV->biRawDef.bmiHeader.biWidth*theApp.theServer->theTV->biRawDef.bmiHeader.biHeight*3 /* ?? */,theApp.theServer->theTV->theFrame)) {
 										p1=myJPEG.buildJPEG(&b,&len,TRUE,theApp.theServer->myQV.quality/100);
 										m_Body->Write(p1,len);
-										GlobalFree(p1);
-										GlobalFree(theApp.theServer->theTV->theFrame);
+										HeapFree(GetProcessHeap(),0,p1);
+#pragma warning { verificare memoria
+										HeapFree(GetProcessHeap(),0,theApp.theServer->theTV->theFrame);
 										theApp.theServer->theTV->theFrame=NULL;
 										}
 									else
@@ -1929,7 +2239,7 @@ int CWebSrvSocket2_vidsend::buildHTMLPage(int cmd,const char *s,const char *parm
 video_failed:
 						p1=myJPEG.buildJPEG(IDB_MONOSCOPIO,&len,75);
 						m_Body->Write(p1,len);
-						GlobalFree(p1);
+						HeapFree(GetProcessHeap(),0,p1);
 						}
 
 					Msg.howCache=0;
@@ -1953,7 +2263,7 @@ video_failed:
 									if(b.SetBitmapBits(((CVidsendView *)theApp.aClient[0]->getView())->biRawDef.biWidth*((CVidsendView *)theApp.aClient[0]->getView())->biRawDef.biHeight*3 /* ?? */,((CVidsendView *)theApp.aClient[0]->getView())->getFrame())) {
 										p1=myJPEG.buildJPEG(&b,&len,TRUE,theApp.theServer->myQV.quality/100);
 										m_Body->Write(p1,len);
-										GlobalFree(p1);
+										HeapFree(GetProcessHeap(),0,p1);
 //										GlobalFree(((CVidsendView *)theApp.aClient[0]->getView())->getFrame());
 										}
 									else
@@ -1974,7 +2284,7 @@ video_failed:
 video_failed2:
 						p1=myJPEG.buildJPEG(IDB_MONOSCOPIO,&len,75);
 						m_Body->Write(p1,len);
-						GlobalFree(p1);
+						HeapFree(GetProcessHeap(),0,p1);
 						}
 
 					Msg.howCache=0;
@@ -1995,7 +2305,7 @@ video_failed2:
 						bBinary=mimeTypeGif;
 						p1=myGIF.buildGIF(v->hIconUser,&len);
 						m_Body->Write(p1,len);
-						GlobalFree(p1);
+						HeapFree(GetProcessHeap(),0,p1);
 						}
 					}
 				}
@@ -2219,30 +2529,30 @@ non_trovato:
 	}
 
 
-CString CWebSrvSocket2_base::prepareHTTPHeader(const char *statMsg,int type,CTime lastModified) {
-	char p1[1024];	// finire con CHTTPHeader
+CString CWebSrvSocket2_base::prepareHTTPHeader(const char *statMsg,enum mimeTypes type,CTime lastModified) {
+	char p1[1024];	// finire con CHTTPHEADER
 
 	m_HTTPHeader->Reset();
 
 	wsprintf(p1,"HTTP/%u.%u %03u %s\r\nServer: Joshua/%u.%02u",
 		HIWORD(m_Parent->HTTPVer),LOWORD(m_Parent->HTTPVer),Msg.status,statMsg,HIWORD(theApp.getVersione()),LOWORD(theApp.getVersione())
 		);
-	m_HTTPHeader->AddToken(0,p1);
+	m_HTTPHeader->AddToken(p1);
 	m_HTTPHeader->AddToken(CHTTPHeader::TAG_DATE,CTimeEx::getNowGMT(FALSE));
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONTENT_LENGTH,NULL,NULL,NULL,m_Body->GetLength());
+	m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONTENT_LENGTH,m_Body->isInFile ? m_Body->forcedLength : m_Body->GetLength());
 	m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONTENT_TYPE,getMimeTypeDescr(type));
 
 	if(Msg.keepAliveR)
 		m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONNECTION,CHTTPHeader::tagKeepAlive);
 	else
-		m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONNECTION,_T("close"));
+		m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONNECTION,CHTTPHeader::tagClose);
 
 	switch(Msg.howCache) {
 		case 0:
 			m_HTTPHeader->AddToken(CHTTPHeader::TAG_CACHE_CONTROL,_T("no-cache"));
 			break;
 		case 1:
-//				m_Body->WriteString(_T("Cache-Control: max-age=10\r\n"));
+//				_tcscat(p1,_T("Cache-Control: max-age=10\r\n"));
 			break;
 		}
 	if(Msg.expires > 0) {
@@ -2254,15 +2564,15 @@ CString CWebSrvSocket2_base::prepareHTTPHeader(const char *statMsg,int type,CTim
 		// serve QUESTO per far comparire il box di login nel browser! (v. 401)
 		}
 	if(Msg.status == 302 /* anche 301 */) {
-//		m_Body->WriteString("Uri: '/casa.html'\r\n");		// PARAMETRIZZARE!
+//		_tcscat(p1,"Uri: '/casa.html'\r\n");		// PARAMETRIZZARE!
 //		if(HTTPVer > MAKELONG(0,1))
-		if(_tcsstr(Msg.referer,"indexold.html"))
+		if(stristr(Msg.referer,"indexold.html"))
 			m_HTTPHeader->AddToken(CHTTPHeader::TAG_LOCATION,_T("/casa.html"));
 		else
 			m_HTTPHeader->AddToken(CHTTPHeader::TAG_LOCATION,_T("/index.html"));
 				// PARAMETRIZZARE! (meglio questo, con HTTP 1.1 !
 		//	else
-//		m_Body->WriteString("Uri: '/casa.html'\r\n");		// PARAMETRIZZARE! e v. ANCHE LOGIN.CGI!!
+//		_tcscat(p1,"Uri: '/casa.html'\r\n");		// PARAMETRIZZARE! e v. ANCHE LOGIN.CGI!!
 		// redirect...
 		}
 	if(*Msg.contentLocation)
@@ -2277,11 +2587,11 @@ CString CWebSrvSocket2_base::prepareHTTPHeader(const char *statMsg,int type,CTim
 			}
 		}
 
-//  CString sLine = _T("Allow: GET, head, PUT, POST, DELETE\r\n");
+//  CString sLine = _T("Allow: GET, HEAD, PUT, POST, DELETE\r\n");
 
 	
 
-//	m_Body->WriteString("\r\n");
+//	_tcscat(p1,"\r\n");
 		//		theApp.FileSpool->print(2,myBuf2);
 		//		theApp.FileSpool->print(2,p1);
 //		theApp.FileSpool->print(2,myBuf2);
@@ -2304,22 +2614,70 @@ int CWebSrvSocket2_base::SendHeader() {
 
 int CWebSrvSocket2_base::SendBody() { 
 	int i,n,retVal=1;
-	DWORD lenSoFar=m_Body->GetLength();
-	BYTE *pBuf=new BYTE[65536];
+	DWORD lenSoFar;
+#define A_CHUNK 65536UL
+	BYTE *pBuf=new BYTE[A_CHUNK+4];
 
-	m_Body->Seek(0,CFile::begin);
-	while(lenSoFar > 0) {
-//		theApp.TCPIP_WD=0;			// se no salta!
-		m_Body->Read(pBuf,65536);
-		if((n=Send(pBuf,min(lenSoFar,65536))) < 0) {			// errore (tipo: troppo lungo)
-			Close();									// quindi forzo chiusura!
-			retVal=0;
-			break;
+	if(m_Body->isInFile) {
+		CFile mF;
+//			if(len < 1001000000UL) {		// pi di questo non (anda)va... boh e poi causa eccezione e rimane allocato!
+		lenSoFar=m_Body->forcedLength;
+		if(pBuf) {
+			if(mF.Open(m_Body->fileName,CFile::modeRead | CFile::shareDenyNone)) {
+				do {
+//					theApp.TCPIP_WD=0;			// se no salta!
+					n=mF.Read(pBuf,min(A_CHUNK,lenSoFar));
+//					m_Body->Attach(pBuf,len,0); non va, ma alla fine qua faccio diversamente
+
+					if((n=Send(pBuf,n)) < 0) {			// errore (tipo: troppo lungo)
+						Close();									// quindi forzo chiusura!
+						goto fine_errore;
+						}
+					lenSoFar-=n;
+					m_Parent->sentBytes+=n;
+					} while(lenSoFar>0);
+				mF.Close();
+				goto fine;
+				}
+			else {
+				goto fine_errore;
+				}
 			}
-		lenSoFar -= n;
-		m_Parent->sentBytes+=n;
+		else {
+			theApp.FileSpool->print(CLogFile::flagInfo,"  NON abbastanza memoria, %u,%u, inFile=%u",A_CHUNK,lenSoFar,m_Body->isInFile);
+			goto fine_errore;
+			}
+//			else {
+//				theApp.FileSpool->print(CLogFile::flagInfo,"  troppo grande, %u",len);
+//				goto fine_errore;
+//				}
+		}
+	else {
+		m_Body->Seek(0,CFile::begin);
+		lenSoFar=m_Body->GetLength();
+		if(pBuf) {
+			while(lenSoFar > 0) {
+//				theApp.TCPIP_WD=0;			// se no salta!
+				m_Body->Read(pBuf,A_CHUNK);
+				if((n=Send(pBuf,min(lenSoFar,A_CHUNK))) < 0) {			// errore (tipo: troppo lungo)
+					Close();									// quindi forzo chiusura!
+					goto fine_errore;
+					}
+				lenSoFar -= n;
+				m_Parent->sentBytes+=n;
+				}
+			goto fine;
+			}
+		else {
+			theApp.FileSpool->print(CLogFile::flagInfo,"  NON abbastanza memoria, %u,%u, inFile=%u",A_CHUNK,lenSoFar,m_Body->isInFile);
+			goto fine_errore;
+			}
 		}
 
+fine_errore:
+	retVal=0;
+
+fine:
 	delete []pBuf;
 	return retVal;
 	}
@@ -2341,14 +2699,12 @@ BOOL CWebSrvSocket2_base::ParseAuthorization(const CString& sField, CString& sUs
     pszToken = strtok(NULL, seps);
     if(pszToken) {
       //Decode the base64 string passed to us
-      CString sInput(pszToken);
-      CString sOutput;
-      CBase64Decoder decoder;
-      if(decoder.Decode(sInput, sOutput)) {
-        int nColon = sOutput.Find(_T(":"));
+      CStringEx sInput(pszToken);
+      if(sInput.Decode64()) {
+        int nColon = sInput.Find(':');
         if(nColon != -1) {
-          sUsername = sOutput.Left(nColon);
-          sPassword = sOutput.Right(sOutput.GetLength()-nColon-1);
+          sUsername = sInput.Left(nColon);
+          sPassword = sInput.Right(sInput.GetLength()-nColon-1);
           bSuccess = HTTP_AUTHORIZATION_BASIC; /*basic*/
 					}
 				}
@@ -2510,16 +2866,16 @@ BYTE CWebSrvSocket2_base::BCD2Hex(const char *s) {
 	i=*s-'0';
 	if(i >= 10)
 		i-=7;
-	n+=i;
+	n |= (i & 0xf);
 	return n;
 	}
 
 const char *CWebSrvSocket2_base::stristr(const char *s1,const char *s2) {
-	char s1_[256],s2_[256],*p;
+	char s1_[1024],s2_[1024],*p;
 
-	_tcsncpy(s1_,s1,255);
+	_tcsncpy(s1_,s1,1023);
 	_tcslwr(s1_);
-	_tcsncpy(s2_,s2,255);
+	_tcsncpy(s2_,s2,1023);
 	_tcslwr(s2_);
 	p=strstr(s1_,s2_);
 	if(p)
@@ -2528,8 +2884,8 @@ const char *CWebSrvSocket2_base::stristr(const char *s1,const char *s2) {
 		return NULL;
 	}
 
-int CWebSrvSocket2_base::setMimeType(const char *s) {
-	int n;
+enum mimeTypes CWebSrvSocket2_base::setMimeType(const char *s) {
+	enum mimeTypes n;
 
 	if(_tcsstr(s,".htm") || _tcsstr(s,".html"))
 		n=mimeTypeHtml;
@@ -2715,7 +3071,7 @@ int CWebCliSocket::sendQuery(CString S) {
 	return 0;
 	}
 
-CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int proxyMode) {
+CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int bKeepAlive,int proxyMode) {
 	char myBuf[512];
 	CString S2;
 
@@ -2733,11 +3089,12 @@ CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int proxyMode) {
 		}
 	S2+=S;
 	wsprintf(myBuf,"%s HTTP/%u.%u",(LPCTSTR)S2,HIWORD(HTTPVer),LOWORD(HTTPVer));
-	m_HTTPHeader->AddToken(0,myBuf);
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT,"*/*");
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT_LANGUAGE,"it,en" /*siamo in un mondo anglo-americano :-) */);
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT_ENCODING,"gzip, deflate");
-
+	m_HTTPHeader->AddToken(CHTTPHeader::TAG_NULL,myBuf);
+	if(!m) {			// mah, direi
+		m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT,"*/*");
+		m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT_LANGUAGE,"it,en" /*siamo in un mondo anglo-americano :-) */);
+		m_HTTPHeader->AddToken(CHTTPHeader::TAG_ACCEPT_ENCODING,"gzip, deflate");
+		}
 
 
 	OSVERSIONINFO osvi;
@@ -2778,10 +3135,17 @@ CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int proxyMode) {
 				}
 			break;
 		case 6:
-			p="windows Vista";
+			switch(osvi.dwMinorVersion) {
+				case 0:		// mmmm cheffroci ;)
+					p="windows Vista";
+					break;
+				case 1:		// 
+					p="windows 7";
+					break;
+				}
 			break;
 		case 7:
-			p="windows 7";
+//			p="windows 7";	// no... 6.1
 			break;
 		case 8:
 			p="windows 8";
@@ -2794,11 +3158,13 @@ CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int proxyMode) {
 			break;
 		}
 	wsprintf(myBuf,"Mozilla/4.0 (compatible; %s; %s)",(LPCTSTR)m_Agent,p);
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_USERAGENT,myBuf);
+//	if(!m) 			// boh
+		m_HTTPHeader->AddToken(CHTTPHeader::TAG_USERAGENT,myBuf);
 	m_HTTPHeader->AddToken(CHTTPHeader::TAG_HOST,Srv);
 	
-	m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONNECTION,CHTTPHeader::tagKeepAlive);
-//	S2+="Authorization: ...\r\n";		// finire...
+	m_HTTPHeader->AddToken(CHTTPHeader::TAG_CONNECTION,bKeepAlive ?
+		CHTTPHeader::tagKeepAlive : CHTTPHeader::tagClose);
+//	S2+="Authorization: ...\r\n";		// finire/fare...
 
 
 //	m_HTTPHeader->GetBuffer()+="0123456789";
@@ -2808,10 +3174,10 @@ CString CWebCliSocket::buildQuery(CString Srv,CString S,int m,int proxyMode) {
 	return m_HTTPHeader->GetBuffer();
 	}
 
-void CWebCliSocket::addHeader(int n,const char *s,const char *s2,CTime t1,DWORD n1) {
+void CWebCliSocket::addHeader(enum CHTTPHeader::HEADER_TAG n,const char *s,const char *s2) {
 	
 	if(m_HTTPHeader)
-		m_HTTPHeader->AddToken(n,s,s2,t1,n1);
+		m_HTTPHeader->AddToken(n,s,s2);
 	}
 
 int CWebCliSocket::authorize(const char *user,const char *pasw, int type) {
@@ -2840,7 +3206,7 @@ int CWebCliSocket::readHeader(char *buf,DWORD len,WORD timeout) {
 	char *myBuf,myBuf2[16],*p;
 
 	n=0;
-	myBuf=(char *)GlobalAlloc(GPTR,MAX_HEADER_LEN);
+	myBuf=(char *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,MAX_HEADER_LEN);
 	if(!myBuf)
 		return -1;
 
@@ -2865,6 +3231,8 @@ int CWebCliSocket::readHeader(char *buf,DWORD len,WORD timeout) {
 					if(p=(char *)CWebSrvSocket2_base::stristr(myBuf,CHTTPHeader::tagContentLength)) {
 						retVal=atoi(p+15);
 						}
+					else
+						retVal=1;			// bah non dovrebbe succedere ma tipo tvmovies.net...
 					break;
 					}
 				}
@@ -2876,7 +3244,7 @@ int CWebCliSocket::readHeader(char *buf,DWORD len,WORD timeout) {
 		buf[i]=0;
 		}
 
-	GlobalFree(myBuf);
+	HeapFree(GetProcessHeap(),0,myBuf);
 
 	return retVal;
 	}
@@ -2887,7 +3255,7 @@ int CWebCliSocket::readPage(char *buf,DWORD len,WORD timeout) {
 	char *myBuf;
 
 	n=0;
-	myBuf=(char *)GlobalAlloc(GPTR,len+1);
+	myBuf=(char *)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,len+1);
 	if(!myBuf)
 		return 0;
 
@@ -2910,7 +3278,7 @@ int CWebCliSocket::readPage(char *buf,DWORD len,WORD timeout) {
 				}
 			}
 		}
-	GlobalFree(myBuf);
+	HeapFree(GetProcessHeap(),0,myBuf);
 	buf[n]=0;
 
 	return n;
@@ -3038,14 +3406,14 @@ CString CWebCliSocket::translateString(const char *s) {
 
 
 
-
-
 //------------------------------------------------------------------------------------
-CStreamSrvSocket::CStreamSrvSocket(CDocument *p) {
+CStreamSrvSocket::CStreamSrvSocket(CDocument *p,enum STREAM_TYPE type) {
 
 	maxConn=0;
-	myParent=p;
+	m_Parent=p;
+	m_Type=type;
 	flag1=flag2=0;
+	tag=0;
 	}
 
 CStreamSrvSocket::~CStreamSrvSocket() {
@@ -3059,12 +3427,24 @@ CStreamSrvSocket::~CStreamSrvSocket() {
 	}
 
 void CStreamSrvSocket::OnAccept(int nErr) {
-	int i;
+	int i,m;
 	CString aIP;
 	UINT aPort;
 	CStreamSrvSocket2 *s;
 
-	if(maxConn < ((CVidsendDoc2 *)myParent)->maxConn) {		// questo potrebbe essere sbagliato: e' OK in ControlSrvSocket, ma qua si sommerebbero audio e video!	
+//					AfxMessageBox("tenta connesso mp3");
+	CString S;
+	if(m_Parent->IsKindOf(RUNTIME_CLASS(CVidsendDoc2))) {
+//		S.Format("%u %u",maxConn,((CVidsendDoc2 *)m_Parent)->maxConn);
+		m=((CVidsendDoc2 *)m_Parent)->maxConn;
+		}
+	else {
+//		S.Format("%u %u",maxConn,((CVidsendDoc22 *)m_Parent)->maxConn);
+		m=((CVidsendDoc22 *)m_Parent)->maxConn;
+		}
+//	AfxMessageBox(S);
+
+	if(maxConn < m) {		// questo potrebbe essere sbagliato: e' OK in ControlSrvSocket, ma qua si sommerebbero audio e video!	
 																			// ...verificare!
 		s=new CStreamSrvSocket2(this);
 		if(s) {
@@ -3075,15 +3455,85 @@ void CStreamSrvSocket::OnAccept(int nErr) {
 				s->status &= ~CStreamSrvSocket2::xOff;
 				s->connectTime=CTime::GetCurrentTime();
 				s->GetPeerName(aIP,aPort);
-//				if(theApp.theConnections)
+				if(theApp.theConnections)
 //					theApp.theConnections->update();		//No... c'e' gia' nel ControlSocket...
+					((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 				theApp.mandaALog((LPCTSTR)aIP,"Connesso client video");
-				if(theApp.FileSpool)
-					theApp.FileSpool->print(CLogFile::flagInfo2,"Connesso client video su porta %d, numConn=%d,maxConn=%d, s=%x",
-						aPort,maxConn,((CVidsendDoc2 *)myParent)->maxConn,s);
+//				if(theApp.debugMode) {			// mah per ora lo lascio per controllare ;)
+					if(theApp.FileSpool)
+						theApp.FileSpool->print(CLogFile::flagInfo2,"Connesso client video/audio da %s su porta %d, numConn=%d,maxConn=%d, s=%x",
+							aIP,aPort,maxConn,m,s);
+//					}
+
+				if(getPort()==MP3_STREAM_SOCKET) {
+					WORD id3v2_size;
+					lame_global_flags *gf;		//
+					gf=(lame_global_flags*)tag;
+
+					s->Send("HTTP/1.0 200 OK\r\n",17);
+					s->Send("Server: VideoSender 2.6\r\n",25);
+					s->Send("Content-Type: audio/mpeg\r\n",26);
+					S.Format("ice-audio-info: bitrate=%u;samplerate=%u;channels=%u\r\n",
+						((CVidsendDoc22*)m_Parent)->myQA.mp3bitrate,44100,2);
+					s->Send(S,S.GetLength());
+					S.Format("icy-description: MP3 %u Kbps\r\n",((CVidsendDoc22*)m_Parent)->myQA.mp3bitrate);
+					s->Send(S,S.GetLength());
+//					s->Send("icy-name: RadioG\r\n",18);		// Personalizzare! 
+					S.Format("icy-name: %s %s\r\n",theApp.infoUtente.cognome,theApp.infoUtente.nome);
+					s->Send(S,S.GetLength());
+
+					s->Send("Cache-Control: no-cache\r\n",24);
+					s->Send("Pragma: no-cache\r\n",18);
+					s->Send("\r\n",2);
+					/*https://stackoverflow.com/questions/17952258/http-request-to-icecast-and-response
+					icy-br: 192
+ice-audio-info: bitrate=192;samplerate=44100;channels=2
+icy-description: MP3 192 Kbps
+icy-genre: *
+icy-name: *
+icy-pub: 1
+icy-url: http://*
+Server: Icecast 2.3.2-kh29
+Cache-Control: no-cache
+Expires: Mon, 26 Jul 1997 05:00:00 GMT
+Pragma: no-cache*/
+
+
+					if(!((CVidsendDoc22*)m_Parent)->suonoIn.IsEmpty()) {
+						if(m_Parent->IsKindOf(RUNTIME_CLASS(CVidsendDoc2))) {
+							sndPlaySound(((CVidsendDoc2*)m_Parent)->suonoIn,SND_ASYNC);
+							}
+						else {
+							S.Format("%u %u",maxConn,((CVidsendDoc22 *)m_Parent)->maxConn);
+							sndPlaySound(((CVidsendDoc22*)m_Parent)->suonoIn,SND_ASYNC);
+							}
+						}
+//					AfxMessageBox("connesso mp3");
+
+			    id3v2_size = lame_get_id3v2_tag(gf, 0, 0);
+					if(id3v2_size > 0) {
+						unsigned char *id3v2tag = (unsigned char *)malloc(id3v2_size);
+						if(id3v2tag != 0) {
+							//usare streamTitle del Doc
+							size_t n_bytes = lame_get_id3v2_tag(gf, id3v2tag, id3v2_size);
+							size_t written = s->Send(id3v2tag, n_bytes);
+							free(id3v2tag);
+							if(written != n_bytes) {
+//								encoder_progress_end(gf);
+//								error_printf("Error writing ID3v2 tag \n");
+//								return 1;
+								}
+							}
+						}
+//			    imp3 = write_id3v1_tag(gf, outf);
+//				  if(imp3) {
+ //       return 1;
+//						}
+					}
+
 				}
 			else
-				theApp.mandaALog(NULL,"Tentativo fallito di connessione client video");
+				theApp.mandaALog(NULL,"Tentativo fallito di connessione client video/audio");
 			return;
 			}
 		}
@@ -3095,6 +3545,10 @@ void CStreamSrvSocket::OnAccept(int nErr) {
 
 	if(theApp.FileSpool)
 		theApp.FileSpool->print(CLogFile::flagInfo,"impossibile Accept() stream, stroncato!");
+
+	if(theApp.theConnections)
+		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
+	// meglio Post Message perché siamo dentro Socket e specie se si fa IPlookup..
 	}
 
 
@@ -3114,6 +3568,9 @@ void CStreamSrvSocket::doDelete(CStreamSrvSocket2 *ss) {
 		}
 
 	maxConn--;
+
+	if(theApp.theConnections)
+		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 	}
 
 int CStreamSrvSocket::Manda(const struct AV_PACKET_HDR *av,int n) {
@@ -3130,7 +3587,7 @@ int CStreamSrvSocket::Manda(const struct AV_PACKET_HDR *av,int n) {
 
 
 			if(theApp.debugMode)
-				theApp.FileSpool->print(CLogFile::flagInfo,"manda video socket %x, i=%d",po,i);
+				theApp.FileSpool->print(CLogFile::flagInfo,"manda stream socket %x, i=%d",po,i);
 
 
 
@@ -3138,8 +3595,175 @@ int CStreamSrvSocket::Manda(const struct AV_PACKET_HDR *av,int n) {
 		}
 
 //	else {		// se non ci sono client, libero io la memoria... (altrimenti lo fanno loro)
-		GlobalFree((void *)av);
+//		GlobalFree((void *)av->lpData);
+		HeapFree(GetProcessHeap(),0,(void *)av);
 //		}
+
+	return i;
+	// 0 se errore in spedizione (per tenerne conto nella preparazione dei frame)
+	// 1 in caso di OK o anche se il client e' pieno (nessun problema dal punto di vista di chi prepara i frame)
+	}
+
+int CStreamSrvSocket::Manda(const void *lpData,int n) {
+	int i=TRUE;
+	POSITION po;
+//Manda del Socket Server Master si occupa di chiamare Manda per ciascun socket client connesso...
+
+  int iread, imp3, owrite, in_limit=0;
+	BYTE mp3buffer[32768];		// diciamo 1sec @ 128Kbps DEVE STARCI TUTTO per subManda
+	int err;
+
+	lame_global_flags *gf;		// (mettere in socket?)
+	gf=(lame_global_flags*)tag;
+//	gf=lame_init();//idem
+//	lame_init_params(gf);//idem
+//	lame_init_bitstream(gf);
+
+//    encoder_progress_begin(gf, inPath, outPath);
+
+/*    id3v2_size = lame_get_id3v2_tag(gf, 0, 0);
+    if(id3v2_size > 0) {
+        unsigned char *id3v2tag = malloc(id3v2_size);
+        if(id3v2tag != 0) {
+            size_t  n_bytes = lame_get_id3v2_tag(gf, id3v2tag, id3v2_size);
+            size_t  written = fwrite(id3v2tag, 1, n_bytes, outf);
+            free(id3v2tag);
+            if(written != n_bytes) {
+                encoder_progress_end(gf);
+                error_printf("Error writing ID3v2 tag \n");
+                return 1;
+            }
+        }
+			}
+    else {
+        unsigned char* id3v2tag = getOldTag(gf);
+        id3v2_size = sizeOfOldTag(gf);
+        if( id3v2_size > 0 ) {
+            size_t owrite = fwrite(id3v2tag, 1, id3v2_size, outf);
+            if(owrite != id3v2_size) {
+                encoder_progress_end(gf);
+                error_printf("Error writing ID3v2 tag \n");
+                return 1;
+            }
+        }
+			}
+    if (global_writer.flush_write == 1) {
+        fflush(outf);
+			}*/
+
+    /* do not feed more than in_limit PCM samples in one encode call
+       otherwise the mp3buffer is likely too small
+     */
+    in_limit = lame_get_maximum_number_of_samples(gf,sizeof(mp3buffer));
+    if(in_limit < 1)
+      in_limit = 1;
+
+    // encode until we hit eof 
+//    do {
+      // read in 'iread' samples 
+//        iread = get_audio(gf, Buffer);
+      iread = n /2/2;
+
+      if(iread >= 0) {
+        const short int *buffer = ((const short int*)lpData)+0;
+        int rest = iread;
+        do {
+          int const chunk = rest < in_limit ? rest : in_limit;
+//                encoder_progress(gf);
+
+          /* encode */
+          imp3 = lame_encode_buffer_interleaved(gf,buffer,chunk,mp3buffer,sizeof(mp3buffer));
+          buffer += chunk;
+          rest -= chunk;
+
+          // was our output buffer big enough? 
+          if(imp3 < 0) {
+            if(imp3 == -1) {
+          //      error_printf("mp3 buffer is not big enough... \n");
+							}
+            else {
+          //      error_printf("mp3 internal error:  error code=%i\n", imp3);
+							}
+            return 0;
+						}
+
+//					if(!theApp.theServer2->bPaused) {
+						po=cSockRoot.GetHeadPosition();
+						if(po) {
+							do {
+
+								if(cSockRoot.GetNext(po)->Manda(mp3buffer,imp3) <= 0)		// -1 se errore socket, -2 se rientrato, 0 se WOULDBLOCK
+									i=FALSE;
+
+								if(theApp.debugMode)
+									theApp.FileSpool->print(CLogFile::flagInfo,"manda mp3 socket %x, i=%d",po,i);
+
+								} while(po);
+							}
+//						}
+
+					err=GetLastError();
+
+					try {
+					if(theApp.theServer2 && theApp.theServer2->saveFile)
+						theApp.theServer2->saveFile->Write(mp3buffer,imp3);
+						}
+					catch(...) {
+						}
+
+          } while(rest > 0 && !err);
+				}
+//			} while(iread > 0);
+
+    if(1 /*nogap*/)
+      imp3 = lame_encode_flush_nogap(gf, mp3buffer, sizeof(mp3buffer)); /* may return one more mp3 frame */
+    else
+      imp3 = lame_encode_flush(gf,mp3buffer,sizeof(mp3buffer)); /* may return one more mp3 frame */
+
+    if(imp3 < 0) {
+      if (imp3 == -1) {
+//            error_printf("mp3 buffer is not big enough... \n");
+				}
+      else {
+//            error_printf("mp3 internal error:  error code=%i\n", imp3);
+				}
+      return 0;
+			}
+
+//    encoder_progress_end(gf);
+
+//			if(!theApp.theServer2->bPaused) {
+				po=cSockRoot.GetHeadPosition();
+				if(po) {
+					do {
+
+						if(cSockRoot.GetNext(po)->Manda(mp3buffer,imp3) <= 0)		// -1 se errore socket, -2 se rientrato, 0 se WOULDBLOCK
+							i=FALSE;
+
+						if(theApp.debugMode)
+							theApp.FileSpool->print(CLogFile::flagInfo,"manda mp3 socket2 %x, i=%d",po,i);
+
+						} while(po);
+					}
+//				}
+
+			err=GetLastError();
+			try {
+			if(theApp.theServer2 && theApp.theServer2->saveFile)
+				theApp.theServer2->saveFile->Write(mp3buffer,imp3);
+				}
+			catch(...) {
+				}
+//    imp3 = write_id3v1_tag(gf, outf);
+ //   if(global_writer.flush_write == 1) {
+ //       fflush(outf);
+//			}
+    if(imp3) {
+ //       return 1;
+			}
+ //   write_xing_frame(gf, outf, id3v2_size);
+
+
 
 	return i;
 	// 0 se errore in spedizione (per tenerne conto nella preparazione dei frame)
@@ -3148,8 +3772,8 @@ int CStreamSrvSocket::Manda(const struct AV_PACKET_HDR *av,int n) {
 
 CStreamSrvSocket2::CStreamSrvSocket2(CStreamSrvSocket *p) {
 
-	myLineText=new CLineText;
-	myParent=p;
+	m_LineText=new CLineText;
+	m_Parent=p;
 	status=0;
 	mandaBuf1=NULL;
 	oldMandaBuf1=NULL;
@@ -3161,34 +3785,46 @@ CStreamSrvSocket2::CStreamSrvSocket2(CStreamSrvSocket *p) {
 	sentFrame=0;
 	stops=0;
 	skippedFrame=0;
+	timeForPacket=0;
 //	SetSockOpt(TCP_NODELAY)		/// puo' servire??
 	}
 
 CStreamSrvSocket2::~CStreamSrvSocket2() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CStreamSrvSocket2::OnReceive(int nErr) {
-	char myBuf[256];
+	char myBuf[1024];
 	int i;
 
-	if((i=Receive(myBuf,1)) > 0) {
-		if(*myBuf) {
-			stops++;
-			status |= CStreamSrvSocket2::xOff;
+	if(m_Parent->getPort()==MP3_STREAM_SOCKET) {
+		*myBuf=0;
+		if((i=Receive(myBuf,1000)) > 0) {
+			myBuf[i]=0;
 			}
-		else
-			status &= ~CStreamSrvSocket2::xOff;
+		if(theApp.debugMode)
+			if(theApp.FileSpool)
+				theApp.FileSpool->print(CLogFile::flagInfo,"MP3 streaming: %s",myBuf);
+		}
+	else {
+		if((i=Receive(myBuf,1)) > 0) {
+			if(*myBuf) {
+				stops++;
+				status |= CStreamSrvSocket2::xOff;
+				}
+			else
+				status &= ~CStreamSrvSocket2::xOff;
+			}
+		if(theApp.debugMode)
+			if(theApp.FileSpool)
+				theApp.FileSpool->print(CLogFile::flagInfo,"XOn: %x",*myBuf);
 		}
 //	p=(char *)GlobalAlloc(GPTR,1024);
 //	wsprintf(p,"XOn"); 
 //  theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
 
 
-	if(theApp.debugMode)
-		if(theApp.FileSpool)
-			theApp.FileSpool->print(CLogFile::flagInfo,"XOn: %x",*myBuf);
 
 
 
@@ -3198,10 +3834,11 @@ void CStreamSrvSocket2::OnReceive(int nErr) {
 void CStreamSrvSocket2::OnClose(int nErr) {
 
 	Close();
-	myParent->doDelete(this);
+	m_Parent->doDelete(this);
 //	delete this;
 //	if(theApp.theConnections)		// meglio di no.. per problema di heartbeat che non va... 5/10/03
 //		theApp.theConnections->update();
+//		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 	}
 
 void CStreamSrvSocket2::OnSend(int nErr) {
@@ -3210,7 +3847,7 @@ void CStreamSrvSocket2::OnSend(int nErr) {
 		theApp.FileSpool->print(CLogFile::flagInfo,"*** OnSend");
  	if(nErr) {
 		if(theApp.FileSpool)
-			theApp.FileSpool->print(2,"errore OnSend %x",nErr);
+			theApp.FileSpool->print(CLogFile::flagError,"errore OnSend %x",nErr);
 		// che fare??
 		}
 	subManda();
@@ -3223,7 +3860,12 @@ int CStreamSrvSocket2::subManda() {
 //	ASSERT(0);
 	if(mandaBuf1size) {			// prima deve passare l'header...
 rifo1:
+		DWORD ti=timeGetTime();
+
 		i=Send(mandaBuf1,mandaBuf1size);
+		ti=timeGetTime()-ti;
+		timeForPacket+=ti;
+		timeForPacket/=2;			// credo che si potrebbe fare un rapporto con il # byte inviati e
 		err=GetLastError();
 		if(theApp.debugMode)
 			theApp.FileSpool->print(CLogFile::flagInfo,"**** mando header %x %u, info=%x : %x",mandaBuf1,mandaBuf1size,myAvh->info,i);
@@ -3240,7 +3882,7 @@ rifo1:
 				if(err==WSAEWOULDBLOCK) {
 					if(theApp.debugMode)
 						theApp.FileSpool->print(CLogFile::flagInfo,"***   BLOCK");
-//					myParent->flag1++;
+//					m_Parent->flag1++;
 
 
 					mandaBuf1size=0;
@@ -3269,13 +3911,13 @@ fine_clear:
 
 		if(theApp.debugMode)
 			theApp.FileSpool->print(CLogFile::flagInfo,"****** pulisco tutto %x %u %u %x; status=%x",
-				oldMandaBuf1,myParent->flag1,myParent->flag2,mandaBuf1,status);
+				oldMandaBuf1,m_Parent->flag1,m_Parent->flag2,mandaBuf1,status);
 
 		if(oldMandaBuf1) {												// ...se i buffer non servono +...
 			retval=0;
-			if(myParent->flag1)
-				myParent->flag1--;
-			if(!myParent->flag1) {
+			if(m_Parent->flag1)
+				m_Parent->flag1--;
+			if(!m_Parent->flag1) {
 //				GlobalFree((void *)oldMandaBuf1);
 				oldMandaBuf1=mandaBuf1=NULL;
 				}
@@ -3291,7 +3933,8 @@ fine:
 
 	if(retval<0) {
 		if(theApp.debugMode)
-			theApp.FileSpool->print(CLogFile::flagInfo,"errore Send");
+			if(theApp.FileSpool)
+				theApp.FileSpool->print(CLogFile::flagInfo,"errore Send");
 		}
 	return retval;
 	// ritorna 0 se e' rientrato in Manda (ossia Manda e' troppo lenta) o se ci sono errori di Send()
@@ -3321,7 +3964,7 @@ int CStreamSrvSocket2::Manda(const struct AV_PACKET_HDR *av,int n) {
 
 			inSendTimeout=0;
 			if(oldMandaBuf1) {												// pulisco tutto!
-				GlobalFree((void *)oldMandaBuf1);
+				HeapFree(GetProcessHeap(),0,(void *)oldMandaBuf1);
 				oldMandaBuf1=mandaBuf1=NULL;
 				}
 			status &= ~inSend;
@@ -3329,8 +3972,8 @@ int CStreamSrvSocket2::Manda(const struct AV_PACKET_HDR *av,int n) {
 		}
 	if(!isXOn()) {						// se il client mi ha detto di fermarmi...
 		status |= waitResync;		// ...idem
-		retval=1;
 		skippedFrame++;
+		retval=1;
 		goto fine;
 		}
 	if(status & waitResync) {		// se questo è un KEYFRAME...
@@ -3344,8 +3987,8 @@ int CStreamSrvSocket2::Manda(const struct AV_PACKET_HDR *av,int n) {
 
 			}
 		else {
-			retval=1;		// cambiare...
 			skippedFrame++;
+			retval=1;		// cambiare...
 			goto fine;
 			}
 		}
@@ -3357,7 +4000,8 @@ int CStreamSrvSocket2::Manda(const struct AV_PACKET_HDR *av,int n) {
 		mandaBuf1size=n;			// ..e le dimensioni.
 		myAvh=(struct AV_PACKET_HDR *)av;					// mi segno qual'e' il pacchetto corrente
 		if(theApp.debugMode>2)
-			theApp.FileSpool->print(CLogFile::flagInfo,"*** preparo pacchetti %x %u",av,n);
+			if(theApp.FileSpool)
+				theApp.FileSpool->print(CLogFile::flagInfo,"*** preparo pacchetti %x %u",av,n);
 		sentFrame++;
 		retval=subManda();
 		}
@@ -3385,27 +4029,39 @@ fine:
 	// 1 se non manda in quanto il client e' pieno, 2> se OK
 	}
 
+int CStreamSrvSocket2::Manda(const void *lpData,DWORD len) {		// usata per MP3, 2023
+	int err;
+	DWORD ti=timeGetTime();
+
+	Send(lpData,len);
+	ti=timeGetTime()-ti;
+	timeForPacket+=ti;
+	timeForPacket/=2;			// credo che si potrebbe fare un rapporto con il # byte inviati e
+
+	return 1;
+	}
+
 
 
 
 CStreamCliSocket::CStreamCliSocket(CWnd *hWnd) : theWnd(hWnd) {
 	int i;
 
-	myLineText=new CLineText(0,NULL,0,64000);
+	m_LineText=new CLineText(0,NULL,0,264000);
 	sBuffer=NULL; 
 	anAvh=NULL;
 	maxBuffers=lowBuffers=highBuffers=0;
 	firstIn=lastOut=0;
-	ok2In=ok2Out=FALSE;
 	totBytesReceived=0;
-	critical=FALSE;
+	InitializeCriticalSection(&m_cs);
 	receivedFrame=stops=skippedFrame=0;
 	lastGoodFrame=0;
 	}
 
 CStreamCliSocket::~CStreamCliSocket() {
 
-	delete myLineText;
+	DeleteCriticalSection(&m_cs);
+	delete m_LineText;
 	}
 
 void CStreamCliSocket::initBuffers(int tb,DWORD bl,DWORD bh) {
@@ -3413,47 +4069,72 @@ void CStreamCliSocket::initBuffers(int tb,DWORD bl,DWORD bh) {
 	
 	if(sBuffer) {
 		emptyBuffers();
-		GlobalFree(sBuffer);
+		HeapFree(GetProcessHeap(),0,sBuffer);
 		}
 	maxBuffers=tb;
-	lowBuffers=bl ? bl : (tb*2)/10;		// bah...
+	lowBuffers=bl ? bl : (tb*2)/10;		// bah... con 3 VIDSEND.EXE si incricca!! in ricezione audio
+//	lowBuffers=max(1,lowBuffers); //idem
 	highBuffers=bh ? bh : (tb*8)/10;		// deve essere SEMPRE minore di maxBuffers, perche' ci sono [maxBuffers] buffer, numerati da 0 a maxBuffers-1... (v. addInBuffer)
-	sBuffer=(struct AV_PACKET_HDR **)GlobalAlloc(GPTR,sizeof(struct AV_PACKET_HDR *) 
+//	highBuffers=max(1,highBuffers);// idem se metto buffers=0
+	sBuffer=(const struct AV_PACKET_HDR **)HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY | HEAP_GENERATE_EXCEPTIONS,sizeof(struct AV_PACKET_HDR *) 
 		* (max(1 /*meglio*/,maxBuffers))); 
 	for(i=0; i<maxBuffers; i++)
 		sBuffer[i]=NULL;
 	}
 
 
-void CStreamCliSocket::addInBuffer(struct AV_PACKET_HDR *avh) { 
+void CStreamCliSocket::addInBuffer(const struct AV_PACKET_HDR *avh) { 
 
-	while(critical);
-	critical=TRUE;
+	EnterCriticalSection(&m_cs);
 	sBuffer[firstIn++]=avh;
-	if(firstIn >= maxBuffers) 
+	if(maxBuffers)
+		firstIn %= maxBuffers;
+	else
 		firstIn=0;
-	if(totAvailBuffers() >= highBuffers)
-		ok2Out=TRUE;
-	if(theApp.debugMode)
-		theApp.FileSpool->print(CLogFile::flagInfo,"Buffers: FirstIn=%u,ok2out=%u",firstIn,ok2Out);
-	critical=FALSE;
+//	if(theApp.debugMode)
+//		theApp.FileSpool->print(CLogFile::flagInfo,"Buffers: FirstIn=%u,ok2out=%u",firstIn,ok2Out);
+	LeaveCriticalSection(&m_cs);
 	}
 
 void CStreamCliSocket::bumpOutBuffer() { 
 
-	while(critical);
-	critical=TRUE;
+	EnterCriticalSection(&m_cs);
 	if(sBuffer[lastOut]) {
-		GlobalFree(sBuffer[lastOut]->lpData); 
-		GlobalFree(sBuffer[lastOut]); 
+		HeapFree(GetProcessHeap(),0,(void *)sBuffer[lastOut]->lpData);
+		HeapFree(GetProcessHeap(),0,(void *)sBuffer[lastOut]); 
 		sBuffer[lastOut]=NULL; 
 		}
 	lastOut++;
-	if(lastOut >= maxBuffers) 
+	if(maxBuffers)
+		lastOut %= maxBuffers;
+	else
 		lastOut=0;
-	if(totAvailBuffers() < lowBuffers)		// questo e' opinabile... in pratica gli ultimi buffer non li usi mai...
-		ok2Out=FALSE;
-	critical=FALSE;
+	LeaveCriticalSection(&m_cs);
+	}
+
+WORD CStreamCliSocket::totAvailBuffers() { 
+	int n;
+	
+	if(maxBuffers<=1)
+		return 1;
+	n=firstIn-lastOut;
+	if(n<0)
+		n+=maxBuffers;
+	return n;
+	}
+
+BOOL CStreamCliSocket::roomForBuffers() { 
+
+	return totAvailBuffers()<maxBuffers;
+	}
+
+BOOL CStreamCliSocket::needMoreBuffers() { 
+	int n=firstIn-lastOut; 
+
+	if(n<=0) 
+		n+=maxBuffers;	
+
+	return n<=highBuffers /*(((highBuffers-lowBuffers)/2)+1)*/; 
 	}
 
 
@@ -3464,13 +4145,21 @@ void CStreamCliSocket::emptyBuffers() {
 	for(i=0; i<maxBuffers; i++) {
 		if(sBuffer[i]) {
 			if(sBuffer[i]->lpData)
-				GlobalFree(sBuffer[i]->lpData);
-			GlobalFree(sBuffer[i]);
+				HeapFree(GetProcessHeap(),0,sBuffer[i]->lpData);
+			HeapFree(GetProcessHeap(),0,(void *)sBuffer[i]);
 			}
 		sBuffer[i]=NULL;
 		}
 	firstIn=lastOut=0;
 	delay(1000);
+	}
+
+void CStreamCliSocket::clear() {
+	int i;
+	char myBuf[64];
+
+	while((i=Receive(myBuf,64)) > 0) {
+		}
 	}
 
 void CStreamCliSocket::delay(DWORD t) {
@@ -3505,7 +4194,7 @@ CStreamVCliSocket::~CStreamVCliSocket() {
 
 	emptyBuffers();
 	if(sBuffer) {
-		GlobalFree(sBuffer);
+		HeapFree(GetProcessHeap(),0,sBuffer);
 		sBuffer=NULL;
 		}
 	}
@@ -3535,12 +4224,12 @@ rifo:
 			(BYTE)myBuf[10],(BYTE)myBuf[11],(BYTE)myBuf[12],(BYTE)myBuf[13],(BYTE)myBuf[14],(BYTE)myBuf[15]);
 			}
 
-		myLineText->handleReadData(myBuf,i);
+		m_LineText->handleReadData(myBuf,i);
 		if(!anAvh) {
-			if(myLineText->ssize() >= AV_PACKET_HDR_SIZE) {
+			if(m_LineText->ssize() >= AV_PACKET_HDR_SIZE) {
 				n=AV_PACKET_HDR_SIZE;
-				anAvh=(struct AV_PACKET_HDR *)GlobalAlloc(GMEM_FIXED,sizeof(struct AV_PACKET_HDR));
-				myLineText->readTextRaw((BYTE *)anAvh,&n);
+				anAvh=(struct AV_PACKET_HDR *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,sizeof(struct AV_PACKET_HDR));
+				m_LineText->readTextRaw((BYTE *)anAvh,&n);
 
 #ifdef _STANDALONE_MODE
 				if(anAvh->tag==MAKEFOURCC('D','G','2','0')) {
@@ -3554,18 +4243,19 @@ rifo:
 clearAll:
 					if(theApp.debugMode>1) {
 						char myBuf[128];
-						wsprintf(myBuf,"  errore cli-frame: anAvh->tag %x",anAvh->tag);
+						wsprintf(myBuf,"  errore cli-frameV: anAvh->tag %x",anAvh->tag);
 						*theApp.FileSpool << myBuf;
 						}
 					Send("\x01",1);		// fermo trasmettitore...
-					myLineText->clearAll();		// pulisco ricevitore...
+					m_LineText->clearAll();		// pulisco ricevitore...
+					clear();
 					emptyBuffers();				// distruggo buffer...
-					DWORD ti=timeGetTime()+2000;	// aspetto un po'...
-					while(ti > timeGetTime());
-					myLineText->clearAll();		// ri-pulisco tutto
+//					delay(2000);	// aspetto un po'... già in emptybuffers
+					clear();
+					m_LineText->clearAll();		// ri-pulisco tutto
 					emptyBuffers();
 					Send("\x00",1);			// il trasm. puo' ripartire.
-					GlobalFree(anAvh);
+					HeapFree(GetProcessHeap(),0,anAvh);
 					anAvh=NULL;
 					if(theApp.debugMode>1) {
 						wsprintf(p,"attesa resync...");
@@ -3574,14 +4264,16 @@ clearAll:
 					goto fine;
 					}
 				}
-			if(myLineText->ssize())		// serve quando tutto il pacchetto (header+dati) era < 1000 byte!
+			if(m_LineText->ssize())		// serve quando tutto il pacchetto (header+dati) era < 1000 byte!
 				goto cealtro;
 			}
 		else {
 cealtro:
-			if(myLineText->ssize() >= anAvh->len) {
+			if(m_LineText->ssize() >= anAvh->len) {
 				n=anAvh->len;
-				anAvh->lpData=myLineText->readTextRaw(NULL,&n);
+				anAvh->lpData=m_LineText->readTextRaw(NULL,&n);
+
+				if(anAvh->type == AV_PACKET_TYPE_VIDEO);			// controllare??
 
 				if(theApp.debugMode>2)
 					wsprintf(p,"ricevuto bmp, len: %d",anAvh->len);
@@ -3602,7 +4294,7 @@ cealtro:
 						}
 					if(theApp.debugMode>1) {
 						char myBuf[128];
-						wsprintf(myBuf,"ricevuto cli-frame: time %u, frame=%x,keyframe %u, firstIn=%u,lastOut=%u,maxBuffers=%u,Room %u ",timeGetTime(),sBuffer[firstIn ? firstIn-1 : maxBuffers-1],anAvh->info,firstIn,lastOut,highBuffers,roomForBuffers());
+						wsprintf(myBuf,"ricevuto cli-frameV: time %u, frame=%x,keyframe %u, firstIn=%u,lastOut=%u,maxBuffers=%u,Room %u ",timeGetTime(),sBuffer[firstIn ? firstIn-1 : maxBuffers-1],anAvh->info,firstIn,lastOut,highBuffers,roomForBuffers());
 						*theApp.FileSpool << myBuf;
 						}
 				anAvh=NULL;
@@ -3612,7 +4304,7 @@ cealtro:
 					goto clearAll;
 					}
 				else {
-					if(theApp.debugMode)
+					if(theApp.debugMode>1)
 						wsprintf(p,"attesa dati...");
 					}
 				}
@@ -3623,10 +4315,14 @@ cealtro:
 		}
 //	wsprintf(p,"stato %d",state);
 fine:
-	if(theApp.m_pMainWnd) {
-		if(*p)
+	if(*p) {
+		if(theApp.m_pMainWnd) 
 			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+		else
+			GlobalFree(p);
 		}
+	else
+		GlobalFree(p);
 	}
 
 
@@ -3635,14 +4331,15 @@ CStreamACliSocket::CStreamACliSocket(CWnd *hWnd,HWAVEOUT *hWO,int numBuffers) :
 
 	initBuffers(numBuffers);
 	hWaveOut=hWO;
-	totBuffers=0;
+	receivedSample=0;
+// no					waveOutRestart(*hWaveOut);
 	}
 
 CStreamACliSocket::~CStreamACliSocket() {
 
 	emptyBuffers();
 	if(sBuffer) {
-		GlobalFree(sBuffer);
+		HeapFree(GetProcessHeap(),0,sBuffer);
 		sBuffer=NULL;
 		}
 	}
@@ -3661,12 +4358,12 @@ void CStreamACliSocket::OnReceive(int nErr) {
 rifo:
 		totBytesReceived+=i;
 
-		myLineText->handleReadData(myBuf,i);
+		m_LineText->handleReadData(myBuf,i);
 		if(!anAvh) {
-			if(myLineText->ssize() >= AV_PACKET_HDR_SIZE) {
+			if(m_LineText->ssize() >= AV_PACKET_HDR_SIZE) {
 				n=AV_PACKET_HDR_SIZE;
-				anAvh=(struct AV_PACKET_HDR *)GlobalAlloc(GPTR,sizeof(struct AV_PACKET_HDR));
-				myLineText->readTextRaw((BYTE *)anAvh,&n);
+				anAvh=(struct AV_PACKET_HDR *)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,sizeof(struct AV_PACKET_HDR));
+				m_LineText->readTextRaw((BYTE *)anAvh,&n);
 //				ASSERT(avh->len<32000);
 #ifdef _STANDALONE_MODE
 				if(anAvh->tag==MAKEFOURCC('D','G','2','0')) {
@@ -3678,10 +4375,16 @@ rifo:
 					}
  				else {		// risincronizzarsi!
 clearAll:
-					myLineText->clearAll();
+					Send("\x01",1);		// fermo trasmettitore...
+					m_LineText->clearAll();		// pulisco ricevitore...
+					clear();
+					emptyBuffers();				// distruggo buffer...
+//					delay(2000);	// aspetto un po'... già in emptybuffers
+					clear();
+					m_LineText->clearAll();		// ri-pulisco tutto
 					emptyBuffers();
-					Send("\x00",1);
-					GlobalFree(anAvh);
+					Send("\x00",1);			// il trasm. puo' ripartire.
+					HeapFree(GetProcessHeap(),0,anAvh);
 					anAvh=NULL;
 					if(theApp.debugMode>1) {
 						wsprintf(p,"attesa resync...");
@@ -3689,32 +4392,50 @@ clearAll:
 					goto fine;
 					}
 				}
-			if(myLineText->ssize())		// serve quando tutto il pacchetto (header+dati) era < 1000 byte!
+			if(m_LineText->ssize())		// serve quando tutto il pacchetto (header+dati) era < 1000 byte!
 				goto cealtro;
 			}
 		else {
 cealtro:
-			if(myLineText->ssize() >= anAvh->len) {
+			if(m_LineText->ssize() >= anAvh->len) {
 				n=anAvh->len;
-				anAvh->lpData=myLineText->readTextRaw(NULL,&n);
+				anAvh->lpData=m_LineText->readTextRaw(NULL,&n);
 
-				totBuffers++;
-				if(theWnd) {
-					((CVidsendView *)theWnd)->playSample(anAvh);
+				if(anAvh->type == AV_PACKET_TYPE_AUDIO) ;			// controllare??
+
+				addInBuffer(anAvh);
+				receivedSample++;
+//				if(!theApp.theCtrl->bPaused) {
+					if(roomForBuffers()) {
+						Send("\x00",1);
+						if(theApp.debugMode)
+							*theApp.FileSpool << "client: mando Xon";
+						}
+					else {
+						stops++;
+						Send("\x01",1);
+						if(theApp.debugMode)
+							*theApp.FileSpool << "client: mando Xoff";
+						((CVidsendView *)theWnd)->waitForKeyFrame=1;	// boh... un'idea per risincronizzare BENE se per caso ho perso dei pacchetti ed evitare quadrettoni...
+						}
+
+//				if(theWnd) {
+//					((CVidsendView *)theWnd)->playSample(anAvh);
 //					n=getBytesReceived();
 //					wsprintf(p,"riproduzione in corso (@ %d.%d KB/s) (b:%d - %d)...",n/2000,(n % 2000)/200,totAvailBuffers(),needMoreBuffers());
 //					if(((CChildFrame *)theWnd->GetParent())->m_wndStatusBar.m_hWnd)
 //						((CChildFrame *)theWnd->GetParent())->m_wndStatusBar.SetPaneText(0,p,TRUE);
 					// in realta' per ora non funziona... bisogna usare i buffer anche qua...
-					}
+//					}
 				if(theApp.debugMode>1)
 					wsprintf(p,"ricevuti dati audio");
-				if(totBuffers>highBuffers)
-					waveOutRestart(*hWaveOut);
+//				if(totBuffers>highBuffers)
+// CHE SENSO HA ?? 2021					bah, ma senza non va... ah c'era un Pause in View... ma non saprei dire perché. tolto cmq!
+//					waveOutRestart(*hWaveOut);
 //				Send("\x01",1);
 				anAvh=NULL;
 				}
-			else
+			else {
 				if(lastGoodFrame<timeGetTime()) {
 					goto clearAll;
 					}
@@ -3723,6 +4444,7 @@ cealtro:
 						wsprintf(p,"attesa dati...");
 						}
 					}
+				}
 			}
 
 //		if((i=CAsyncSocket::Receive(myBuf,1000,MSG_PEEK)) > 0)
@@ -3730,23 +4452,29 @@ cealtro:
 		}
 //	wsprintf(p,"stato %d",state);
 fine:
-  if(theApp.m_pMainWnd)
-		theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+	if(*p) {
+	  if(theApp.m_pMainWnd)
+			theApp.m_pMainWnd->PostMessage(WM_UPDATE_PANE,0,(DWORD)p);
+		else
+			GlobalFree(p);
+		}
+	else
+		GlobalFree(p);
 	}
 
 
 
 CControlSrvSocket2::CControlSrvSocket2(CControlSrvSocket *p) {
 
-	myLineText=new CLineText;
-	myParent=p;
+	m_LineText=new CLineText;
+	m_Parent=p;
 	packetType=0;
 	reInit();
 	}
 
 CControlSrvSocket2::~CControlSrvSocket2() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CControlSrvSocket2::OnReceive(int nErr) {
@@ -3765,12 +4493,13 @@ void CControlSrvSocket2::OnReceive(int nErr) {
 			break;
 		case 1:				// dati di riconoscimento del client
 			if((i=Receive(myBuf,127)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 127) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 127) {
 					connName=myBuf;		// passo questi dati, ma solo per averli (NON per log utenti/autenticazione!)
 					// password=myBuf+32... mi serve?
-					numLogConn=*(DWORD *)(myBuf+64);
-					timedConn=*(CTimeSpan *)(myBuf+68);
+					appName=myBuf+64;
+					numLogConn=*(DWORD *)(myBuf+96);
+					timedConn=*(CTimeSpan *)(myBuf+100);
 					startConn=CTime::GetCurrentTime();
 					}
 				packetType=0;
@@ -3793,6 +4522,9 @@ void CControlSrvSocket2::OnReceive(int nErr) {
 
 				packetType=0;
 				}
+			break;
+		default:
+			Receive(myBuf,255);
 			break;
 		}
 
@@ -3820,7 +4552,7 @@ int CControlSrvSocket2::checkUtenti() {
 void CControlSrvSocket2::doClose() {
 
 	Close();
-	myParent->doDelete(this);
+	m_Parent->doDelete(this);
 //	delete this;
 	}
 
@@ -3836,7 +4568,7 @@ void CControlSrvSocket2::reInit() {
 CControlSrvSocket::CControlSrvSocket(CDocument *p) {
 
 	maxConn=0;
-	myParent=p;
+	m_Parent=p;
 	}
 
 CControlSrvSocket::~CControlSrvSocket() {
@@ -3855,7 +4587,7 @@ void CControlSrvSocket::OnAccept(int nErr) {
 	UINT aPort;
 	CControlSrvSocket2 *s;
 
-	if(maxConn< ((CVidsendDoc2 *)myParent)->maxConn) {
+	if(maxConn< ((CVidsendDoc2 *)m_Parent)->maxConn) {
 			s=new CControlSrvSocket2(this);
 			if(s) {
 				cSockRoot.AddTail(s);
@@ -3863,8 +4595,8 @@ void CControlSrvSocket::OnAccept(int nErr) {
 		
 				if(Accept(*s)) {
 					s->GetPeerName(aIP,aPort);
-					if(((CVidsendDoc2 *)myParent)->acceptConnect(aIP)) {
-						struct STREAM_INFO *si=((CVidsendDoc2 *)myParent)->getConnectionInfo();
+					if(((CVidsendDoc2 *)m_Parent)->acceptConnect(aIP)) {
+						struct STREAM_INFO *si=((CVidsendDoc2 *)m_Parent)->getConnectionInfo();
 						if(si) {
 							if(s->Send("\x1",1) != SOCKET_ERROR)
 								s->Send(si,sizeof(struct STREAM_INFO));
@@ -3879,11 +4611,11 @@ void CControlSrvSocket::OnAccept(int nErr) {
 						s->doClose();
 						}
 					if(theApp.theConnections)
-						theApp.theConnections->update();
+						((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 					theApp.mandaALog((LPCTSTR)aIP,"Connesso client ctrl");
 					if(theApp.debugMode) {
 						if(theApp.FileSpool)
-							theApp.FileSpool->print(2,"Connesso client ctrl");
+							theApp.FileSpool->print(CLogFile::flagInfo2,"Connesso client ctrl da %s",aIP);
 						}
 					}
 				else
@@ -3899,6 +4631,9 @@ void CControlSrvSocket::OnAccept(int nErr) {
 	
 	if(theApp.FileSpool)
 		theApp.FileSpool->print(2,"impossibile Accept() control stream, stroncato!");
+
+	if(theApp.theConnections)
+		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 	}
 
 void CControlSrvSocket::OnClose(int nErr) {
@@ -3909,8 +4644,8 @@ void CControlSrvSocket::OnClose(int nErr) {
 void CControlSrvSocket::doDelete(CControlSrvSocket2 *ss) {
 	CControlSrvSocket2 *s;
 
-	if(!((CVidsendDoc2 *)myParent)->suonoOut.IsEmpty()) {
-		sndPlaySound(((CVidsendDoc2 *)myParent)->suonoOut,SND_ASYNC);
+	if(!((CVidsendDoc2 *)m_Parent)->suonoOut.IsEmpty()) {
+		sndPlaySound(((CVidsendDoc2 *)m_Parent)->suonoOut,SND_ASYNC);
 		}
 	POSITION po;
 
@@ -3924,7 +4659,8 @@ void CControlSrvSocket::doDelete(CControlSrvSocket2 *ss) {
 	maxConn--;
 
 	if(theApp.theConnections)
-		theApp.theConnections->update();
+		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
+
 	}
 
 void CControlSrvSocket::checkUtenti() {
@@ -3948,14 +4684,14 @@ void CControlSrvSocket::checkUtenti() {
 
 CControlCliSocket::CControlCliSocket(CWnd *hWnd) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	theWnd=hWnd;
 	packetType=0;
 	}
 
 CControlCliSocket::~CControlCliSocket() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CControlCliSocket::OnReceive(int nErr) {
@@ -3973,10 +4709,10 @@ rifo:
 			break;
 		case 1:
 			if((i=Receive(myBuf,sizeof(struct STREAM_INFO))) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= sizeof(struct STREAM_INFO)) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= sizeof(struct STREAM_INFO)) {
 					n=sizeof(struct STREAM_INFO);
-					myLineText->readTextRaw((BYTE *)&(((CVidsendView *)theWnd)->streamInfo),&n);
+					m_LineText->readTextRaw((BYTE *)&(((CVidsendView *)theWnd)->streamInfo),&n);
 					if(((CVidsendView *)theWnd)->streamInfo.versione <= VIDSEND_VERSIONE) {
 						GetPeerName(aIP,aPort);
 						if(!((CVidsendView *)theWnd)->doConnect((char *)(LPCTSTR)aIP,&((CVidsendView *)theWnd)->streamInfo)) {
@@ -3993,14 +4729,17 @@ rifo:
 			break;
 		case 2:
 			if((i=Receive(myBuf,1000)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 255) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 255) {
 					n=255;
-					myLineText->readTextRaw((BYTE *)myBuf,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf,&n);
 					AfxMessageBox((char *)myBuf,MB_ICONEXCLAMATION);
 					packetType=0;
 					}
 				}
+			break;
+		default:
+			Receive(myBuf,1023);
 			break;
 		}
 	}
@@ -4018,13 +4757,289 @@ int CControlCliSocket::SendUserPass(const char *n,const char *p,DWORD x,CTimeSpa
 	char myBuf[128];
 
 	*myBuf=1;
-	strncpy(myBuf+1,n,31);
+	_tcsncpy(myBuf+1,n,31);
 	myBuf[32]=0;
 	theApp.Scramble(myBuf+33,p,_tcslen(p),0);			// qui non c'e' SerNum... per ora?
-	*(DWORD *)(myBuf+65)=x;
-	*(CTimeSpan *)(myBuf+69)=t;
+	_tcscpy(myBuf+65,"VideoSender");
+	myBuf[96]=0;
+	*(DWORD *)(myBuf+97)=x;
+	*(CTimeSpan *)(myBuf+101)=t;
 	return Send(myBuf,128);
 	}
+
+
+
+// VBAN 2021 --------------------------------------------------------------------------------------------------
+CVBANSocket::CVBANSocket(CDocument *p,UINT port) : m_Port(port) {
+	m_Parent=p;
+	bytesPerFrame=256;
+	
+  int optVal = 10;
+
+#define IP_MULTICAST_TTL 3        /* u_char; set/get IP multicast ttl */ /* forse in <netinet/in.h> */
+	int i = SetSockOpt(IP_MULTICAST_TTL,(void *)&optVal,sizeof(int));
+
+	config.port=VBAN_PORT;
+	config.direction=(enum ::socket_direction)SOCKET_OUT;
+	ZeroMemory(config.ip_address,sizeof(config.ip_address));
+	}
+
+CVBANSocket::~CVBANSocket() {
+	}
+
+const char *CVBANSocket::bit_fmt_names [VBAN_BIT_RESOLUTION_MAX] = {
+  "8I", "16I", "24I", "32I", "32F", "64F", "12I", "10I"
+	};
+
+int CVBANSocket::Open(LPSTR address) {
+	int i;
+	char optflag = 1;
+
+	if(address)
+		_tcscpy(config.ip_address,address);
+	i=Create(m_Port,SOCK_DGRAM);
+	if(!address || IsBroadcastAddress(address))
+		int ret = SetSockOpt(SO_BROADCAST, &optflag, sizeof(optflag));
+	return i;
+	}
+
+/** Return VBanHeader pointer from buffer */
+#define PACKET_HEADER_PTR(_buffer) ((struct VBanHeader *)_buffer)
+/** Return payload pointer of a Vban packet from buffer pointer */
+#define PACKET_PAYLOAD_PTR(_buffer) ((char *)(PACKET_HEADER_PTR(_buffer)+1))
+/** Return payload size from total packet size */
+#define PACKET_PAYLOAD_SIZE(_size) (_size - sizeof(struct VBanHeader))
+
+int CVBANSocket::Ping() {
+  struct VBanHeader *hdr = PACKET_HEADER_PTR(databuf);
+
+  hdr->vban       = VBAN_HEADER_FOURC;
+	hdr->format_SR  = VBAN_PROTOCOL_SERVICE;
+  hdr->service_type = VBAN_SERVICE_IDENTIFICATION;
+  hdr->service = VBAN_SERVICE_FNCT_PING0;
+  hdr->reserved = 0;
+  _tcsncpy(hdr->streamname, "PING", 4);
+  hdr->nuFrame    = 0;
+	return SendTo(databuf, sizeof(struct VBanHeader), config.port, *config.ip_address ? config.ip_address : NULL,0);
+	}
+
+int CVBANSocket::PacketSetNewContent(size_t payload_size) {
+  struct VBanHeader *hdr = PACKET_HEADER_PTR(databuf);
+
+  if(databuf == 0)    {
+//      logger_log(LOG_FATAL, "%s: null argument", __func__);
+    return -EINVAL;
+	  }
+  hdr->format_nbs = (((payload_size / ((hdr->format_nbc+1) * 
+		VBanBitResolutionSize[(hdr->format_bit & VBAN_BIT_RESOLUTION_MASK)])) ) / 4 ) -1;
+  ++hdr->nuFrame;
+
+  return 0;
+	}
+
+void CVBANSocket::PacketSetNewSeq(DWORD seq) {
+  struct VBanHeader *hdr = PACKET_HEADER_PTR(databuf);
+  hdr->nuFrame=seq;
+	}
+
+/** should better be in vban.h header ?*/
+size_t CVBANSocket::vban_sr_from_value(unsigned int value) {
+  size_t index = 0;
+
+  while((index < VBAN_SR_MAXNUMBER) && (value != VBanSRList[index])) {
+    ++index;
+    }
+
+  return index;
+	}
+
+int CVBANSocket::PacketCheck(const char *streamname, const BYTE *buffer, size_t size) {
+  struct VBanHeader const* const hdr = PACKET_HEADER_PTR(buffer);
+  enum VBanProtocol protocol = VBAN_PROTOCOL_UNDEFINED_4;
+  enum VBanCodec codec = VBAN_CODEC_UNDEFINED_14;
+
+  if((streamname == 0) || (buffer == 0)) {
+//        logger_log(LOG_FATAL, "%s: null pointer argument", __func__);
+    return -EINVAL;
+    }
+
+  if(size <= VBAN_HEADER_SIZE) {
+ //       logger_log(LOG_WARNING, "%s: packet too small", __func__);
+    return -EINVAL;
+    }
+
+    if (hdr->vban != VBAN_HEADER_FOURC)    {
+ //       logger_log(LOG_WARNING, "%s: invalid vban magic fourc", __func__);
+    return -EINVAL;
+    }
+
+  if(_tcsncmp(streamname, hdr->streamname, VBAN_STREAM_NAME_SIZE))    {
+ //       logger_log(LOG_DEBUG, "%s: different streamname", __func__);
+    return -EINVAL;
+    }
+
+    /** check the reserved bit : it must be 0 */
+  if(hdr->format_bit & VBAN_RESERVED_MASK)    {
+ //       logger_log(LOG_WARNING, "%s: reserved format bit invalid value", __func__);
+    return -EINVAL;
+    }
+
+  /** check protocol and codec */
+  protocol        = (enum VBanProtocol)(hdr->format_SR & VBAN_PROTOCOL_MASK);
+  codec           = (enum VBanCodec )(hdr->format_bit & VBAN_CODEC_MASK);
+
+  switch (protocol) {
+    case VBAN_PROTOCOL_AUDIO:
+      return (codec == VBAN_CODEC_PCM) ? PacketPcmCheck(buffer, size) : -EINVAL;
+
+    case VBAN_PROTOCOL_SERIAL:
+    case VBAN_PROTOCOL_TXT:
+    case VBAN_PROTOCOL_UNDEFINED_1:
+    case VBAN_PROTOCOL_VIDEO:
+    case VBAN_PROTOCOL_UNDEFINED_3:
+    case VBAN_PROTOCOL_UNDEFINED_4:
+      /** not supported yet */
+      return -EINVAL;
+
+    default:
+  //    logger_log(LOG_ERROR, "%s: packet with unknown protocol", __func__);
+      return -EINVAL;
+    }
+	}
+
+int CVBANSocket::PacketPcmCheck(const BYTE *buffer, size_t size) {
+
+    /** the packet is already a valid vban packet and buffer already checked before */
+
+  struct VBanHeader const* const hdr = PACKET_HEADER_PTR(buffer);
+  enum VBanBitResolution const bit_resolution = (enum VBanBitResolution)(hdr->format_bit & VBAN_BIT_RESOLUTION_MASK);
+  int const sample_rate   = hdr->format_SR & VBAN_SR_MASK;
+  int const nb_samples    = (hdr->format_nbs + 1) * 4;
+  int const nb_channels   = hdr->format_nbc + 1;
+  size_t sample_size      = 0;
+  size_t payload_size     = 0;
+
+//  logger_log(LOG_DEBUG, "%s: packet is vban: %u, sr: %d, nbs: %d, nbc: %d, bit: %d, name: %s, nu: %u",
+//      __func__, hdr->vban, hdr->format_SR, hdr->format_nbs, hdr->format_nbc, hdr->format_bit, hdr->streamname, hdr->nuFrame);
+
+  if(bit_resolution >= VBAN_BIT_RESOLUTION_MAX) {
+  //      logger_log(LOG_WARNING, "%s: invalid bit resolution", __func__);
+    return -EINVAL;
+    }
+
+  if(sample_rate >= VBAN_SR_MAXNUMBER) {
+   //     logger_log(LOG_WARNING, "%s: invalid sample rate", __func__);
+    return -EINVAL;
+    }
+
+  sample_size = VBanBitResolutionSize[bit_resolution];
+  payload_size = nb_samples * sample_size * nb_channels;
+
+  if(payload_size != (size - VBAN_HEADER_SIZE)) {
+   //     logger_log(LOG_WARNING, "%s: invalid payload size, expected %d, got %d", __func__, payload_size, (size - VBAN_HEADER_SIZE));
+    return -EINVAL;
+    }
+    
+  return 0;
+	}
+
+int CVBANSocket::PacketInitHeader(const struct stream_config_t *stream_config, const char *streamname) {
+  struct VBanHeader *hdr = PACKET_HEADER_PTR(databuf);
+
+  if((databuf == 0) || (stream_config == 0))    {
+//      logger_log(LOG_FATAL, "%s: null argument", __func__);
+    return -EINVAL;
+		}
+
+  hdr->vban       = VBAN_HEADER_FOURC;
+  hdr->format_nbc = stream_config->nb_channels - 1;
+  hdr->format_SR  = vban_sr_from_value(stream_config->sample_rate);
+  hdr->format_bit = stream_config->bit_fmt;
+  _tcsncpy(hdr->streamname, streamname, VBAN_STREAM_NAME_SIZE-1);
+  hdr->nuFrame    = 0;
+
+  return 0;
+	}
+
+
+int CVBANSocket::Manda(const void *lpData,DWORD len) {
+  int ret = 0;
+  struct sockaddr_in si_other;
+  int slen = sizeof(si_other);
+	static DWORD frameCnt=0;
+
+//    logger_log(LOG_DEBUG, "%s invoked", __func__);
+
+/*
+  if(m_hSocket == 0)    {
+//        logger_log(LOG_ERROR, "%s: socket is not open", __func__);
+    return -ENODEV;
+		}
+
+  ZeroMemory(&si_other, sizeof(si_other));		// non la uso cmq... TOGLIERE POI
+  si_other.sin_family        = AF_INET;
+  si_other.sin_port          = htons(config.port);
+  si_other.sin_addr.s_addr   = inet_addr(config.ip_address);
+*/
+
+// messo dopo costruzione, di là!	stream_config.bit_fmt=VBAN_BITFMT_8_INT;
+//	stream_config.nb_channels=1 /* theTV->wfd.wf.numChannels */;
+//	stream_config.sample_rate=8000 /* theTV->wfd.wf.nSamplesPerSec */ ;
+//	PacketInitHeader(buffer, &stream_config, "Liverpool's GD");
+
+//	BYTE myBuf[32000];
+//	memcpy(myBuf,lpData,len);		// perché credo che il buffer venga deallocato di là!
+
+	int chunkSize,chunk;
+	BYTE *ptr=(BYTE *)lpData /*myBuf*/;
+	struct VBanHeader *hdr=(struct VBanHeader *)databuf;
+	bytesPerFrame=(VBAN_SAMPLES_MAX_NB * 
+		(theApp.theServer->theTV->wfd.wf.nChannels * theApp.theServer->theTV->wfd.wf.wBitsPerSample))/8;
+// was: max 256 sample per packet...
+	chunkSize=min(bytesPerFrame,VBAN_DATA_MAX_SIZE);
+	PacketSetNewContent(chunkSize);
+  chunk=((((DWORD)hdr->format_nbs) + 1) * (((hdr->format_nbc+1) * 
+		VBanBitResolutionSize[(hdr->format_bit & VBAN_BIT_RESOLUTION_MASK)])) ) *4;			// per i resti della divisione/4..
+	if(chunk != chunkSize) {
+		chunkSize=chunk;
+		PacketSetNewContent(chunkSize);
+		}
+
+	do {
+		chunk=min(chunkSize,len);
+		if(chunk != chunkSize)
+			PacketSetNewContent(chunk);
+		frameCnt++;
+		PacketSetNewSeq(frameCnt);
+		memcpy(databuf+sizeof(struct VBanHeader),ptr,chunk);
+
+		ptr+=chunk;
+
+//		struct VBanHeader *avh=(struct VBanHeader *)databuf;
+		ret = SendTo(databuf, chunk+sizeof(struct VBanHeader), config.port, *config.ip_address ? config.ip_address : NULL,0);
+		// SERVE ultimo parm o si incasina con ipaddress e NULL - ecc  £$%@# ; no.. è stronzo in modo Release..
+//		https://social.msdn.microsoft.com/Forums/ie/en-US/3076a9cd-57a0-418d-8de1-07adc3b486bb/socket-fails-with-error-10022-when-application-is-run-from-certain-network-shares-on-vista-and?forum=wsk.
+//  ret = SendTo(buffer, 1000, config.port, config.ip_address);
+//						theApp.FileSpool->print(CLogFile::flagInfo,"VBAN manda %d",ret);
+		if(ret < 0)    {
+				ASSERT(0);
+			int i = GetLastError();
+						theApp.FileSpool->print(CLogFile::flagInfo,"  error %d",i);
+			if(errno != EINTR)        {
+	//            logger_log(LOG_ERROR, "%s: sendto error %d %s", __func__, errno, strerror(errno));
+				}
+			return ret;
+			}
+
+		len-=chunk;
+
+		} while(len>0);
+
+  return ret;
+	}
+
+
+
 
 
 #ifndef _CAMPARTY_MODE
@@ -4032,16 +5047,16 @@ int CControlCliSocket::SendUserPass(const char *n,const char *p,DWORD x,CTimeSpa
 // Authentication server Socket(s)
 CAuthSrvSocket2::CAuthSrvSocket2(CAuthSrvSocket *p) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	packetType=0;
-	myParent=p;
+	m_Parent=p;
 	numLogConn=0;
 	cliTimeOut=timeGetTime();
 	}
 
 CAuthSrvSocket2::~CAuthSrvSocket2() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CAuthSrvSocket2::OnReceive(int nErr) {
@@ -4070,10 +5085,10 @@ rifo:
 			break;
 		case 1:
 			if((i=Receive(myBuf,127)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 127) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 127) {
 					n=127;
-					myLineText->readTextRaw((BYTE *)myBuf2,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf2,&n);
 					nome=myBuf2;
 					memcpy(pasw,myBuf2+32,32);
 					i=*(DWORD *)(myBuf2+64);	// se client o exhib
@@ -4143,7 +5158,7 @@ fine:
 				if(theApp.debugMode) {
 					if(theApp.FileSpool) {
 						GetPeerName(aIP,aPort);
-						theApp.FileSpool->print(2,"ricevuto HeartBeat da %s",(LPCTSTR)aIP);
+						theApp.FileSpool->print(CLogFile::flagInfo,"ricevuto HeartBeat da %s",(LPCTSTR)aIP);
 						}
 					}
 
@@ -4166,10 +5181,10 @@ void CAuthSrvSocket2::OnClose(int nErr) {
 
 	if(theApp.debugMode) {
 		if(theApp.FileSpool)
-			theApp.FileSpool->print(2,"**close authsock srv, OnClose");
+			theApp.FileSpool->print(CLogFile::flagInfo,"**close authsock srv, OnClose");
 		}
 	Close();
-	myParent->doDelete(this);
+	m_Parent->doDelete(this);
 	}
 
 void CAuthSrvSocket2::updateDBUtenti() {
@@ -4185,7 +5200,7 @@ void CAuthSrvSocket2::updateDBUtenti() {
 				Close();
 				if(theApp.debugMode) {
 					if(theApp.FileSpool)
-						theApp.FileSpool->print(2,"**close authsock, IPcambiato");
+						theApp.FileSpool->print(CLogFile::flagInfo,"**close authsock, IPcambiato");
 					}
 				}
 			}
@@ -4236,7 +5251,7 @@ void CAuthSrvSocket::OnAccept(int nErr) {
 	tempSock.Close();			// questo indica troppe connessioni
 	}
 	if(theApp.FileSpool)
-		theApp.FileSpool->print(2,"impossibile Accept() AuthSrv, stroncato!");
+		theApp.FileSpool->print(CLogFile::flagInfo,"impossibile Accept() AuthSrv, stroncato!");
 	}
 
 void CAuthSrvSocket::doDelete(CAuthSrvSocket2 *ss,int bForced) {
@@ -4272,9 +5287,9 @@ void CAuthSrvSocket::updateDBUtenti() {
 
 CAuthCliSocket::CAuthCliSocket(/*CWnd *hWnd*/ CExDocument *p) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	packetType=0;
-	myParent=p;
+	m_Parent=p;
 //	theWnd=hWnd;
 	theWnd=NULL;
 	reInit();
@@ -4282,7 +5297,7 @@ CAuthCliSocket::CAuthCliSocket(/*CWnd *hWnd*/ CExDocument *p) {
 
 CAuthCliSocket::~CAuthCliSocket() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CAuthCliSocket::OnReceive(int nErr) {
@@ -4301,30 +5316,30 @@ rifo:
 			if((i=Receive(myBuf,sizeof(int)*3+sizeof(CTimeSpan)+
 					sizeof(FTPserver)+sizeof(FTPlogin)+sizeof(FTPpassword)+
 					sizeof(tariffa)+sizeof(double)+sizeof(passwordSconto))) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= sizeof(int)*3+sizeof(CTimeSpan)+
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= sizeof(int)*3+sizeof(CTimeSpan)+
 					sizeof(FTPserver)+sizeof(FTPlogin)+sizeof(FTPpassword)+
 					sizeof(tariffa)+sizeof(double)+sizeof(passwordSconto)) {
 					n=sizeof(int);
-					myLineText->readTextRaw((BYTE *)&response,&n);
+					m_LineText->readTextRaw((BYTE *)&response,&n);
 					n=sizeof(int);
-					myLineText->readTextRaw((BYTE *)&extraParm,&n);
+					m_LineText->readTextRaw((BYTE *)&extraParm,&n);
 					n=sizeof(DWORD);
-					myLineText->readTextRaw((BYTE *)&IDutente,&n);
+					m_LineText->readTextRaw((BYTE *)&IDutente,&n);
 					n=sizeof(tariffa);
-					myLineText->readTextRaw((BYTE *)tariffa,&n);
+					m_LineText->readTextRaw((BYTE *)tariffa,&n);
 					n=sizeof(double);
-					myLineText->readTextRaw((BYTE *)&sconto,&n);
+					m_LineText->readTextRaw((BYTE *)&sconto,&n);
 					n=sizeof(passwordSconto);
-					myLineText->readTextRaw((BYTE *)passwordSconto,&n);
+					m_LineText->readTextRaw((BYTE *)passwordSconto,&n);
 					n=sizeof(CTimeSpan);
-					myLineText->readTextRaw((BYTE *)&timedConn,&n);
+					m_LineText->readTextRaw((BYTE *)&timedConn,&n);
 					n=sizeof(FTPserver);
-					myLineText->readTextRaw((BYTE *)FTPserver,&n);
+					m_LineText->readTextRaw((BYTE *)FTPserver,&n);
 					n=sizeof(FTPlogin);
-					myLineText->readTextRaw((BYTE *)FTPlogin,&n);
+					m_LineText->readTextRaw((BYTE *)FTPlogin,&n);
 					n=sizeof(FTPpassword);
-					myLineText->readTextRaw((BYTE *)FTPpassword,&n);
+					m_LineText->readTextRaw((BYTE *)FTPpassword,&n);
 					packetType=0;
 					}
 				}
@@ -4346,6 +5361,9 @@ rifo:
 				getParent()->getView()->SendMessage(WM_COMMAND,ID_CONNESSIONE_DISCONNETTI,0);		// per costringere a ricollegarsi!! (v. anche OCX)
 				packetType=0;
 				}
+			break;
+		default:
+			Receive(myBuf,1023);
 			break;
 		}
 
@@ -4398,15 +5416,15 @@ int CAuthCliSocket::SendUserPass(char *n,char *p,int m,DWORD id2,
 // Directory server Socket(s)
 CDirectorySrvSocket2::CDirectorySrvSocket2(CDirectorySrvSocket *p) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	packetType=0;
 	cliTimeOut=-1;
-	myParent=p;
+	m_Parent=p;
 	}
 
 CDirectorySrvSocket2::~CDirectorySrvSocket2() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CDirectorySrvSocket2::OnReceive(int nErr) {
@@ -4431,18 +5449,21 @@ rifo:
 			break;
 		case 1:
 			if((i=Receive(myBuf,32)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 32) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 32) {
 					n=32;
-					myLineText->readTextRaw((BYTE *)myBuf2,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf2,&n);
 					connName=myBuf2;
 					if(theApp.theConnections)
-						theApp.theConnections->update();
+						((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 					packetType=0;
 					}
 				}
 			break;
 		case 2:		// potrebbe servire per indicare le caratteristiche del server che si registra...
+			break;
+		default:
+			Receive(myBuf,255);
 			break;
 		}
 	}
@@ -4451,8 +5472,8 @@ void CDirectorySrvSocket2::OnClose(int nErr) {
 
 	Close();
 	if(theApp.theDirectoryServer)
-		theApp.theDirectoryServer->update();
-	myParent->doDelete(this);
+		((CVidsendView6*)theApp.theDirectoryServer->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
+	m_Parent->doDelete(this);
 	}
 
 CDirectorySrvSocket::CDirectorySrvSocket() {
@@ -4484,7 +5505,7 @@ void CDirectorySrvSocket::OnAccept(int nErr) {
 			j=Accept(*s);
 			if(j) {
 				if(theApp.theDirectoryServer)
-					theApp.theDirectoryServer->update();
+					((CVidsendView6*)theApp.theDirectoryServer->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 				}
 			else
 				theApp.mandaALog(NULL,"Tentativo fallito di connessione client DirSrv");
@@ -4519,13 +5540,13 @@ void CDirectorySrvSocket::doDelete(CDirectorySrvSocket2 *ss) {
 
 CDirectoryCliSocket::CDirectoryCliSocket() {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	packetType=0;
 	}
 
 CDirectoryCliSocket::~CDirectoryCliSocket() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CDirectoryCliSocket::OnReceive(int nErr) {
@@ -4542,14 +5563,17 @@ rifo:
 			break;
 		case 2:
 			if((i=Receive(myBuf,255)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 255) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 255) {
 					n=255;
-					myLineText->readTextRaw((BYTE *)myBuf,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf,&n);
 					AfxMessageBox((char *)myBuf,MB_ICONEXCLAMATION);
 					packetType=0;
 					}
 				}
+			break;
+		default:
+			Receive(myBuf,1023);
 			break;
 		}
 	}
@@ -4569,9 +5593,9 @@ void CDirectoryCliSocket::OnClose(int nErr) {
 // CHAT Socket(s)
 CChatSrvSocket2::CChatSrvSocket2(CChatSrvSocket *p) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	packetType=0;
-	myParent=p;
+	m_Parent=p;
 	cliTimeOut=timeGetTime();
 	richOne2One=0;
 	serNum=0;
@@ -4581,7 +5605,7 @@ CChatSrvSocket2::CChatSrvSocket2(CChatSrvSocket *p) {
 
 CChatSrvSocket2::~CChatSrvSocket2() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CChatSrvSocket2::OnReceive(int nErr) {
@@ -4595,20 +5619,20 @@ void CChatSrvSocket2::OnReceive(int nErr) {
 																				// Bisogna fare attenzione a quanti byte si ricevono...
 																				// NON sappiamo se OnReceive viene richiamata piu' volte o no...
 																				// in caso io non legga tutti i dati...
-		myLineText->handleReadData(myBuf,i);
+		m_LineText->handleReadData(myBuf,i);
 rifo:
 		switch(packetType) {
 			case 0:
-				if(myLineText->ssize() >= 1) {
+				if(m_LineText->ssize() >= 1) {
 					n=1;
-					myLineText->readTextRaw((BYTE *)&packetType,&n);
+					m_LineText->readTextRaw((BYTE *)&packetType,&n);
 //2018					goto rifo;
 					}
 				break;
 			case 1:			// ID di chi si connette
-				if(myLineText->ssize() >= 41) {
+				if(m_LineText->ssize() >= 41) {
 					n=41;
-					myLineText->readTextRaw((BYTE *)myBuf2,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf2,&n);
 					connType=*(BYTE *)myBuf2;
 					connColor=*(DWORD *)(myBuf2+1) & 0xffffff;
 					serNum=*(DWORD *)(myBuf2+4);
@@ -4651,22 +5675,22 @@ rifo:
 							_tcscpy(m.sender,(LPCTSTR)"<server");
 							if(theApp.theChat->opzioniVisive & CVidsendDoc4::avvisi_sonori)
 								MessageBeep(MB_OK);
-							myParent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
+							m_Parent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
 							}
 						}
 					if(theApp.theConnections)
-						theApp.theConnections->update();
+						((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 					packetType=0;
-					if(myLineText->ssize() > 0)
+					if(m_LineText->ssize() > 0)
 						goto rifo;
 					}
 				break;
 			case 2:		// messaggio pubblico (da inoltrare a tutti)
-				if(myLineText->ssize() >= 200) {
+				if(m_LineText->ssize() >= 200) {
 					struct CHAT_MESSAGE m;
 					CString S;
 					n=200;
-					myLineText->readTextRaw((BYTE *)&m.message,&n);
+					m_LineText->readTextRaw((BYTE *)&m.message,&n);
 					m.id=2;
 					m.color=connColor;
 					m.extra=(connType & CVidsendView4::supervisorMsg ? CVidsendView4::supervisorMsg : 0) |
@@ -4678,26 +5702,26 @@ rifo:
 					if(!strncmp(m.message,"\\\\*",3) && !(theApp.theChat->Opzioni & CVidsendDoc4::usaIcons)) {
 						goto non_inviare;
 						}
-					myParent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
+					m_Parent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
 non_inviare:
 					packetType=0;
-					if(myLineText->ssize() > 0)
+					if(m_LineText->ssize() > 0)
 						goto rifo;
 					}
 				break;
 			case 3:		// messaggio privato (da inoltrare a UNO!)
 /*			if((i=Receive(myBuf,1000)) > 0) {
-				myLineText->handleReadData(myBuf,i);
-				if(myLineText->ssize() >= 255) {
+				m_LineText->handleReadData(myBuf,i);
+				if(m_LineText->ssize() >= 255) {
 					n=255;
-					myLineText->readTextRaw((BYTE *)myBuf,&n);
+					m_LineText->readTextRaw((BYTE *)myBuf,&n);
 					AfxMessageBox(myBuf,MB_ICONEXCLAMATION);
 					packetType=0;
 					}
 				}*/
 				break;
 			case 11:		// heartBeat
-				if(myLineText->ssize() >= 2) {
+				if(m_LineText->ssize() >= 2) {
 					cliTimeOut=timeGetTime();
 
 					if(theApp.debugMode) {
@@ -4709,6 +5733,9 @@ non_inviare:
 
 					packetType=0;
 					}
+				break;
+			default:
+				Receive(myBuf,255);
 				break;
 			}
 		}
@@ -4735,13 +5762,13 @@ void CChatSrvSocket2::OnClose(int nErr) {
 			if(theApp.theChat->Opzioni & CVidsendDoc4::onlyOne2One)			// all'uscita, COMUNQUE TOLGO 1:1
 				theApp.theChat->Opzioni &= ~CVidsendDoc4::onlyOne2One;
 			((CButton *)theApp.theChat->getView()->GetDlgItem(IDC_BUTTON5))->SetCheck(0);
-			myParent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
+			m_Parent->Manda((char *)&m,sizeof(struct CHAT_MESSAGE));
 			}
 		}
-	myParent->doDelete(this);
+	m_Parent->doDelete(this);
 	}
 
-int CChatSrvSocket2::Manda(char *p,int n) {
+int CChatSrvSocket2::Manda(const char *p,int n) {
 
 	return Send(p,n);
 	}
@@ -4814,7 +5841,7 @@ void CChatSrvSocket::OnAccept(int nErr) {
 					// la notifica del nuovo arrivato e' in Receive info...
 					}
 				if(theApp.theConnections)
-					theApp.theConnections->update();
+				((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 				}
 			else
 				theApp.mandaALog(NULL,"Tentativo fallito di connessione client Chat");
@@ -4831,7 +5858,7 @@ fine:
 		theApp.FileSpool->print(2,"impossibile Accept() chat, stroncato!");
 	}
 
-int CChatSrvSocket::Manda(char *p,int n) {
+int CChatSrvSocket::Manda(const char *p,int n) {
 	POSITION po;
 
 	po=cSockRoot.GetHeadPosition();
@@ -4862,20 +5889,20 @@ void CChatSrvSocket::doDelete(CChatSrvSocket2 *ss) {
 	maxConn--;
 
 	if(theApp.theConnections)
-		theApp.theConnections->update();
+		((CVidsendView6*)theApp.theConnections->getView())->PostMessage(WM_COMMAND,ID_VISUALIZZA_AGGIORNA,0);
 	}
 
 
 CChatCliSocket::CChatCliSocket(CWnd *v) {
 
-	myLineText=new CLineText;
+	m_LineText=new CLineText;
 	theWnd=v;
 	packetType=0;
 	}
 
 CChatCliSocket::~CChatCliSocket() {
 
-	delete myLineText;
+	delete m_LineText;
 	}
 
 void CChatCliSocket::OnReceive(int nErr) {
@@ -4889,55 +5916,58 @@ void CChatCliSocket::OnReceive(int nErr) {
 																				// Bisogna fare attenzione a quanti byte si ricevono...
 																				// NON sappiamo se OnReceive viene richiamata piu' volte o no...
 																				// in caso io non legga tutti i dati...
-		myLineText->handleReadData(myBuf,i);
+		m_LineText->handleReadData(myBuf,i);
 rifo:
 		switch(packetType) {
 			case 0:
-				if(myLineText->ssize() >= 1) {
+				if(m_LineText->ssize() >= 1) {
 					n=1;
-					myLineText->readTextRaw((BYTE *)&packetType,&n);
+					m_LineText->readTextRaw((BYTE *)&packetType,&n);
 					goto rifo;
 					}
 				break;
 			case 1:
-				if(myLineText->ssize() >= sizeof(struct CHAT_INFO)) {
+				if(m_LineText->ssize() >= sizeof(struct CHAT_INFO)) {
 					n=sizeof(struct CHAT_INFO);
-					myLineText->readTextRaw((BYTE *)&(((CVidsendView4 *)theWnd)->chatInfo),&n);
+					m_LineText->readTextRaw((BYTE *)&(((CVidsendView4 *)theWnd)->chatInfo),&n);
 					GetPeerName(aIP,aPort);
 					if(!((CVidsendView4 *)theWnd)->doConnect((char *)(LPCTSTR)aIP,&((CVidsendView4 *)theWnd)->chatInfo)) {
 						((CVidsendView4 *)theWnd)->endConnect();
 						Close();
 						}
 					packetType=0;
-					if(myLineText->ssize() > 0)
+					if(m_LineText->ssize() > 0)
 						goto rifo;
 					}
 				break;
 			case 2:
-				if(myLineText->ssize() >= (sizeof(struct CHAT_MESSAGE)-1)) {
+				if(m_LineText->ssize() >= (sizeof(struct CHAT_MESSAGE)-1)) {
 					struct CHAT_MESSAGE *m;
 					n=(sizeof(struct CHAT_MESSAGE)-1);
 					if(m=new struct CHAT_MESSAGE) {
-						myLineText->readTextRaw(((BYTE *)m)+1,&n);
+						m_LineText->readTextRaw(((BYTE *)m)+1,&n);
 						((CVidsendView4 *)theWnd)->addToListBox(m);
 						}
 					else
-						myLineText->readTextRaw((BYTE *)myBuf,&n);
+						m_LineText->readTextRaw((BYTE *)myBuf,&n);
 					//segnalare errore!
 					packetType=0;
-					if(myLineText->ssize() > 0)
+					if(m_LineText->ssize() > 0)
 						goto rifo;
 					}
 				break;
 			case 3:
-				if(myLineText->ssize() >= sizeof(struct CHAT_ROOMS_INFO)) {
+				if(m_LineText->ssize() >= sizeof(struct CHAT_ROOMS_INFO)) {
 					n=sizeof(struct CHAT_ROOMS_INFO);
-					myLineText->readTextRaw((BYTE *)&(((CVidsendView4 *)theWnd)->chatRoomsInfo),&n);
+					m_LineText->readTextRaw((BYTE *)&(((CVidsendView4 *)theWnd)->chatRoomsInfo),&n);
 					// finire...
 					packetType=0;
-					if(myLineText->ssize() > 0)
+					if(m_LineText->ssize() > 0)
 						goto rifo;
 					}
+				break;
+			default:
+				Receive(myBuf,255);
 				break;
 			}
 		}
@@ -5004,7 +6034,7 @@ BOOL CVidsendApp::impostaDaAtomClock(char *server) {
 
 
 
-int CVidsendApp::getMonthFromGMTString(char *s) {
+int CVidsendApp::getMonthFromGMTString(const char *s) {
 
 	switch(*(int *)s) {
 		case ' NAJ':
@@ -5047,7 +6077,7 @@ int CVidsendApp::getMonthFromGMTString(char *s) {
 	return -1;
 	}
 
-CTime CVidsendApp::parseGMTTime(char *s) {
+CTime CVidsendApp::parseGMTTime(const char *s) {
 	char *p;
 	int i;
 	CTime myT;
@@ -5058,7 +6088,7 @@ CTime CVidsendApp::parseGMTTime(char *s) {
 	while(isspace(*s))
 		s++;
 	if(isalpha(*s)) {
-		strupr(s);
+		strupr((char *)s);			// porcata! ma ok
 		switch(*(short int *)s) {
 			case 'US':
 				i=0;
@@ -5083,7 +6113,7 @@ CTime CVidsendApp::parseGMTTime(char *s) {
 				break;
 			}
 		t.tm_wday=i;
-		p=s+3;
+		p=(char *)s+3;
 		if(*p ==',')
 			p++;
 		p++;

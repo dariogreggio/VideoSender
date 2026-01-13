@@ -8,11 +8,18 @@
 
 struct EXT_WAVEFORMATEX {
 	WAVEFORMATEX wf;
-	char extra[64];
+	BYTE extra[64];
+	};
+//2018: v. anche WAVE_FORMAT_EXTENSIBLE, https://docs.microsoft.com/en-us/previous-versions/windows/desktop/ee419020%28v%3dvs.85%29
+
+struct COMPRESSION_TYPES {
+	DWORD fourCC;
+	WORD bitsPerPixel;
 	};
 
 #define RGBConvert2416(n)    (DWORD) ((((n) & 0xF8) >> 3) | (((n) & 0xFC00) >> 5) | (((n) & 0xf80000) >> 8))
 
+#define QUALITYBOX_CHECK 8
 class CTV {
 	enum {
 		THE_FIRST_CAPTURE=0,			// ci saranno max 10 periferiche di cattura
@@ -27,13 +34,13 @@ class CTV {
 		};
 public:
 	CTV(CWnd *);
-	CTV(CWnd *, BOOL canOverlay, BITMAPINFOHEADER *biRawDef=NULL, DWORD fps=5, DWORD kFrame=CTV::oneKPerSecond, DWORD preferredDriver=0, 
-		BOOL bAudio=1, WAVEFORMATEX *preferredWf=NULL, BOOL bVerbose=TRUE);
-	CTV(CWnd *, BOOL canOverlay, RECT *size, WORD bpp, DWORD fps=5, DWORD preferredDriver=0, DWORD kFrame=CTV::oneKPerSecond, 
-		BOOL bAudio=1, WAVEFORMATEX *preferredWf=NULL, BOOL bVerbose=TRUE);
+	CTV(CWnd *, BOOL canOverlay, const BITMAPINFOHEADER *biRawDef=NULL, DWORD fps=5, DWORD kFrame=CTV::oneKPerSecond, 
+		DWORD preferredDriver=0, BOOL bAudio=1, const WAVEFORMATEX *preferredWf=NULL, BOOL bVerbose=TRUE);
+	CTV(CWnd *, BOOL canOverlay, const SIZE *size, WORD bpp, DWORD fps=5, DWORD preferredFormat=0, DWORD preferredDriver=0, 
+		DWORD kFrame=CTV::oneKPerSecond, BOOL bAudio=1, const WAVEFORMATEX *preferredWf=NULL, BOOL bVerbose=TRUE);
 	void preConstruct(CWnd *pWnd=NULL);
 	~CTV();
-	int initCapture(BOOL, BITMAPINFOHEADER *, DWORD , DWORD , DWORD, BOOL, WAVEFORMATEX *, BOOL bVerbose);
+	int initCapture(BOOL, const BITMAPINFOHEADER *, DWORD , DWORD , DWORD, BOOL, const WAVEFORMATEX *, BOOL bVerbose);
 	int setSuperImposeDateTime(int m) { if(biRawBitmap.biBitCount==24) { imposeTime=m; return 1; } else return 0;};
 	int setSuperImposeText(const char *s,int m) { _tcsncpy(imposeText,s,31); imposeText[31]=0; imposeTextPos=m; return 1; };
 	int startSaveFile(CString,DWORD);
@@ -51,14 +58,15 @@ public:
 	BOOL isRecordingVideo() { return aviFile != NULL;}
 	/*static */ int superImposeDateTime(const LPBITMAPINFOHEADER,BYTE *,COLORREF dColor=RGB(255,255,255));
 	/*static */ int superImposeText(const LPBITMAPINFOHEADER,BYTE *,const char *s,COLORREF dColor=RGB(255,255,255));
-	static int superImposeText(CBitmap *b,const char *s,COLORREF dColor=RGB(255,255,255),int flag=0);
+	static int superImposeText(const CBitmap *b,const char *s,COLORREF dColor=RGB(255,255,255),int flag=0);
 	static int superImposeBox(const LPBITMAPINFOHEADER,BYTE *,const RECT *,COLORREF dColor=RGB(0,255,0));
 	static int convertColorBitmapToBN(const LPBITMAPINFOHEADER,BYTE *);
 	static int mirrorBitmap(const LPBITMAPINFOHEADER,BYTE *);
 	static int flipBitmap(const LPBITMAPINFOHEADER,BYTE *);
 	static int resampleBitmap(const LPBITMAPINFOHEADER,BYTE *,RECT *);
-	int checkQualityBox(const LPBITMAPINFOHEADER,const BYTE *,RECT *);
+	int checkQualityBox(const LPBITMAPINFOHEADER,const BYTE *,RECT *,LPDWORD retLuma=NULL,DWORD retChroma[]=NULL,DWORD ***myOldCells=NULL);
 	int setOpzioni(DWORD n) { opzioniSave=n; return 1; };
+	int compressAFrame(LPVIDEOHDR,int doPreview,CWnd *w,HDRAWDIB hdd,LPBITMAPINFOHEADER bmih);
 
 protected:
 	BOOL setAudioFormat(WAVEFORMATEX *wfex) { return m_hWnd ? capSetAudioFormat(m_hWnd,wfex,sizeof(WAVEFORMATEX)) : -1; }
@@ -83,7 +91,10 @@ protected:
 #endif
 
 public:
+	static const COMPRESSION_TYPES acceptedCompressionType[];
 	HACMSTREAM m_hAcm;
+	HWAVEIN m_hWaveIn;
+	WAVEHDR IWaveHdr1,IWaveHdr2;
 	HIC m_hICCo,m_hICDe /*per decomprimere in RGB telecamere che non lo danno*/;
 	DWORD framesPerSec,KFrame;
 #ifndef USA_DIRECTX
@@ -91,7 +102,7 @@ public:
 	CAPDRIVERCAPS captureCaps;
 	CAPSTATUS captureStatus;
 #endif
-	//COMPVARS cv;
+	COMPVARS cv;
 	DWORD maxFrameSize;
 	DWORD compressor;
 	DWORD theCapture;
@@ -104,6 +115,7 @@ public:
 	DWORD oldTimeCaptured;	// usato nella callback video per patch-are i fps
 	BOOL inCapture;
 	BYTE *theFrame;		// ultimo frame catturato, per controllo movimento e HTML/Webcam
+	BYTE *m_AudioBuffer1,*m_AudioBuffer2;
 
 protected:
 	CWnd *m_Parent;
