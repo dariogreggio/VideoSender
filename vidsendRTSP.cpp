@@ -405,8 +405,10 @@ int CRTSPClientSocket::Send(WORD http_tunnel_port, CString S) {
 	int i;
 
   if(http_tunnel_port != 0) {
+		CStringEx S2=S;
     char encodedBytes[4096];
-		CSMTPAttachment::EncodeBase64(S, S.GetLength(), encodedBytes, 4095, NULL);
+		S2.Encode64();
+		_tcscpy(encodedBytes, (LPCTSTR)S2);
 		i=CSocket::Send(encodedBytes,_tcslen(encodedBytes));
     if(i<=0) {
       Close();
@@ -1950,7 +1952,9 @@ CString CRTSPClientSocket::MakeBasicResp(CString username, CString password) {
   CString S = username + ":" + password;
 	char encUserPasw[256];
 
-	CSMTPAttachment::EncodeBase64(S, S.GetLength(), encUserPasw, 255, NULL);
+	CStringEx S2=S;
+
+	S2.Encode64();
 /*  char *encodedBytes = base64Encode(tmp.c_str(), tmp.length());
   if(NULL == encodedBytes) {
     return "";
@@ -1958,7 +1962,7 @@ CString CRTSPClientSocket::MakeBasicResp(CString username, CString password) {
   tmp.assign(encodedBytes);
   delete[] encodedBytes;
 	*/
-	S=encUserPasw;
+	S=S2;
 
   return S;
 	}
@@ -2053,28 +2057,19 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 	buf[1]=0x00;
 	buf[2]=0x00;
 	buf[3]=0x00;
+	struct FU_A *fua=(struct FU_A*)&mybuf[12];
 	do {
 		if(!it->second->GetMediaPacket(mybuf,&size2))
 			break;
-		//GetMyRTPPacket
-		pack=(struct RTPHeader*)(mybuf);
-		NAL=mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
-		switch(mybuf[12] & 0x1f) {		// https://stackoverflow.com/questions/11543839/h-264-conversion-with-ffmpeg-from-a-rtp-stream
+		pack=(struct RTPHeader*)&mybuf;
+		NAL=mybuf[12] & 0xe0 /*fua->F fua->NRI*/ | fua->h_type;
+		switch(fua->i_type) {		// https://stackoverflow.com/questions/11543839/h-264-conversion-with-ffmpeg-from-a-rtp-stream
 			case H264TypeInterfaceFU_A::_SPS /*7*/: //SPS
-				NAL=mybuf[12] & 0xe0 | mybuf[13] & 0x1f;			pack->marker=true;
-				buf[3]=0x01;
-				break;
 			case H264TypeInterfaceFU_A::_PPS /*8*/: //PPS
-				NAL=mybuf[12] & 0xe0 | mybuf[13] & 0x1f;			pack->marker=true;
-				buf[3]=0x01;
-				break;
 			case H264TypeInterfaceFU_A::_SEI /*6*/: //SEI
-				NAL=mybuf[12] & 0xe0 | mybuf[13] & 0x1f;			pack->marker=true;
 				buf[3]=0x01;
 				break;
 			case H264TypeInterfaceFU_A::_FU_A_ID /*28*/: //video fragment
-				buf[3]=0x01;
-				break;
 			case H264TypeInterfaceFU_A::_FU_B_ID /*29*/: //video fragment
 				buf[3]=0x01;
 				break;
@@ -2085,28 +2080,31 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 				buf[3]=0x01;
 				break;
 			}
-		if((mybuf[12] & 0x1f) == 28 /*_FU_A_ID*/)	{	//  video 
-			if(p==buf+4) {			// se il primo del gruppo...
-				*p=0x65;		//mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
-				memcpy(p+1,mybuf  +14,size2-14);		// salto header
-				p+=size2-13;
-				}
-			else {
-				memcpy(p,mybuf  +14,size2-14);		// salto header
-				p+=size2-14;
-				}
-			}
-		else if((mybuf[12] & 0x1f) == 1)	{	//  video 
-			*p=0x61;		//mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
-			memcpy(p+1,mybuf  +13,size2-13);		// salto header
-			p+=size2-12;
-			}
-		else {	//non-video (start bit
-			memcpy(p,mybuf  +12,size2-12);		// 
-			p+=size2-12;
+		switch(fua->i_type) {
+			case H264TypeInterfaceFU_A::_FU_A_ID:	//  video 
+				if(fua->S) {			// se il primo del gruppo...
+					*p=NAL;		//0x65   mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
+					memcpy(p+1,mybuf  +14,size2-14);		// salto header
+					p+=size2-13;
+					}
+				else {
+					memcpy(p,mybuf  +14,size2-14);		// salto header
+					p+=size2-14;
+					}
+				break;
+			case 1:	//  video 
+				*p=0x61 /*NAL ma verrebbe 0x60 e non va bene... */;		//0x61 mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
+				memcpy(p+1,mybuf  +13,size2-13);		// salto header
+				p+=size2-12;
+				break;
+			default:	//non-video
+				memcpy(p,mybuf  +12,size2-12);		// 
+				p+=size2-12;
+				break;
 			}
 // https://stackoverflow.com/questions/9618369/h-264-over-rtp-identify-sps-and-pps-frames
-		} while(!pack->marker);
+		} while(!fua->E /*pack->marker*/);
+//	*p++=0; *p++=0; *p++=0; *p++=0;		// marker di fine/next NAL, per decoder H264...
 	*size=p-buf;
 	return buf;
 	}
