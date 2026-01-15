@@ -18,6 +18,17 @@
 #include <limits.h>
 #include <io.h>
 
+InputParameters cfgparams;
+// Color components
+enum {
+  Y_COMP = 0,    // Y Component
+  U_COMP = 1,    // U Component
+  V_COMP = 2,    // V Component
+  R_COMP = 3,    // R Component
+  G_COMP = 4,    // G Component
+  B_COMP = 5,    // B Component
+  T_COMP = 6
+} ColorComponent;
 
 static inline short smin(short a, short b) {
   return (short) (((a) < (b)) ? (a) : (b));
@@ -4314,7 +4325,7 @@ void ParseCommand(InputParameters *p_Inp, int ac, char *av[]) {
     if (0 == strncmp (av[CLcount], "-f", 2) || 0 == strncmp (av[CLcount], "-F", 2))  // A file parameter?
     {
       content = GetConfigFileContent (av[CLcount+1]);
-      if (NULL==content)
+      if (!content)
         error (errortext, 300);
       printf ("Parsing Configfile %s", av[CLcount+1]);
       ParseContent (p_Inp, Map, content, (int) strlen (content));
@@ -5686,7 +5697,7 @@ static void Configure(InputParameters *p_Inp, int ac, char *av[]){
 if bOutputAllFrames is 1, then output all valid frames to file onetime; 
 else output the first valid frame and move the buffer to the end of list;
 *********************************************************/
-static int WriteOneFrame(DecodedPicList *pDecPic, int hFileOutput0, int hFileOutput1, int bOutputAllFrames) {
+/*static*/ int WriteOneFrame(DecodedPicList *pDecPic, int hFileOutput0, int hFileOutput1, int bOutputAllFrames) {
   int iOutputFrame=0;
   DecodedPicList *pPic = pDecPic;
 
@@ -5799,6 +5810,7 @@ static int WriteOneFrame(DecodedPicList *pDecPic, int hFileOutput0, int hFileOut
   return iOutputFrame;
 }
 
+#if 0
 /*!
  ***********************************************************************
  * \brief
@@ -5859,7 +5871,7 @@ int main(int argc, char **argv) {
   printf("%d frames are decoded.\n", iFramesDecoded);
   return 0;
 }
-
+#endif
 
 
 
@@ -5871,6 +5883,7 @@ int main(int argc, char **argv) {
  */
 void ercInit(VideoParameters *p_Vid, int pic_sizex, int pic_sizey, int flag) {
   ercClose(p_Vid, p_Vid->erc_errorVar);
+
   p_Vid->erc_object_list = (objectBuffer_t *) calloc((pic_sizex * pic_sizey) >> 6, sizeof(objectBuffer_t));
   if (p_Vid->erc_object_list == NULL) no_mem_exit("ercInit: erc_object_list");
 
@@ -6428,8 +6441,7 @@ int ercCollect8PredBlocks( int predBlocks[], int currRow, int currColumn, char *
  *      in vertical/horizontal direction. (Y:2 U,V:1)
  ************************************************************************
  */
-int ercCollectColumnBlocks( int predBlocks[], int currRow, int currColumn, char *condition, int maxRow, int maxColumn, int step )
-{
+int ercCollectColumnBlocks( int predBlocks[], int currRow, int currColumn, char *condition, int maxRow, int maxColumn, int step ) {
   int srcCounter=0, threshold = ERC_BLOCK_CORRUPTED;
 
   memset( predBlocks, 0, 8*sizeof(int) );
@@ -6547,15 +6559,13 @@ static void concealBlocks( VideoParameters *p_Vid, int lastColumn, int lastRow, 
               break;
             }
 
-            if ( comp == 0 )
-            {
+            if ( comp == 0 )            {
               condition[ currRow*lastColumn+column] = ERC_BLOCK_CONCEALED;
               condition[ currRow*lastColumn+column + 1] = ERC_BLOCK_CONCEALED;
               condition[ currRow*lastColumn+column + lastColumn] = ERC_BLOCK_CONCEALED;
               condition[ currRow*lastColumn+column + lastColumn + 1] = ERC_BLOCK_CONCEALED;
             }
-            else
-            {
+            else            {
               condition[ currRow*lastColumn+column] = ERC_BLOCK_CONCEALED;
             }
 
@@ -6588,18 +6598,16 @@ static void concealBlocks( VideoParameters *p_Vid, int lastColumn, int lastRow, 
             }
 
             switch( comp )            {
-            case 0 :
-              ercPixConcealIMB( p_Vid, recfr->yptr, currRow, column, predBlocks, picSizeX, 2 );
-              break;
-
-            case 1 :
-              ercPixConcealIMB( p_Vid, recfr->uptr, currRow, column, predBlocks, (picSizeX>>1), 1 );
-              break;
-
-            case 2 :
-              ercPixConcealIMB( p_Vid, recfr->vptr, currRow, column, predBlocks, (picSizeX>>1), 1 );
-              break;
-            }
+							case 0 :
+								ercPixConcealIMB( p_Vid, recfr->yptr, currRow, column, predBlocks, picSizeX, 2 );
+								break;
+							case 1 :
+								ercPixConcealIMB( p_Vid, recfr->uptr, currRow, column, predBlocks, (picSizeX>>1), 1 );
+								break;
+							case 2 :
+								ercPixConcealIMB( p_Vid, recfr->vptr, currRow, column, predBlocks, (picSizeX>>1), 1 );
+								break;
+							}
 
             if ( comp == 0 )            {
               condition[ currRow*lastColumn+column] = ERC_BLOCK_CONCEALED;
@@ -6607,8 +6615,7 @@ static void concealBlocks( VideoParameters *p_Vid, int lastColumn, int lastRow, 
               condition[ currRow*lastColumn+column + lastColumn] = ERC_BLOCK_CONCEALED;
               condition[ currRow*lastColumn+column + lastColumn + 1] = ERC_BLOCK_CONCEALED;
             }
-            else
-            {
+            else            {
               condition[ currRow*lastColumn+column ] = ERC_BLOCK_CONCEALED;
             }
           }
@@ -6616,11 +6623,10 @@ static void concealBlocks( VideoParameters *p_Vid, int lastColumn, int lastRow, 
 
         lastCorruptedRow = -1;
         firstCorruptedRow = -1;
-
-      }
-    }
-  }
-}
+				}
+			}
+		}
+	}
 
 /*!
  ************************************************************************
@@ -6652,34 +6658,34 @@ static void pixMeanInterpolateBlock( VideoParameters *p_Vid, imgpel *src[], imgp
         weight = blockSize-row;
         tmp += weight * (*(src[4]+bmax*frameWidth+column));
         srcCounter += weight;
-      }
+				}
       // left
       if ( src[5])      {
         weight = blockSize-column;
         tmp += weight * (*(src[5]+row*frameWidth+bmax));
         srcCounter += weight;
-      }
+				}
       // below
       if ( src[6])      {
         weight = row+1;
         tmp += weight * (*(src[6]+column));
         srcCounter += weight;
-      }
+			  }
       // right
       if ( src[7])      {
         weight = column+1;
         tmp += weight * (*(src[7]+row*frameWidth));
         srcCounter += weight;
-      }
+		    }
 
       if ( srcCounter > 0 )
         block[ k + column ] = (imgpel)(tmp/srcCounter);
       else
         block[ k + column ] = (imgpel) (blockSize == 8 ? p_Vid->dc_pred_value_comp[1] : p_Vid->dc_pred_value_comp[0]);
-    }
+	    }
     k += frameWidth;
-  }
-}
+		}
+	}
 
 
 
@@ -6736,11 +6742,9 @@ int ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list,
   imgpel *predMB;
 
   /* if concealment is on */
-  if ( errorVar && errorVar->concealment )
-  {
+  if ( errorVar && errorVar->concealment )  {
     /* if there are segments to be concealed */
-    if ( errorVar->nOfCorruptedSegments )
-    {
+    if ( errorVar->nOfCorruptedSegments )    {
       if (chroma_format_idc != YUV400)
         predMB = (imgpel *) malloc ( (256 + (p_Vid->mb_cr_size)*2) * sizeof (imgpel));
       else
@@ -6751,35 +6755,26 @@ int ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list,
       lastRow = (int) (picSizeY>>4);
       lastColumn = (int) (picSizeX>>4);
 
-      for ( columnInd=0; columnInd < lastColumn; columnInd ++)
-      {
+      for ( columnInd=0; columnInd < lastColumn; columnInd ++)      {
 
         column = ((columnInd%2) ? (lastColumn - columnInd/2 -1) : (columnInd/2));
 
-        for ( row=0; row < lastRow; row++)
-        {
-
-          if ( errorVar->yCondition[MBxy2YBlock(column, row, 0, picSizeX)] <= ERC_BLOCK_CORRUPTED )
-          {                           // ERC_BLOCK_CORRUPTED (1) or ERC_BLOCK_EMPTY (0)
+        for ( row=0; row < lastRow; row++)        {
+          if ( errorVar->yCondition[MBxy2YBlock(column, row, 0, picSizeX)] <= ERC_BLOCK_CORRUPTED )          {                           // ERC_BLOCK_CORRUPTED (1) or ERC_BLOCK_EMPTY (0)
             firstCorruptedRow = row;
             /* find the last row which has corrupted blocks (in same continuous area) */
-            for ( lastCorruptedRow = row+1; lastCorruptedRow < lastRow; lastCorruptedRow++)
-            {
+            for ( lastCorruptedRow = row+1; lastCorruptedRow < lastRow; lastCorruptedRow++)            {
               /* check blocks in the current column */
-              if (errorVar->yCondition[MBxy2YBlock(column, lastCorruptedRow, 0, picSizeX)] > ERC_BLOCK_CORRUPTED)
-              {
+              if (errorVar->yCondition[MBxy2YBlock(column, lastCorruptedRow, 0, picSizeX)] > ERC_BLOCK_CORRUPTED)              {
                 /* current one is already OK, so the last was the previous one */
                 lastCorruptedRow --;
                 break;
               }
             }
-            if ( lastCorruptedRow >= lastRow )
-            {
+            if ( lastCorruptedRow >= lastRow )            {
               /* correct only from above */
               lastCorruptedRow = lastRow-1;
-              for ( currRow = firstCorruptedRow; currRow < lastRow; currRow++ )
-              {
-
+              for ( currRow = firstCorruptedRow; currRow < lastRow; currRow++ )              {
                 ercCollect8PredBlocks (predBlocks, (currRow<<1), (column<<1),
                   errorVar->yCondition, (lastRow<<1), (lastColumn<<1), 2, 0);
 
@@ -6819,8 +6814,7 @@ int ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list,
 
               row = lastCorruptedRow+1;
             }
-            else
-            {
+            else            {
               /* correct bi-directionally */
 
               row = lastCorruptedRow+1;
@@ -6830,15 +6824,12 @@ int ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list,
               /*
               *  Conceal the corrupted area switching between the up and the bottom rows
               */
-              for ( i=0; i < areaHeight; i++)
-              {
-                if ( i % 2 )
-                {
+              for ( i=0; i < areaHeight; i++)              {
+                if ( i % 2 )                {
                   currRow = lastCorruptedRow;
                   lastCorruptedRow --;
                 }
-                else
-                {
+                else                {
                   currRow = firstCorruptedRow;
                   firstCorruptedRow ++;
                 }
@@ -6892,8 +6883,7 @@ int ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list,
  ************************************************************************
  */
 static int concealByCopy(frame *recfr, int currMBNum,
-                         objectBuffer_t *object_list, int picSizeX)
-{
+                         objectBuffer_t *object_list, int picSizeX) {
   objectBuffer_t *currRegion;
 
   currRegion = object_list+(currMBNum<<2);
@@ -6922,8 +6912,7 @@ static int concealByCopy(frame *recfr, int currMBNum,
  *      can be 16 or 8 to tell the dimension of the region to copy
  ************************************************************************
  */
-static void copyBetweenFrames (frame *recfr, int currYBlockNum, int picSizeX, int regionSize)
-{
+static void copyBetweenFrames (frame *recfr, int currYBlockNum, int picSizeX, int regionSize) {
   VideoParameters *p_Vid = recfr->p_Vid;
   StorablePicture *dec_picture = p_Vid->dec_picture;
   int j, k, location, xmin, ymin;
@@ -6934,16 +6923,14 @@ static void copyBetweenFrames (frame *recfr, int currYBlockNum, int picSizeX, in
   ymin = (yPosYBlock(currYBlockNum,picSizeX)<<3);
 
   for (j = ymin; j < ymin + regionSize; j++)
-    for (k = xmin; k < xmin + regionSize; k++)
-    {
+    for (k = xmin; k < xmin + regionSize; k++)    {
       location = j * picSizeX + k;
 //th      recfr->yptr[location] = dec_picture->imgY[j][k];
       recfr->yptr[location] = refPic->imgY[j][k];
     }
 
     for (j = ymin >> uv_div[1][dec_picture->chroma_format_idc]; j < (ymin + regionSize) >> uv_div[1][dec_picture->chroma_format_idc]; j++)
-      for (k = xmin >> uv_div[0][dec_picture->chroma_format_idc]; k < (xmin + regionSize) >> uv_div[0][dec_picture->chroma_format_idc]; k++)
-      {
+      for (k = xmin >> uv_div[0][dec_picture->chroma_format_idc]; k < (xmin + regionSize) >> uv_div[0][dec_picture->chroma_format_idc]; k++)      {
 //        location = j * picSizeX / 2 + k;
         location = ((j * picSizeX) >> uv_div[0][dec_picture->chroma_format_idc]) + k;
 
@@ -6952,7 +6939,7 @@ static void copyBetweenFrames (frame *recfr, int currYBlockNum, int picSizeX, in
         recfr->uptr[location] = refPic->imgUV[0][j][k];
         recfr->vptr[location] = refPic->imgUV[1][j][k];
       }
-}
+	}
 
 /*!
  ************************************************************************
@@ -6983,8 +6970,7 @@ static void copyBetweenFrames (frame *recfr, int currYBlockNum, int picSizeX, in
  */
 static int concealByTrial(frame *recfr, imgpel *predMB,
                           int currMBNum, objectBuffer_t *object_list, int predBlocks[],
-                          int picSizeX, int picSizeY, char *yCondition)
-{
+                          int picSizeX, int picSizeY, char *yCondition) {
   VideoParameters *p_Vid = recfr->p_Vid;
 
   int predMBNum=0, numMBPerLine,
@@ -7002,8 +6988,7 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
   comp=0;
   regionSize = 16;
 
-  do
-  { /* 4 blocks loop */
+  do  { /* 4 blocks loop */
 
     currRegion = object_list+(currMBNum<<2)+comp;
 
@@ -7012,8 +6997,7 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
     currRegion->xMin = (xPosYBlock(MBNum2YBlock(currMBNum,comp,picSizeX),picSizeX)<<3);
     currRegion->yMin = (yPosYBlock(MBNum2YBlock(currMBNum,comp,picSizeX),picSizeX)<<3);
 
-    do
-    { /* reliability loop */
+    do    { /* reliability loop */
 
       minDist=0;
       fInterNeighborExists=0;
@@ -7021,12 +7005,10 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
       fZeroMotionChecked=0;
 
       /* loop the 4 neighbours */
-      for (i = 4; i < 8; i++)
-      {
+      for (i = 4; i < 8; i++)      {
 
         /* if reliable, try it */
-        if (predBlocks[i] >= threshold)
-        {
+        if (predBlocks[i] >= threshold)        {
           switch (i)
           {
           case 4:
@@ -7057,30 +7039,24 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
           /* try the concealment with the Motion Info of the current neighbour
           only try if the neighbour is not Intra */
           if (isBlock(object_list,predMBNum,compSplit1,INTRA) ||
-            isBlock(object_list,predMBNum,compSplit2,INTRA))
-          {
+            isBlock(object_list,predMBNum,compSplit2,INTRA))          {
             numIntraNeighbours++;
           }
-          else
-          {
+          else          {
             /* if neighbour MB is splitted, try both neighbour blocks */
             for (predSplitted = isSplitted(object_list, predMBNum),
               compPred = compSplit1;
               predSplitted >= 0;
               compPred = compSplit2,
-              predSplitted -= ((compSplit1 == compSplit2) ? 2 : 1))
-            {
+              predSplitted -= ((compSplit1 == compSplit2) ? 2 : 1))            {
 
               /* if Zero Motion Block, do the copying. This option is tried only once */
-              if (isBlock(object_list, predMBNum, compPred, INTER_COPY))
-              {
+              if (isBlock(object_list, predMBNum, compPred, INTER_COPY))              {
 
-                if (fZeroMotionChecked)
-                {
+                if (fZeroMotionChecked)                {
                   continue;
                 }
-                else
-                {
+                else                {
                   fZeroMotionChecked = 1;
 
                   mvPred[0] = mvPred[1]=0;
@@ -7090,12 +7066,10 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
                 }
               }
               /* build motion using the neighbour's Motion Parameters */
-              else if (isBlock(object_list,predMBNum,compPred,INTRA))
-              {
+              else if (isBlock(object_list,predMBNum,compPred,INTRA))              {
                 continue;
               }
-              else
-              {
+              else              {
                 mvptr = getParam(object_list, predMBNum, compPred, mv);
 
                 mvPred[0] = mvptr[0];
@@ -7111,8 +7085,7 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
                 predMB, recfr->yptr, picSizeX, regionSize);
 
               /* if so far best -> store the pixels as the best concealment */
-              if (currDist < minDist || !fInterNeighborExists)
-              {
+              if (currDist < minDist || !fInterNeighborExists)              {
 
                 minDist = currDist;
 
@@ -7132,15 +7105,14 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
             }
           }
         }
-    }
+			}
 
-    threshold--;
+			threshold--;
 
-    } while ((threshold >= ERC_BLOCK_CONCEALED) && (fInterNeighborExists == 0));
+			} while ((threshold >= ERC_BLOCK_CONCEALED) && (fInterNeighborExists == 0));
 
     /* always try zero motion */
-    if (!fZeroMotionChecked)
-    {
+    if (!fZeroMotionChecked)    {
       mvPred[0] = mvPred[1]=0;
       mvPred[2]=0;
 
@@ -7150,9 +7122,7 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
         MBNum2YBlock(currMBNum,comp,picSizeX),
         predMB, recfr->yptr, picSizeX, regionSize);
 
-      if (currDist < minDist || !fInterNeighborExists)
-      {
-
+      if (currDist < minDist || !fInterNeighborExists)      {
         minDist = currDist;
         for (k=0;k<3;k++)
           mvBest[k] = mvPred[k];
@@ -7162,20 +7132,20 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
 
         copyPredMB(MBNum2YBlock(currMBNum,comp,picSizeX), predMB, recfr,
           picSizeX, regionSize);
-      }
-    }
+		    }
+	    }
 
     for (i=0; i<3; i++)
       currRegion->mv[i] = mvBest[i];
 
-    yCondition[MBNum2YBlock(currMBNum,comp,picSizeX)] = ERC_BLOCK_CONCEALED;
-    comp = (comp+order+4)%4;
-    compLeft--;
+			yCondition[MBNum2YBlock(currMBNum,comp,picSizeX)] = ERC_BLOCK_CONCEALED;
+			comp = (comp+order+4)%4;
+			compLeft--;
 
-    } while (compLeft);
+		  } while (compLeft);
 
     return 0;
-}
+	}
 
 /*!
 ************************************************************************
@@ -7197,8 +7167,7 @@ static int concealByTrial(frame *recfr, imgpel *predMB,
 *      the Y,U,V planes are concatenated y = predMB, u = predMB+256, v = predMB+320
 ************************************************************************
 */
-static void buildPredRegionYUV(VideoParameters *p_Vid, int *mv, int x, int y, imgpel *predMB)
-{
+static void buildPredRegionYUV(VideoParameters *p_Vid, int *mv, int x, int y, imgpel *predMB) {
   imgpel **tmp_block;
   int i=0, j=0, ii=0, jj=0,i1=0,j1=0,j4=0,i4=0;
   int uv;
@@ -7263,17 +7232,14 @@ static void buildPredRegionYUV(VideoParameters *p_Vid, int *mv, int x, int y, im
   }
 
 
-  for (j=0; j < 16; j++)
-  {
-    for (i=0; i < 16; i++)
-    {
+  for (j=0; j < 16; j++)  {
+    for (i=0; i < 16; i++)    {
       pMB[j*16+i] = currSlice->mb_pred[LumaComp][j][i];
     }
   }
   pMB += 256;
 
-  if (dec_picture->chroma_format_idc != YUV400)
-  {
+  if (dec_picture->chroma_format_idc != YUV400)  {
     // chroma *******************************************************
     f1_x = 64/p_Vid->mb_cr_size_x;
     f2_x=f1_x-1;
@@ -7284,21 +7250,16 @@ static void buildPredRegionYUV(VideoParameters *p_Vid, int *mv, int x, int y, im
     f3=f1_x*f1_y;
     f4=f3>>1;
 
-    for(uv=0;uv<2;uv++)
-    {
-      for (b8=0;b8<(p_Vid->num_uv_blocks);b8++)
-      {
-        for(b4=0;b4<4;b4++)
-        {
+    for(uv=0;uv<2;uv++)    {
+      for (b8=0;b8<(p_Vid->num_uv_blocks);b8++)      {
+        for(b4=0;b4<4;b4++)        {
           joff = subblk_offset_y[yuv][b8][b4];
           j4=currMB->pix_c_y+joff;
           ioff = subblk_offset_x[yuv][b8][b4];
           i4=currMB->pix_c_x+ioff;
 
-          for(jj=0;jj<4;jj++)
-          {
-            for(ii=0;ii<4;ii++)
-            {
+          for(jj=0;jj<4;jj++)          {
+            for(ii=0;ii<4;ii++)            {
               i1=(i4+ii)*f1_x + mv[0];
               j1=(j4+jj)*f1_y + mv[1];
 
@@ -7356,8 +7317,7 @@ static void buildPredRegionYUV(VideoParameters *p_Vid, int *mv, int x, int y, im
  ************************************************************************
  */
 static void copyPredMB (int currYBlockNum, imgpel *predMB, frame *recfr,
-                        int picSizeX, int regionSize)
-{
+                        int picSizeX, int regionSize) {
   VideoParameters *p_Vid = recfr->p_Vid;
   StorablePicture *dec_picture = p_Vid->dec_picture;
   int j, k, xmin, ymin, xmax, ymax;
@@ -7370,21 +7330,16 @@ static void copyPredMB (int currYBlockNum, imgpel *predMB, frame *recfr,
   xmax = xmin + regionSize -1;
   ymax = ymin + regionSize -1;
 
-  for (j = ymin; j <= ymax; j++)
-  {
-    for (k = xmin; k <= xmax; k++)
-    {
+  for (j = ymin; j <= ymax; j++)  {
+    for (k = xmin; k <= xmax; k++)    {
       locationTmp = (j-ymin) * 16 + (k-xmin);
       dec_picture->imgY[j][k] = predMB[locationTmp];
     }
   }
 
-  if (dec_picture->chroma_format_idc != YUV400)
-  {
-    for (j = (ymin>>uv_y); j <= (ymax>>uv_y); j++)
-    {
-      for (k = (xmin>>uv_x); k <= (xmax>>uv_x); k++)
-      {
+  if (dec_picture->chroma_format_idc != YUV400)  {
+    for (j = (ymin>>uv_y); j <= (ymax>>uv_y); j++)    {
+      for (k = (xmin>>uv_x); k <= (xmax>>uv_x); k++)      {
         locationTmp = (j-(ymin>>uv_y)) * p_Vid->mb_cr_size_x + (k-(xmin>>1)) + 256;
         dec_picture->imgUV[0][j][k] = predMB[locationTmp];
 
@@ -7424,59 +7379,46 @@ static void copyPredMB (int currYBlockNum, imgpel *predMB, frame *recfr,
  ************************************************************************
  */
 static int edgeDistortion (int predBlocks[], int currYBlockNum, imgpel *predMB,
-                           imgpel *recY, int picSizeX, int regionSize)
-{
+                           imgpel *recY, int picSizeX, int regionSize) {
   int i, j, distortion, numOfPredBlocks, threshold = ERC_BLOCK_OK;
   imgpel *currBlock = NULL, *neighbor = NULL;
   int currBlockOffset=0;
 
   currBlock = recY + (yPosYBlock(currYBlockNum,picSizeX)<<3)*picSizeX + (xPosYBlock(currYBlockNum,picSizeX)<<3);
 
-  do
-  {
+  do  {
 
     distortion=0; numOfPredBlocks=0;
 
     // loop the 4 neighbors
-    for (j = 4; j < 8; j++)
-    {
+    for (j = 4; j < 8; j++)    {
       /* if reliable, count boundary pixel difference */
-      if (predBlocks[j] >= threshold)
-      {
+      if (predBlocks[j] >= threshold)      {
 
-        switch (j)
-        {
-        case 4:
-          neighbor = currBlock - picSizeX;
-          for ( i=0; i < regionSize; i++ )
-          {
-            distortion += iabs((int)(predMB[i] - neighbor[i]));
-          }
-          break;
-        case 5:
-          neighbor = currBlock - 1;
-          for ( i=0; i < regionSize; i++ )
-          {
-            distortion += iabs((int)(predMB[i*16] - neighbor[i*picSizeX]));
-          }
-          break;
-        case 6:
-          neighbor = currBlock + regionSize*picSizeX;
-          currBlockOffset = (regionSize-1)*16;
-          for ( i=0; i < regionSize; i++ )
-          {
-            distortion += iabs((int)(predMB[i+currBlockOffset] - neighbor[i]));
-          }
-          break;
-        case 7:
-          neighbor = currBlock + regionSize;
-          currBlockOffset = regionSize-1;
-          for ( i=0; i < regionSize; i++ )
-          {
-            distortion += iabs((int)(predMB[i*16+currBlockOffset] - neighbor[i*picSizeX]));
-          }
-          break;
-        }
+        switch (j)        {
+					case 4:
+						neighbor = currBlock - picSizeX;
+						for ( i=0; i < regionSize; i++ )
+							distortion += iabs((int)(predMB[i] - neighbor[i]));
+						break;
+					case 5:
+						neighbor = currBlock - 1;
+						for ( i=0; i < regionSize; i++ )
+							distortion += iabs((int)(predMB[i*16] - neighbor[i*picSizeX]));
+						break;
+					case 6:
+						neighbor = currBlock + regionSize*picSizeX;
+						currBlockOffset = (regionSize-1)*16;
+						for ( i=0; i < regionSize; i++ )
+							distortion += iabs((int)(predMB[i+currBlockOffset] - neighbor[i]));
+						break;
+					case 7:
+						neighbor = currBlock + regionSize;
+						currBlockOffset = regionSize-1;
+						for ( i=0; i < regionSize; i++ )
+							distortion += iabs((int)(predMB[i*16+currBlockOffset] - neighbor[i*picSizeX]));
+						break;
+					}
 
         numOfPredBlocks++;
       }
@@ -7485,10 +7427,9 @@ static int edgeDistortion (int predBlocks[], int currYBlockNum, imgpel *predMB,
     threshold--;
     if (threshold < ERC_BLOCK_CONCEALED)
       break;
-  } while (numOfPredBlocks == 0);
+	  } while (numOfPredBlocks == 0);
 
-  if(numOfPredBlocks == 0)
-  {
+  if(numOfPredBlocks == 0)  {
     return 0;
     // assert (numOfPredBlocks != 0); !!!KS hmm, trying to continue...
   }
@@ -7507,8 +7448,7 @@ static int edgeDistortion (int predBlocks[], int currYBlockNum, imgpel *predMB,
 *************************************************************************
 */
 static void buildPredblockRegionYUV(VideoParameters *p_Vid, int *mv,
-                                    int x, int y, imgpel *predMB, int list, int current_mb_nr)
-{
+                                    int x, int y, imgpel *predMB, int list, int current_mb_nr) {
   imgpel **tmp_block;
   int i=0,j=0,ii=0,jj=0,i1=0,j1=0,j4=0,i4=0;
   int uv;
@@ -7557,17 +7497,13 @@ static void buildPredblockRegionYUV(VideoParameters *p_Vid, int *mv,
       currSlice->mb_pred[LumaComp][jj][ii]=tmp_block[jj][ii];
 
 
-  for (j=0; j < 4; j++)
-  {
+  for (j=0; j < 4; j++)  {
     for (i=0; i < 4; i++)
-    {
       pMB[j*4+i] = currSlice->mb_pred[LumaComp][j][i];
-    }
   }
   pMB += 16;
 
-  if (dec_picture->chroma_format_idc != YUV400)
-  {
+  if (dec_picture->chroma_format_idc != YUV400)  {
     // chroma *******************************************************
     f1_x = 64/(p_Vid->mb_cr_size_x);
     f2_x=f1_x-1;
@@ -7578,17 +7514,14 @@ static void buildPredblockRegionYUV(VideoParameters *p_Vid, int *mv,
     f3=f1_x*f1_y;
     f4=f3>>1;
 
-    for(uv=0;uv<2;uv++)
-    {
+    for(uv=0;uv<2;uv++)    {
       joff = subblk_offset_y[yuv][0][0];
       j4=currMB->pix_c_y+joff;
       ioff = subblk_offset_x[yuv][0][0];
       i4=currMB->pix_c_x+ioff;
 
-      for(jj=0;jj<2;jj++)
-      {
-        for(ii=0;ii<2;ii++)
-        {
+      for(jj=0;jj<2;jj++)      {
+        for(ii=0;ii<2;ii++)        {
           i1=(i4+ii)*f1_x + mv[0];
           j1=(j4+jj)*f1_y + mv[1];
 
@@ -7609,12 +7542,9 @@ static void buildPredblockRegionYUV(VideoParameters *p_Vid, int *mv,
         }
       }
 
-      for (j=0; j < 2; j++)
-      {
+      for (j=0; j < 2; j++)      {
         for (i=0; i < 2; i++)
-        {
           pMB[j*2+i] = currSlice->mb_pred[uv + 1][j][i];
-        }
       }
       pMB += 4;
 
@@ -7630,8 +7560,7 @@ static void buildPredblockRegionYUV(VideoParameters *p_Vid, int *mv,
 *
 ************************************************************************
 */
-static inline int compare_pic_by_pic_num_desc( const void *arg1, const void *arg2 )
-{
+static inline int compare_pic_by_pic_num_desc( const void *arg1, const void *arg2 ) {
   int pic_num1 = (*(StorablePicture**)arg1)->pic_num;
   int pic_num2 = (*(StorablePicture**)arg2)->pic_num;
 
@@ -7650,10 +7579,10 @@ static inline int compare_pic_by_pic_num_desc( const void *arg1, const void *arg
 *
 ************************************************************************
 */
-static inline int compare_pic_by_lt_pic_num_asc( const void *arg1, const void *arg2 )
-{
+static inline int compare_pic_by_lt_pic_num_asc( const void *arg1, const void *arg2 ) {
   int long_term_pic_num1 = (*(StorablePicture**)arg1)->long_term_pic_num;
   int long_term_pic_num2 = (*(StorablePicture**)arg2)->long_term_pic_num;
+
   if ( long_term_pic_num1 < long_term_pic_num2)
     return -1;
 
@@ -7670,8 +7599,7 @@ static inline int compare_pic_by_lt_pic_num_asc( const void *arg1, const void *a
 *
 ************************************************************************
 */
-static inline int compare_pic_by_poc_asc( const void *arg1, const void *arg2 )
-{
+static inline int compare_pic_by_poc_asc( const void *arg1, const void *arg2 ) {
   int poc1 = (*(StorablePicture**)arg1)->poc;
   int poc2 = (*(StorablePicture**)arg2)->poc;
 
@@ -7691,8 +7619,7 @@ static inline int compare_pic_by_poc_asc( const void *arg1, const void *arg2 )
 *
 ************************************************************************
 */
-static inline int compare_pic_by_poc_desc( const void *arg1, const void *arg2 )
-{
+static inline int compare_pic_by_poc_desc( const void *arg1, const void *arg2 ) {
   int poc1 = (*(StorablePicture**)arg1)->poc;
   int poc2 = (*(StorablePicture**)arg2)->poc;
 
@@ -7710,10 +7637,8 @@ static inline int compare_pic_by_poc_desc( const void *arg1, const void *arg2 )
 *    Copy image data from one array to another array
 ************************************************************************
 */
-
 static void CopyImgData(imgpel **inputY, imgpel ***inputUV, imgpel **outputY, imgpel ***outputUV, 
-                        int img_width, int img_height, int img_width_cr, int img_height_cr)
-{
+                        int img_width, int img_height, int img_width_cr, int img_height_cr) {
   int x, y;
 
   for (y=0; y<img_height; y++)
@@ -7721,8 +7646,7 @@ static void CopyImgData(imgpel **inputY, imgpel ***inputUV, imgpel **outputY, im
       outputY[y][x] = inputY[y][x];
 
   for (y=0; y<img_height_cr; y++)
-    for (x=0; x<img_width_cr; x++)
-    {
+    for (x=0; x<img_width_cr; x++)    {
       outputUV[0][y][x] = inputUV[0][y][x];
       outputUV[1][y][x] = inputUV[1][y][x];
     }
@@ -7734,16 +7658,12 @@ static void CopyImgData(imgpel **inputY, imgpel ***inputUV, imgpel **outputY, im
 *    Copies the last reference frame for concealing reference frame loss.
 ************************************************************************
 */
-
-static StorablePicture* get_last_ref_pic_from_dpb(DecodedPictureBuffer *p_Dpb)
-{
+static StorablePicture* get_last_ref_pic_from_dpb(DecodedPictureBuffer *p_Dpb) {
   int used_size = p_Dpb->used_size - 1;
   int i;
 
-  for(i = used_size; i >= 0; i--)
-  {
-    if (p_Dpb->fs[i]->is_used==3)
-    {
+  for(i = used_size; i >= 0; i--)  {
+    if (p_Dpb->fs[i]->is_used==3)    {
       if (((p_Dpb->fs[i]->frame->used_for_reference) &&
         (!p_Dpb->fs[i]->frame->is_long_term)) /*||  ((p_Dpb->fs[i]->frame->used_for_reference==0)
                                            && (p_Dpb->fs[i]->frame->slice_type == P_SLICE))*/ )
@@ -7764,9 +7684,7 @@ static StorablePicture* get_last_ref_pic_from_dpb(DecodedPictureBuffer *p_Dpb)
 *
 ************************************************************************
 */
-
-static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoParameters *p_Vid)
-{
+static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoParameters *p_Vid) {
   int i=0;
   int mv[3];
   int multiplier;
@@ -7833,8 +7751,7 @@ static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoPar
     mb_height = (dst->PicSizeInMbs)/(dst->PicWidthInMbs);
     scale = (p_Vid->conceal_slice_type == B_SLICE) ? 2 : 1;
 
-    if(p_Vid->conceal_slice_type == B_SLICE)
-    {
+    if(p_Vid->conceal_slice_type == B_SLICE)    {
       init_lists_for_non_reference_loss(
         p_Vid->p_Dpb_layer[0],
         dst->slice_type, p_Vid->ppSliceList[0]->structure);
@@ -7844,11 +7761,9 @@ static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoPar
 
     multiplier = BLOCK_SIZE;
 
-    for(i=0;i<mb_height*4;i++)
-    {
+    for(i=0;i<mb_height*4;i++)    {
       mm = i * BLOCK_SIZE;
-      for(j=0;j<mb_width*4;j++)
-      {
+      for(j=0;j<mb_width*4;j++)      {
         nn = j * BLOCK_SIZE;
 
         mv[0] = src->mv_info[i][j].mv[LIST_0].mv_x / scale;
@@ -7872,18 +7787,15 @@ static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoPar
 
         predMB = storeYUV;
 
-        for(ii=0;ii<multiplier;ii++)
-        {
-          for(jj=0;jj<multiplier;jj++)
-          {
+        for(ii=0;ii<multiplier;ii++)        {
+          for(jj=0;jj<multiplier;jj++)          {
             dst->imgY[i*multiplier+ii][j*multiplier+jj] = predMB[ii*(multiplier)+jj];
           }
         }
 
         predMB = predMB + (multiplier*multiplier);
 
-        if (dec_picture->chroma_format_idc != YUV400)
-        {
+        if (dec_picture->chroma_format_idc != YUV400)        {
 
           for(uv=0;uv<2;uv++)
           {
@@ -7910,10 +7822,8 @@ static void copy_to_conceal(StorablePicture *src, StorablePicture *dst, VideoPar
 *
 ************************************************************************
 */
-
 static void
-copy_prev_pic_to_concealed_pic(StorablePicture *picture, DecodedPictureBuffer *p_Dpb)
-{
+copy_prev_pic_to_concealed_pic(StorablePicture *picture, DecodedPictureBuffer *p_Dpb) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   /* get the last ref pic in dpb */
   StorablePicture *ref_pic = get_last_ref_pic_from_dpb(p_Dpb);
@@ -7935,9 +7845,7 @@ copy_prev_pic_to_concealed_pic(StorablePicture *picture, DecodedPictureBuffer *p
 *
 ************************************************************************
 */
-
-void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
-{
+void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   int CurrFrameNum;
   int UnusedShortTermFrameNum;
@@ -7950,8 +7858,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
 
   // printf("A gap in frame number is found, try to fill it.\n");
 
-  if(p_Vid->IDR_concealment_flag == 1)
-  {
+  if(p_Vid->IDR_concealment_flag == 1)  {
     // Conceals an IDR frame loss. Uses the reference frame in the previous
     // GOP for concealment.
     UnusedShortTermFrameNum=0;
@@ -7963,8 +7870,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
 
   CurrFrameNum = pSlice->frame_num;
 
-  while (CurrFrameNum != UnusedShortTermFrameNum)
-  {
+  while (CurrFrameNum != UnusedShortTermFrameNum)  {
     picture = alloc_storable_picture (p_Vid, FRAME, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, 1);
 
     picture->coded_frame = 1;
@@ -7988,8 +7894,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
     copy_prev_pic_to_concealed_pic(picture, p_Dpb);
 
     //if (UnusedShortTermFrameNum == 0)
-    if(p_Vid->IDR_concealment_flag == 1)
-    {
+    if(p_Vid->IDR_concealment_flag == 1)    {
       picture->slice_type = I_SLICE;
       picture->idr_flag = TRUE;
       flush_dpb(p_Dpb);
@@ -8009,9 +7914,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
 
     // update reference flags and set current flag.
     for(i=16;i>0;i--)
-    {
       pSlice->ref_flag[i] = pSlice->ref_flag[i-1];
-    }
     pSlice->ref_flag[0]=0;
   }
   pSlice->delta_pic_order_cnt[0] = tmp1;
@@ -8027,18 +7930,13 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice)
 *
 ************************************************************************
 */
-
-void update_ref_list_for_concealment(DecodedPictureBuffer *p_Dpb)
-{
+void update_ref_list_for_concealment(DecodedPictureBuffer *p_Dpb) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   unsigned i, j= 0;
 
-  for (i=0; i < p_Dpb->used_size; i++)
-  {
+  for (i=0; i < p_Dpb->used_size; i++)  {
     if (p_Dpb->fs[i]->concealment_reference)
-    {
       p_Dpb->fs_ref[j++] = p_Dpb->fs[i];
-    }
   }
 
   p_Dpb->ref_frames_in_buffer = p_Vid->active_pps->num_ref_idx_l0_default_active_minus1;
@@ -8053,8 +7951,7 @@ void update_ref_list_for_concealment(DecodedPictureBuffer *p_Dpb)
 *
 ************************************************************************
 */
-void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSliceType, PictureStructure currPicStructure)
-{
+void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSliceType, PictureStructure currPicStructure) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   seq_parameter_set_rbsp_t *active_sps = p_Vid->active_sps;
 
@@ -8068,12 +7965,9 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
 
   StorablePicture *tmp_s;
 
-  if (currPicStructure == FRAME)
-  {
-    for(i=0;i<p_Dpb->ref_frames_in_buffer; i++)
-    {
-      if(p_Dpb->fs[i]->concealment_reference == 1)
-      {
+  if (currPicStructure == FRAME)  {
+    for(i=0;i<p_Dpb->ref_frames_in_buffer; i++)    {
+      if(p_Dpb->fs[i]->concealment_reference == 1)      {
         if(p_Dpb->fs[i]->frame_num > p_Vid->frame_to_conceal)
           p_Dpb->fs_ref[i]->frame_num_wrap = p_Dpb->fs[i]->frame_num - max_frame_num;
         else
@@ -8083,8 +7977,7 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
     }
   }
 
-  if (currSliceType == P_SLICE)
-  {
+  if (currSliceType == P_SLICE)  {
     // Calculate FrameNumWrap and PicNum
     if (currPicStructure == FRAME)
     {
@@ -8101,15 +7994,11 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
     }
   }
 
-  if (currSliceType == B_SLICE)
-  {
-    if (currPicStructure == FRAME)
-    {
+  if (currSliceType == B_SLICE)  {
+    if (currPicStructure == FRAME)    {
       //      for(i=0;i<p_Dpb->ref_frames_in_buffer; i++)
-      for(i=0;i<p_Dpb->used_size; i++)
-      {
-        if(p_Dpb->fs[i]->concealment_reference == 1)
-        {
+      for(i=0;i<p_Dpb->used_size; i++)      {
+        if(p_Dpb->fs[i]->concealment_reference == 1)        {
           if(p_Vid->earlier_missing_poc > p_Dpb->fs[i]->frame->poc)
             p_Vid->ppSliceList[0]->listX[0][list0idx++] = p_Dpb->fs[i]->frame;
         }
@@ -8119,10 +8008,8 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
       list0idx_1 = list0idx;
 
       //      for(i=0;i<p_Dpb->ref_frames_in_buffer; i++)
-      for(i=0;i<p_Dpb->used_size; i++)
-      {
-        if(p_Dpb->fs[i]->concealment_reference == 1)
-        {
+      for(i=0;i<p_Dpb->used_size; i++)      {
+        if(p_Dpb->fs[i]->concealment_reference == 1)        {
           if(p_Vid->earlier_missing_poc < p_Dpb->fs[i]->frame->poc)
             p_Vid->ppSliceList[0]->listX[0][list0idx++] = p_Dpb->fs[i]->frame;
         }
@@ -8131,13 +8018,9 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
       qsort((void *)&p_Vid->ppSliceList[0]->listX[0][list0idx_1], list0idx-list0idx_1, sizeof(StorablePicture*), compare_pic_by_poc_asc);
 
       for (j=0; j<list0idx_1; j++)
-      {
         p_Vid->ppSliceList[0]->listX[1][list0idx-list0idx_1+j]=p_Vid->ppSliceList[0]->listX[0][j];
-      }
       for (j=list0idx_1; j<list0idx; j++)
-      {
         p_Vid->ppSliceList[0]->listX[1][j-list0idx_1]=p_Vid->ppSliceList[0]->listX[0][j];
-      }
 
       p_Vid->ppSliceList[0]->listXsize[0] = p_Vid->ppSliceList[0]->listXsize[1] = (char) list0idx;
 
@@ -8147,17 +8030,14 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
     }
   }
 
-  if ((p_Vid->ppSliceList[0]->listXsize[0] == p_Vid->ppSliceList[0]->listXsize[1]) && (p_Vid->ppSliceList[0]->listXsize[0] > 1))
-  {
+  if ((p_Vid->ppSliceList[0]->listXsize[0] == p_Vid->ppSliceList[0]->listXsize[1]) && (p_Vid->ppSliceList[0]->listXsize[0] > 1))  {
     // check if lists are identical, if yes swap first two elements of listX[1]
     diff=0;
-    for (j=0; j< p_Vid->ppSliceList[0]->listXsize[0]; j++)
-    {
+    for (j=0; j< p_Vid->ppSliceList[0]->listXsize[0]; j++)    {
       if (p_Vid->ppSliceList[0]->listX[0][j]!=p_Vid->ppSliceList[0]->listX[1][j])
         diff=1;
     }
-    if (!diff)
-    {
+    if (!diff)    {
       tmp_s = p_Vid->ppSliceList[0]->listX[1][0];
       p_Vid->ppSliceList[0]->listX[1][0]=p_Vid->ppSliceList[0]->listX[1][1];
       p_Vid->ppSliceList[0]->listX[1][1]=tmp_s;
@@ -8170,12 +8050,10 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
 
   p_Vid->ppSliceList[0]->listXsize[1]=0;
   // set the unused list entries to NULL
-  for (i=p_Vid->ppSliceList[0]->listXsize[0]; i< (MAX_LIST_SIZE) ; i++)
-  {
+  for (i=p_Vid->ppSliceList[0]->listXsize[0]; i< (MAX_LIST_SIZE) ; i++)  {
     p_Vid->ppSliceList[0]->listX[0][i] = NULL;
   }
-  for (i=p_Vid->ppSliceList[0]->listXsize[1]; i< (MAX_LIST_SIZE) ; i++)
-  {
+  for (i=p_Vid->ppSliceList[0]->listXsize[1]; i< (MAX_LIST_SIZE) ; i++)  {
     p_Vid->ppSliceList[0]->listX[1][i] = NULL;
   }
 }
@@ -8190,9 +8068,7 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, int currSlic
 *
 ************************************************************************
 */
-
-StorablePicture *get_pic_from_dpb(DecodedPictureBuffer *p_Dpb, int missingpoc, unsigned int *pos)
-{
+StorablePicture *get_pic_from_dpb(DecodedPictureBuffer *p_Dpb, int missingpoc, unsigned int *pos) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   int used_size = p_Dpb->used_size - 1;
   int i, concealfrom=0;
@@ -8202,10 +8078,8 @@ StorablePicture *get_pic_from_dpb(DecodedPictureBuffer *p_Dpb, int missingpoc, u
   else if (p_Vid->conceal_mode == 2)
     concealfrom = missingpoc + p_Vid->poc_gap;
 
-  for(i = used_size; i >= 0; i--)
-  {
-    if(p_Dpb->fs[i]->poc == concealfrom)
-    {
+  for(i = used_size; i >= 0; i--)  {
+    if(p_Dpb->fs[i]->poc == concealfrom)    {
       *pos = i;
       return p_Dpb->fs[i]->frame;
     }
@@ -8222,9 +8096,7 @@ StorablePicture *get_pic_from_dpb(DecodedPictureBuffer *p_Dpb, int missingpoc, u
 *
 ************************************************************************
 */
-
-int comp(const void *i, const void *j)
-{
+int comp(const void *i, const void *j) {
   return *(int *)i - *(int *)j;
 }
 
@@ -8236,14 +8108,12 @@ int comp(const void *i, const void *j)
 *
 ************************************************************************
 */
-
-struct concealment_node * init_node( StorablePicture* picture, int missingpoc )
-{
+struct concealment_node * init_node( StorablePicture* picture, int missingpoc ) {
   struct concealment_node *ptr;
 
   ptr = (struct concealment_node *) calloc( 1, sizeof(struct concealment_node ) );
 
-  if( ptr == NULL )
+  if(!ptr)
     return (struct concealment_node *) NULL;
   else {
     ptr->picture = picture;
@@ -8260,9 +8130,7 @@ struct concealment_node * init_node( StorablePicture* picture, int missingpoc )
 *
 ************************************************************************
 */
-
-void print_node( struct concealment_node *ptr )
-{
+void print_node( struct concealment_node *ptr ) {
   printf("Missing POC=%d\n", ptr->missingpocs );
 }
 
@@ -8274,11 +8142,9 @@ void print_node( struct concealment_node *ptr )
 *
 ************************************************************************
 */
+void print_list( struct concealment_node *ptr ) {
 
-void print_list( struct concealment_node *ptr )
-{
-  while( ptr != NULL )
-  {
+  while( ptr)  {
     print_node( ptr );
     ptr = ptr->next;
   }
@@ -8291,12 +8157,9 @@ void print_list( struct concealment_node *ptr )
 *
 ************************************************************************
 */
+static void add_node( VideoParameters *p_Vid, struct concealment_node *concealment_new ) {
 
-
-static void add_node( VideoParameters *p_Vid, struct concealment_node *concealment_new )
-{
-  if( p_Vid->concealment_head == NULL )
-  {
+  if(!p_Vid->concealment_head  )  {
     p_Vid->concealment_end = p_Vid->concealment_head = concealment_new;
     return;
   }
@@ -8312,13 +8175,10 @@ static void add_node( VideoParameters *p_Vid, struct concealment_node *concealme
 *
 ************************************************************************
 */
+static void delete_node( VideoParameters *p_Vid, struct concealment_node *ptr ) {
 
-
-static void delete_node( VideoParameters *p_Vid, struct concealment_node *ptr )
-{
   // We only need to delete the first node in the linked list
-  if( ptr == p_Vid->concealment_head ) 
-  {
+  if( ptr == p_Vid->concealment_head )   {
     p_Vid->concealment_head = p_Vid->concealment_head->next;
     if( p_Vid->concealment_end == ptr )
       p_Vid->concealment_end = p_Vid->concealment_end->next;
@@ -8333,20 +8193,17 @@ static void delete_node( VideoParameters *p_Vid, struct concealment_node *ptr )
 *
 ************************************************************************
 */
-
-void delete_list( VideoParameters *p_Vid, struct concealment_node *ptr )
-{
+void delete_list( VideoParameters *p_Vid, struct concealment_node *ptr ) {
   struct concealment_node *temp;
 
-  if( p_Vid->concealment_head == NULL ) return;
+  if( p_Vid->concealment_head == NULL )
+		return;
 
-  if( ptr == p_Vid->concealment_head ) 
-  {
+  if( ptr == p_Vid->concealment_head )   {
     p_Vid->concealment_head = NULL;
     p_Vid->concealment_end = NULL;
   }
-  else
-  {
+  else  {
     temp = p_Vid->concealment_head;
 
     while( temp->next != ptr )
@@ -8372,9 +8229,7 @@ void delete_list( VideoParameters *p_Vid, struct concealment_node *ptr )
 *
 ************************************************************************
 */
-
-void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff)
-{
+void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   int missingpoc=0;
   unsigned int i, pos=0;
@@ -8388,8 +8243,7 @@ void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff)
 
   qsort(p_Vid->pocs_in_dpb, p_Dpb->size, sizeof(int), comp);
 
-  for(i=0;i<p_Dpb->size-diff;i++)
-  {
+  for(i=0;i<p_Dpb->size-diff;i++)  {
     p_Dpb->used_size = p_Dpb->size;
     if((p_Vid->pocs_in_dpb[i+1] - p_Vid->pocs_in_dpb[i]) > p_Vid->poc_gap)
     {
@@ -8438,11 +8292,9 @@ void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff)
 *
 ************************************************************************
 */
+void sliding_window_poc_management(DecodedPictureBuffer *p_Dpb, StorablePicture *p) {    
 
-void sliding_window_poc_management(DecodedPictureBuffer *p_Dpb, StorablePicture *p)
-{    
-  if (p_Dpb->used_size == p_Dpb->size)
-  {
+  if (p_Dpb->used_size == p_Dpb->size)  {
     VideoParameters *p_Vid = p_Dpb->p_Vid;
     unsigned int i;
 
@@ -8462,15 +8314,12 @@ void sliding_window_poc_management(DecodedPictureBuffer *p_Dpb, StorablePicture 
 *
 ************************************************************************
 */
-
-void write_lost_non_ref_pic(DecodedPictureBuffer *p_Dpb, int poc, int p_out)
-{
+void write_lost_non_ref_pic(DecodedPictureBuffer *p_Dpb, int poc, int p_out) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
   FrameStore concealment_fs;
-  if(poc > 0)
-  {
-    if((poc - p_Dpb->last_output_poc) > p_Vid->poc_gap)
-    {
+
+  if(poc > 0)  {
+    if((poc - p_Dpb->last_output_poc) > p_Vid->poc_gap)    {
 
       concealment_fs.frame = p_Vid->concealment_head->picture;
       concealment_fs.is_output=0;
@@ -8491,22 +8340,18 @@ void write_lost_non_ref_pic(DecodedPictureBuffer *p_Dpb, int poc, int p_out)
 *
 ************************************************************************
 */
-
-void write_lost_ref_after_idr(DecodedPictureBuffer *p_Dpb, int pos)
-{
+void write_lost_ref_after_idr(DecodedPictureBuffer *p_Dpb, int pos) {
   VideoParameters *p_Vid = p_Dpb->p_Vid;
 
   int temp = 1;
 
-  if(p_Vid->last_out_fs->frame == NULL)
-  {
+  if(!p_Vid->last_out_fs->frame)  {
     p_Vid->last_out_fs->frame = alloc_storable_picture (p_Vid, FRAME, p_Vid->width, p_Vid->height,
       p_Vid->width_cr, p_Vid->height_cr, 1);
     p_Vid->last_out_fs->is_used = 3;
   }
 
-  if(p_Vid->conceal_mode == 2)
-  {
+  if(p_Vid->conceal_mode == 2)  {
     temp = 2;
     p_Vid->conceal_mode = 1;
   }
@@ -8532,78 +8377,75 @@ void write_lost_ref_after_idr(DecodedPictureBuffer *p_Dpb, int pos)
  *    EX_SYNC   sync on next header
  ***********************************************************************
  */
-int set_ec_flag(VideoParameters *p_Vid, int se)
-{
+int set_ec_flag(VideoParameters *p_Vid, int se) {
 
   /*
   if (p_Vid->ec_flag[se] == NO_EC)
     printf("Error concealment on element %s\n",SEtypes[se]);
   */
-  switch (se)
-  {
-  case SE_HEADER :
-    p_Vid->ec_flag[SE_HEADER] = EC_REQ;
-  case SE_PTYPE :
-    p_Vid->ec_flag[SE_PTYPE] = EC_REQ;
-  case SE_MBTYPE :
-    p_Vid->ec_flag[SE_MBTYPE] = EC_REQ;
+  switch (se)  {
+		case SE_HEADER :
+			p_Vid->ec_flag[SE_HEADER] = EC_REQ;
+		case SE_PTYPE :
+			p_Vid->ec_flag[SE_PTYPE] = EC_REQ;
+		case SE_MBTYPE :
+			p_Vid->ec_flag[SE_MBTYPE] = EC_REQ;
 
-  case SE_REFFRAME :
-    p_Vid->ec_flag[SE_REFFRAME] = EC_REQ;
-    p_Vid->ec_flag[SE_MVD] = EC_REQ; // set all motion vectors to zero length
-    se = SE_CBP_INTER;      // conceal also Inter texture elements
-    break;
+		case SE_REFFRAME :
+			p_Vid->ec_flag[SE_REFFRAME] = EC_REQ;
+			p_Vid->ec_flag[SE_MVD] = EC_REQ; // set all motion vectors to zero length
+			se = SE_CBP_INTER;      // conceal also Inter texture elements
+			break;
 
-  case SE_INTRAPREDMODE :
-    p_Vid->ec_flag[SE_INTRAPREDMODE] = EC_REQ;
-    se = SE_CBP_INTRA;      // conceal also Intra texture elements
-    break;
-  case SE_MVD :
-    p_Vid->ec_flag[SE_MVD] = EC_REQ;
-    se = SE_CBP_INTER;      // conceal also Inter texture elements
-    break;
+		case SE_INTRAPREDMODE :
+			p_Vid->ec_flag[SE_INTRAPREDMODE] = EC_REQ;
+			se = SE_CBP_INTRA;      // conceal also Intra texture elements
+			break;
+		case SE_MVD :
+			p_Vid->ec_flag[SE_MVD] = EC_REQ;
+			se = SE_CBP_INTER;      // conceal also Inter texture elements
+			break;
 
-  default:
-    break;
-  }
+		default:
+			break;
+		}
 
-  switch (se)
-  {
-  case SE_CBP_INTRA :
-    p_Vid->ec_flag[SE_CBP_INTRA] = EC_REQ;
-  case SE_LUM_DC_INTRA :
-    p_Vid->ec_flag[SE_LUM_DC_INTRA] = EC_REQ;
-  case SE_CHR_DC_INTRA :
-    p_Vid->ec_flag[SE_CHR_DC_INTRA] = EC_REQ;
-  case SE_LUM_AC_INTRA :
-    p_Vid->ec_flag[SE_LUM_AC_INTRA] = EC_REQ;
-  case SE_CHR_AC_INTRA :
-    p_Vid->ec_flag[SE_CHR_AC_INTRA] = EC_REQ;
-    break;
+  switch (se)  {
+		case SE_CBP_INTRA :
+			p_Vid->ec_flag[SE_CBP_INTRA] = EC_REQ;
+		case SE_LUM_DC_INTRA :
+			p_Vid->ec_flag[SE_LUM_DC_INTRA] = EC_REQ;
+		case SE_CHR_DC_INTRA :
+			p_Vid->ec_flag[SE_CHR_DC_INTRA] = EC_REQ;
+		case SE_LUM_AC_INTRA :
+			p_Vid->ec_flag[SE_LUM_AC_INTRA] = EC_REQ;
+		case SE_CHR_AC_INTRA :
+			p_Vid->ec_flag[SE_CHR_AC_INTRA] = EC_REQ;
+			break;
 
-  case SE_CBP_INTER :
-    p_Vid->ec_flag[SE_CBP_INTER] = EC_REQ;
-  case SE_LUM_DC_INTER :
-    p_Vid->ec_flag[SE_LUM_DC_INTER] = EC_REQ;
-  case SE_CHR_DC_INTER :
-    p_Vid->ec_flag[SE_CHR_DC_INTER] = EC_REQ;
-  case SE_LUM_AC_INTER :
-    p_Vid->ec_flag[SE_LUM_AC_INTER] = EC_REQ;
-  case SE_CHR_AC_INTER :
-    p_Vid->ec_flag[SE_CHR_AC_INTER] = EC_REQ;
-    break;
-  case SE_DELTA_QUANT_INTER :
-    p_Vid->ec_flag[SE_DELTA_QUANT_INTER] = EC_REQ;
-    break;
-  case SE_DELTA_QUANT_INTRA :
-    p_Vid->ec_flag[SE_DELTA_QUANT_INTRA] = EC_REQ;
-    break;
-  default:
-    break;
+		case SE_CBP_INTER :
+			p_Vid->ec_flag[SE_CBP_INTER] = EC_REQ;
+		case SE_LUM_DC_INTER :
+			p_Vid->ec_flag[SE_LUM_DC_INTER] = EC_REQ;
+		case SE_CHR_DC_INTER :
+			p_Vid->ec_flag[SE_CHR_DC_INTER] = EC_REQ;
+		case SE_LUM_AC_INTER :
+			p_Vid->ec_flag[SE_LUM_AC_INTER] = EC_REQ;
+		case SE_CHR_AC_INTER :
+			p_Vid->ec_flag[SE_CHR_AC_INTER] = EC_REQ;
+			break;
+		case SE_DELTA_QUANT_INTER :
+			p_Vid->ec_flag[SE_DELTA_QUANT_INTER] = EC_REQ;
+			break;
+		case SE_DELTA_QUANT_INTRA :
+			p_Vid->ec_flag[SE_DELTA_QUANT_INTRA] = EC_REQ;
+			break;
+		default:
+			break;
 
-  }
+		}
   return EC_REQ;
-}
+	}
 
 /*!
  ***********************************************************************
@@ -8612,9 +8454,9 @@ int set_ec_flag(VideoParameters *p_Vid, int se)
  *
  ***********************************************************************
  */
-void reset_ec_flags(VideoParameters *p_Vid)
-{
+void reset_ec_flags(VideoParameters *p_Vid) {
   int i;
+
   for (i=0; i<SE_MAX_ELEMENTS; i++)
     p_Vid->ec_flag[i] = NO_EC;
 }
@@ -8631,8 +8473,8 @@ void reset_ec_flags(VideoParameters *p_Vid)
  *    EC_REQ if element requires error concealment
  ***********************************************************************
  */
-int get_concealed_element(VideoParameters *p_Vid, SyntaxElement *sym)
-{
+int get_concealed_element(VideoParameters *p_Vid, SyntaxElement *sym) {
+
   if (p_Vid->ec_flag[sym->type] == NO_EC)
     return NO_EC;
 /*
@@ -8640,66 +8482,65 @@ int get_concealed_element(VideoParameters *p_Vid, SyntaxElement *sym)
   printf("TRACE: get concealed element for %s!!!\n", SEtypes[sym->type]);
 #endif
 */
-  switch (sym->type)
-  {
-  case SE_HEADER :
-    sym->len = 31;
-    sym->inf=0; // Picture Header
-    break;
+  switch (sym->type)  {
+		case SE_HEADER :
+			sym->len = 31;
+			sym->inf=0; // Picture Header
+			break;
 
-  case SE_PTYPE : // inter_img_1
-  case SE_MBTYPE : // set COPY_MB
-  case SE_REFFRAME :
-    sym->len = 1;
-    sym->inf=0;
-    break;
+		case SE_PTYPE : // inter_img_1
+		case SE_MBTYPE : // set COPY_MB
+		case SE_REFFRAME :
+			sym->len = 1;
+			sym->inf=0;
+			break;
 
-  case SE_INTRAPREDMODE :
-  case SE_MVD :
-    sym->len = 1;
-    sym->inf=0;  // set vector to zero length
-    break;
+		case SE_INTRAPREDMODE :
+		case SE_MVD :
+			sym->len = 1;
+			sym->inf=0;  // set vector to zero length
+			break;
 
-  case SE_CBP_INTRA :
-    sym->len = 5;
-    sym->inf=0; // codenumber 3 <=> no CBP information for INTRA images
-    break;
+		case SE_CBP_INTRA :
+			sym->len = 5;
+			sym->inf=0; // codenumber 3 <=> no CBP information for INTRA images
+			break;
 
-  case SE_LUM_DC_INTRA :
-  case SE_CHR_DC_INTRA :
-  case SE_LUM_AC_INTRA :
-  case SE_CHR_AC_INTRA :
-    sym->len = 1;
-    sym->inf=0;  // return EOB
-    break;
+		case SE_LUM_DC_INTRA :
+		case SE_CHR_DC_INTRA :
+		case SE_LUM_AC_INTRA :
+		case SE_CHR_AC_INTRA :
+			sym->len = 1;
+			sym->inf=0;  // return EOB
+			break;
 
-  case SE_CBP_INTER :
-    sym->len = 1;
-    sym->inf=0; // codenumber 1 <=> no CBP information for INTER images
-    break;
+		case SE_CBP_INTER :
+			sym->len = 1;
+			sym->inf=0; // codenumber 1 <=> no CBP information for INTER images
+			break;
 
-  case SE_LUM_DC_INTER :
-  case SE_CHR_DC_INTER :
-  case SE_LUM_AC_INTER :
-  case SE_CHR_AC_INTER :
-    sym->len = 1;
-    sym->inf=0;  // return EOB
-    break;
+		case SE_LUM_DC_INTER :
+		case SE_CHR_DC_INTER :
+		case SE_LUM_AC_INTER :
+		case SE_CHR_AC_INTER :
+			sym->len = 1;
+			sym->inf=0;  // return EOB
+			break;
 
-  case SE_DELTA_QUANT_INTER:
-    sym->len = 1;
-    sym->inf=0;
-    break;
-  case SE_DELTA_QUANT_INTRA:
-    sym->len = 1;
-    sym->inf=0;
-    break;
-  default:
-    break;
-  }
+		case SE_DELTA_QUANT_INTER:
+			sym->len = 1;
+			sym->inf=0;
+			break;
+		case SE_DELTA_QUANT_INTRA:
+			sym->len = 1;
+			sym->inf=0;
+			break;
+		default:
+			break;
+		}
 
   return EC_REQ;
-}
+	}
 
 
 
@@ -8711,8 +8552,7 @@ int get_concealed_element(VideoParameters *p_Vid, SyntaxElement *sym)
 *    decrement trace p_Dec->bitcounter (used for special case in mb aff)
 ************************************************************************
 */
-void dectracebitcnt(int count)
-{
+void dectracebitcnt(int count) {
   p_Dec->bitcounter -= count;
 }
 
@@ -8836,14 +8676,12 @@ void tracebits2(
  *    Tracing information such as motion/ref_idx etc
  ************************************************************************
  */
-void trace_info(
-                  SyntaxElement *currSE,        //!< syntax element to update
-                  const char *description_str,  //!< tracing information, char array describing the symbol
-                  int value1                    //!< value to be recorded
-)
-
-{
+void trace_info(SyntaxElement *currSE,        //!< syntax element to update
+                const char *description_str,  //!< tracing information, char array describing the symbol
+                int value1                    //!< value to be recorded
+) {
   char tstring[20];   
+
   sprintf( tstring, "%s%d", description_str, value1); 
   strncpy(currSE->tracestring, tstring, TRACESTRING_SIZE);
 }
@@ -8875,8 +8713,7 @@ static void FmoGenerateType6MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static int FmoGenerateMapUnitToSliceGroupMap (VideoParameters *p_Vid, Slice *currSlice)
-{
+static int FmoGenerateMapUnitToSliceGroupMap (VideoParameters *p_Vid, Slice *currSlice) {
   seq_parameter_set_rbsp_t* sps = p_Vid->active_sps;
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
 
@@ -8884,12 +8721,9 @@ static int FmoGenerateMapUnitToSliceGroupMap (VideoParameters *p_Vid, Slice *cur
 
   NumSliceGroupMapUnits = (sps->pic_height_in_map_units_minus1+1)* (sps->pic_width_in_mbs_minus1+1);
 
-  if (pps->slice_group_map_type == 6)
-  {
+  if (pps->slice_group_map_type == 6)  {
     if ((pps->pic_size_in_map_units_minus1 + 1) != NumSliceGroupMapUnits)
-    {
       error ("wrong pps->pic_size_in_map_units_minus1 for used SPS and FMO type 6", 500);
-    }
   }
 
   // allocate memory for p_Vid->MapUnitToSliceGroupMap
@@ -9018,12 +8852,9 @@ int fmo_init(VideoParameters *p_Vid, Slice *pSlice) {
   printf("\n");
   printf("FMO Map (Mb):\n");
 
-  for (j=0; j<p_Vid->PicHeightInMbs; j++)
-  {
+  for (j=0; j<p_Vid->PicHeightInMbs; j++)  {
     for (i=0; i<p_Vid->PicWidthInMbs; i++)
-    {
       printf("%c",48 + p_Vid->MbToSliceGroupMap[i + j * p_Vid->PicWidthInMbs]);
-    }
     printf("\n");
   }
   printf("\n");
@@ -9040,15 +8871,13 @@ int fmo_init(VideoParameters *p_Vid, Slice *pSlice) {
  *    Free memory allocated by FMO functions
  ************************************************************************
  */
-int FmoFinit(VideoParameters *p_Vid)
-{
-  if (p_Vid->MbToSliceGroupMap)
-  {
+int FmoFinit(VideoParameters *p_Vid) {
+
+  if (p_Vid->MbToSliceGroupMap)  {
     free (p_Vid->MbToSliceGroupMap);
     p_Vid->MbToSliceGroupMap = NULL;
   }
-  if (p_Vid->MapUnitToSliceGroupMap)
-  {
+  if (p_Vid->MapUnitToSliceGroupMap)  {
     free (p_Vid->MapUnitToSliceGroupMap);
     p_Vid->MapUnitToSliceGroupMap = NULL;
   }
@@ -9065,8 +8894,7 @@ int FmoFinit(VideoParameters *p_Vid)
  *    VideoParameters
  ************************************************************************
  */
-int FmoGetNumberOfSliceGroup(VideoParameters *p_Vid)
-{
+int FmoGetNumberOfSliceGroup(VideoParameters *p_Vid) {
   return p_Vid->NumberOfSliceGroups;
 }
 
@@ -9083,8 +8911,7 @@ int FmoGetNumberOfSliceGroup(VideoParameters *p_Vid)
  *    None
  ************************************************************************
  */
-int FmoGetLastMBOfPicture(VideoParameters *p_Vid)
-{
+int FmoGetLastMBOfPicture(VideoParameters *p_Vid) {
   return FmoGetLastMBInSliceGroup (p_Vid, FmoGetNumberOfSliceGroup(p_Vid)-1);
 }
 
@@ -9098,9 +8925,7 @@ int FmoGetLastMBOfPicture(VideoParameters *p_Vid)
  *    SliceGroupID (0 to 7)
  ************************************************************************
  */
-
-int FmoGetLastMBInSliceGroup (VideoParameters *p_Vid, int SliceGroup)
-{
+int FmoGetLastMBInSliceGroup (VideoParameters *p_Vid, int SliceGroup) {
   int i;
 
   for (i=p_Vid->PicSizeInMbs-1; i>=0; i--)
@@ -9122,8 +8947,7 @@ int FmoGetLastMBInSliceGroup (VideoParameters *p_Vid, int SliceGroup)
  *    Macroblock number (in scan order)
  ************************************************************************
  */
-int FmoGetSliceGroupId (VideoParameters *p_Vid, int mb)
-{
+int FmoGetSliceGroupId (VideoParameters *p_Vid, int mb) {
   assert (mb < (int) p_Vid->PicSizeInMbs);
   assert (p_Vid->MbToSliceGroupMap != NULL);
   return p_Vid->MbToSliceGroupMap[mb];
@@ -9142,8 +8966,7 @@ int FmoGetSliceGroupId (VideoParameters *p_Vid, int mb)
  *    number of the current macroblock
  ************************************************************************
  */
-int FmoGetNextMBNr (VideoParameters *p_Vid, int CurrentMbNr)
-{
+int FmoGetNextMBNr (VideoParameters *p_Vid, int CurrentMbNr) {
   int SliceGroup = FmoGetSliceGroupId (p_Vid, CurrentMbNr);
 
   while (++CurrentMbNr<(int)p_Vid->PicSizeInMbs && p_Vid->MbToSliceGroupMap [CurrentMbNr] != SliceGroup)
@@ -9163,23 +8986,20 @@ int FmoGetNextMBNr (VideoParameters *p_Vid, int CurrentMbNr)
  *
  ************************************************************************
  */
-static void FmoGenerateType0MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits )
-{
+static void FmoGenerateType0MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
   unsigned iGroup, j;
   unsigned i=0;
-  do
-  {
+
+  do  {
     for( iGroup=0;
          (iGroup <= pps->num_slice_groups_minus1) && (i < PicSizeInMapUnits);
-         i += pps->run_length_minus1[iGroup++] + 1 )
-    {
+         i += pps->run_length_minus1[iGroup++] + 1 )    {
       for( j=0; j <= pps->run_length_minus1[ iGroup ] && i + j < PicSizeInMapUnits; j++ )
         p_Vid->MapUnitToSliceGroupMap[i+j] = iGroup;
     }
-  }
-  while( i < PicSizeInMapUnits );
-}
+		}  while( i < PicSizeInMapUnits );
+	}
 
 
 /*!
@@ -9189,12 +9009,11 @@ static void FmoGenerateType0MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType1MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits )
-{
+static void FmoGenerateType1MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
   unsigned i;
-  for( i=0; i < PicSizeInMapUnits; i++ )
-  {
+
+  for( i=0; i < PicSizeInMapUnits; i++ )  {
     p_Vid->MapUnitToSliceGroupMap[i] = ((i%p_Vid->PicWidthInMbs)+(((i/p_Vid->PicWidthInMbs)*(pps->num_slice_groups_minus1+1))/2))
                                 %(pps->num_slice_groups_minus1+1);
   }
@@ -9207,8 +9026,7 @@ static void FmoGenerateType1MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType2MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits )
-{
+static void FmoGenerateType2MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
   int iGroup;
   unsigned i, x, y;
@@ -9237,8 +9055,7 @@ static void FmoGenerateType2MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType3MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice )
-{
+static void FmoGenerateType3MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
   unsigned i, k;
   int leftBound, topBound, rightBound, bottomBound;
@@ -9261,22 +9078,19 @@ static void FmoGenerateType3MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
   xDir =  pps->slice_group_change_direction_flag - 1;
   yDir =  pps->slice_group_change_direction_flag;
 
-  for( k=0; k < PicSizeInMapUnits; k += mapUnitVacant )
-  {
+  for( k=0; k < PicSizeInMapUnits; k += mapUnitVacant )  {
     mapUnitVacant = ( p_Vid->MapUnitToSliceGroupMap[ y * p_Vid->PicWidthInMbs + x ]  ==  2 );
     if( mapUnitVacant )
        p_Vid->MapUnitToSliceGroupMap[ y * p_Vid->PicWidthInMbs + x ] = ( k >= mapUnitsInSliceGroup0 );
 
-    if( xDir  ==  -1  &&  x  ==  leftBound )
-    {
+    if( xDir  ==  -1  &&  x  ==  leftBound )    {
       leftBound = imax( leftBound - 1, 0 );
       x = leftBound;
       xDir=0;
       yDir = 2 * pps->slice_group_change_direction_flag - 1;
     }
     else
-      if( xDir  ==  1  &&  x  ==  rightBound )
-      {
+      if( xDir  ==  1  &&  x  ==  rightBound )      {
         rightBound = imin( rightBound + 1, (int)p_Vid->PicWidthInMbs - 1 );
         x = rightBound;
         xDir=0;
@@ -9314,8 +9128,7 @@ static void FmoGenerateType3MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType4MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice )
-{
+static void FmoGenerateType4MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
 
   unsigned mapUnitsInSliceGroup0 = imin((pps->slice_group_change_rate_minus1 + 1) * currSlice->slice_group_change_cycle, PicSizeInMapUnits);
@@ -9338,8 +9151,7 @@ static void FmoGenerateType4MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType5MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice )
-{
+static void FmoGenerateType5MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits, Slice *currSlice ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps;
 
   unsigned mapUnitsInSliceGroup0 = imin((pps->slice_group_change_rate_minus1 + 1) * currSlice->slice_group_change_cycle, PicSizeInMapUnits);
@@ -9363,15 +9175,13 @@ static void FmoGenerateType5MapUnitMap (VideoParameters *p_Vid, unsigned PicSize
  *
  ************************************************************************
  */
-static void FmoGenerateType6MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits )
-{
+static void FmoGenerateType6MapUnitMap (VideoParameters *p_Vid, unsigned PicSizeInMapUnits ) {
   pic_parameter_set_rbsp_t* pps = p_Vid->active_pps; 
   unsigned i;
+
   for (i=0; i<PicSizeInMapUnits; i++)
-  {
     p_Vid->MapUnitToSliceGroupMap[i] = pps->slice_group_id[i];
-  }
-}
+	}
 
 
 
@@ -9395,26 +9205,22 @@ static void ref_pic_list_mvc_modification(Slice *currSlice);
  *    calculate Ceil(Log2(uiVal))
  ************************************************************************
  */
-unsigned CeilLog2( unsigned uiVal)
-{
+unsigned CeilLog2( unsigned uiVal) {
   unsigned uiTmp = uiVal-1;
   unsigned uiRet=0;
 
-  while( uiTmp != 0 )
-  {
+  while( uiTmp != 0 )  {
     uiTmp >>= 1;
     uiRet++;
   }
   return uiRet;
 }
 
-unsigned CeilLog2_sf( unsigned uiVal)
-{
+unsigned CeilLog2_sf( unsigned uiVal) {
   unsigned uiTmp = uiVal-1;
   unsigned uiRet=0;
 
-  while( uiTmp > 0 )
-  {
+  while( uiTmp > 0 )  {
     uiTmp >>= 1;
     uiRet++;
   }
@@ -9429,8 +9235,7 @@ unsigned CeilLog2_sf( unsigned uiVal)
  *    Length of the first part of the slice header (in bits)
  ************************************************************************
  */
-int FirstPartOfSliceHeader(Slice *currSlice)
-{
+int FirstPartOfSliceHeader(Slice *currSlice) {
   VideoParameters *p_Vid = currSlice->p_Vid;
   uint8_t dP_nr = assignSE2partition[currSlice->dp_mode][SE_HEADER];
   DataPartition *partition = &(currSlice->partArr[dP_nr]);
@@ -9466,8 +9271,7 @@ int FirstPartOfSliceHeader(Slice *currSlice)
  *    Length of the second part of the Slice header in bits
  ************************************************************************
  */
-int RestOfSliceHeader(Slice *currSlice)
-{
+int RestOfSliceHeader(Slice *currSlice){
   VideoParameters *p_Vid = currSlice->p_Vid;
   InputParameters *p_Inp = currSlice->p_Inp;
   seq_parameter_set_rbsp_t *active_sps = p_Vid->active_sps;
@@ -9489,8 +9293,7 @@ int RestOfSliceHeader(Slice *currSlice)
     assert(currSlice->frame_num == 0);
   }
 
-  if (active_sps->frame_mbs_only_flag)
-  {
+  if (active_sps->frame_mbs_only_flag)  {
     p_Vid->structure = FRAME;
     currSlice->field_pic_flag=0;
   }
@@ -9498,14 +9301,12 @@ int RestOfSliceHeader(Slice *currSlice)
   {
     // field_pic_flag   u(1)
     currSlice->field_pic_flag = read_u_1("SH: field_pic_flag", currStream, &p_Dec->UsedBits);
-    if (currSlice->field_pic_flag)
-    {
+    if (currSlice->field_pic_flag)    {
       // bottom_field_flag  u(1)
       currSlice->bottom_field_flag = (uint8_t) read_u_1("SH: bottom_field_flag", currStream, &p_Dec->UsedBits);
       p_Vid->structure = currSlice->bottom_field_flag ? BOTTOM_FIELD : TOP_FIELD;
     }
-    else
-    {
+    else    {
       p_Vid->structure = FRAME;
       currSlice->bottom_field_flag = FALSE;
     }
@@ -9534,26 +9335,22 @@ int RestOfSliceHeader(Slice *currSlice)
   }
 #endif
 
-  if (active_sps->pic_order_cnt_type == 0)
-  {
+  if (active_sps->pic_order_cnt_type == 0)  {
     currSlice->pic_order_cnt_lsb = read_u_v(active_sps->log2_max_pic_order_cnt_lsb_minus4 + 4, "SH: pic_order_cnt_lsb", currStream, &p_Dec->UsedBits);
     if( p_Vid->active_pps->bottom_field_pic_order_in_frame_present_flag  ==  1 &&  !currSlice->field_pic_flag )
       currSlice->delta_pic_order_cnt_bottom = read_se_v("SH: delta_pic_order_cnt_bottom", currStream, &p_Dec->UsedBits);
     else
       currSlice->delta_pic_order_cnt_bottom=0;
   }
-  if( active_sps->pic_order_cnt_type == 1 )
-  {
-    if ( !active_sps->delta_pic_order_always_zero_flag )
-    {
+  if( active_sps->pic_order_cnt_type == 1 )  {
+    if ( !active_sps->delta_pic_order_always_zero_flag )    {
       currSlice->delta_pic_order_cnt[ 0 ] = read_se_v("SH: delta_pic_order_cnt[0]", currStream, &p_Dec->UsedBits);
       if( p_Vid->active_pps->bottom_field_pic_order_in_frame_present_flag  ==  1  &&  !currSlice->field_pic_flag )
         currSlice->delta_pic_order_cnt[ 1 ] = read_se_v("SH: delta_pic_order_cnt[1]", currStream, &p_Dec->UsedBits);
       else
         currSlice->delta_pic_order_cnt[ 1 ]=0;  // set to zero if not in stream
     }
-    else
-    {
+    else    {
       currSlice->delta_pic_order_cnt[ 0 ]=0;
       currSlice->delta_pic_order_cnt[ 1 ]=0;
     }
@@ -9561,23 +9358,17 @@ int RestOfSliceHeader(Slice *currSlice)
 
   //! redundant_pic_cnt is missing here
   if (p_Vid->active_pps->redundant_pic_cnt_present_flag)
-  {
     currSlice->redundant_pic_cnt = read_ue_v ("SH: redundant_pic_cnt", currStream, &p_Dec->UsedBits);
-  }
 
   if(currSlice->slice_type == B_SLICE)
-  {
     currSlice->direct_spatial_mv_pred_flag = read_u_1 ("SH: direct_spatial_mv_pred_flag", currStream, &p_Dec->UsedBits);
-  }
 
   currSlice->num_ref_idx_active[LIST_0] = p_Vid->active_pps->num_ref_idx_l0_default_active_minus1 + 1;
   currSlice->num_ref_idx_active[LIST_1] = p_Vid->active_pps->num_ref_idx_l1_default_active_minus1 + 1;
 
-  if(currSlice->slice_type == P_SLICE || currSlice->slice_type == SP_SLICE || currSlice->slice_type == B_SLICE)
-  {
+  if(currSlice->slice_type == P_SLICE || currSlice->slice_type == SP_SLICE || currSlice->slice_type == B_SLICE)  {
     val = read_u_1 ("SH: num_ref_idx_override_flag", currStream, &p_Dec->UsedBits);
-    if (val)
-    {
+    if (val)    {
       currSlice->num_ref_idx_active[LIST_0] = 1 + read_ue_v ("SH: num_ref_idx_l0_active_minus1", currStream, &p_Dec->UsedBits);
 
       if(currSlice->slice_type == B_SLICE)
@@ -9587,9 +9378,7 @@ int RestOfSliceHeader(Slice *currSlice)
     }
   }
   if (currSlice->slice_type!=B_SLICE)
-  {
     currSlice->num_ref_idx_active[LIST_1]=0;
-  }
 
 #if (MVC_EXTENSION_ENABLE)
   if (currSlice->svc_extension_flag == 0 || currSlice->svc_extension_flag == 1)
@@ -9607,21 +9396,15 @@ int RestOfSliceHeader(Slice *currSlice)
 
   if ((p_Vid->active_pps->weighted_pred_flag&&(currSlice->slice_type == P_SLICE|| currSlice->slice_type == SP_SLICE))||
       (p_Vid->active_pps->weighted_bipred_idc==1 && (currSlice->slice_type == B_SLICE)))
-  {
     pred_weight_table(currSlice);
-  }
 
   if (currSlice->nal_reference_idc)
     dec_ref_pic_marking(p_Vid, currStream, currSlice);
 
   if (p_Vid->active_pps->entropy_coding_mode_flag && currSlice->slice_type != I_SLICE && currSlice->slice_type != SI_SLICE)
-  {
     currSlice->model_number = read_ue_v("SH: cabac_init_idc", currStream, &p_Dec->UsedBits);
-  }
   else
-  {
     currSlice->model_number=0;
-  }
 
   currSlice->slice_qp_delta = val = read_se_v("SH: slice_qp_delta", currStream, &p_Dec->UsedBits);
   //currSlice->qp = p_Vid->qp = 26 + p_Vid->active_pps->pic_init_qp_minus26 + val;
@@ -9630,12 +9413,9 @@ int RestOfSliceHeader(Slice *currSlice)
   if ((currSlice->qp < -p_Vid->bitdepth_luma_qp_scale) || (currSlice->qp > 51))
     error ("slice_qp_delta makes slice_qp_y out of range", 500);
 
-  if(currSlice->slice_type == SP_SLICE || currSlice->slice_type == SI_SLICE)
-  {
+  if(currSlice->slice_type == SP_SLICE || currSlice->slice_type == SI_SLICE)  {
     if(currSlice->slice_type==SP_SLICE)
-    {
       currSlice->sp_switch = read_u_1 ("SH: sp_for_switch_flag", currStream, &p_Dec->UsedBits);
-    }
     currSlice->slice_qs_delta = val = read_se_v("SH: slice_qs_delta", currStream, &p_Dec->UsedBits);
     currSlice->qs = 26 + p_Vid->active_pps->pic_init_qs_minus26 + val;    
     if ((currSlice->qs < 0) || (currSlice->qs > 51))
@@ -9645,17 +9425,14 @@ int RestOfSliceHeader(Slice *currSlice)
 #if DPF_PARAM_DISP
   printf("deblocking_filter_control_present_flag:%d\n", p_Vid->active_pps->deblocking_filter_control_present_flag);
 #endif
-  if (p_Vid->active_pps->deblocking_filter_control_present_flag)
-  {
+  if (p_Vid->active_pps->deblocking_filter_control_present_flag)  {
     currSlice->DFDisableIdc = (short) read_ue_v ("SH: disable_deblocking_filter_idc", currStream, &p_Dec->UsedBits);
 
-    if (currSlice->DFDisableIdc!=1)
-    {
+    if (currSlice->DFDisableIdc!=1)    {
       currSlice->DFAlphaC0Offset = (short) (2 * read_se_v("SH: slice_alpha_c0_offset_div2", currStream, &p_Dec->UsedBits));
       currSlice->DFBetaOffset    = (short) (2 * read_se_v("SH: slice_beta_offset_div2", currStream, &p_Dec->UsedBits));
     }
-    else
-    {
+    else    {
       currSlice->DFAlphaC0Offset = currSlice->DFBetaOffset=0;
     }
   }
@@ -9669,16 +9446,14 @@ int RestOfSliceHeader(Slice *currSlice)
 
   // The conformance point for intra profiles is without deblocking, but decoders are still recommended to filter the output.
   // We allow in the decoder config to skip the loop filtering. This is achieved by modifying the parameters here.
-  if ( is_HI_intra_only_profile(active_sps->profile_idc, active_sps->constrained_set3_flag) && (p_Inp->intra_profile_deblocking == 0) )
-  {
+  if ( is_HI_intra_only_profile(active_sps->profile_idc, active_sps->constrained_set3_flag) && (p_Inp->intra_profile_deblocking == 0) )  {
     currSlice->DFDisableIdc =1;
     currSlice->DFAlphaC0Offset = currSlice->DFBetaOffset=0;
   }
 
 
   if (p_Vid->active_pps->num_slice_groups_minus1>0 && p_Vid->active_pps->slice_group_map_type>=3 &&
-      p_Vid->active_pps->slice_group_map_type<=5)
-  {
+      p_Vid->active_pps->slice_group_map_type<=5)  {
     len = (active_sps->pic_height_in_map_units_minus1+1)*(active_sps->pic_width_in_mbs_minus1+1)/
           (p_Vid->active_pps->slice_group_change_rate_minus1+1);
     if (((active_sps->pic_height_in_map_units_minus1+1)*(active_sps->pic_width_in_mbs_minus1+1))%
@@ -9703,8 +9478,7 @@ int RestOfSliceHeader(Slice *currSlice)
  *    read the reference picture reordering information
  ************************************************************************
  */
-static void ref_pic_list_reordering(Slice *currSlice)
-{
+static void ref_pic_list_reordering(Slice *currSlice) {
   //VideoParameters *p_Vid = currSlice->p_Vid;
   uint8_t dP_nr = assignSE2partition[currSlice->dp_mode][SE_HEADER];
   DataPartition *partition = &(currSlice->partArr[dP_nr]);
@@ -44961,12 +44735,10 @@ void itrans8x8(Macroblock *currMB,   //!< current macroblock
 
   int    **m7     = currSlice->mb_rres[pl];
 
-  if (currMB->is_lossless == TRUE)
-  {
+  if (currMB->is_lossless )  {
     recon8x8_lossless(&m7[joff], &currSlice->mb_rec[pl][joff], &currSlice->mb_pred[pl][joff], currMB->p_Vid->max_pel_value_comp[pl], ioff);
   }
-  else
-  {
+  else  {
     inverse8x8(&m7[joff], &m7[joff], ioff);
     recon8x8  (&m7[joff], &currSlice->mb_rec[pl][joff], &currSlice->mb_pred[pl][joff], currMB->p_Vid->max_pel_value_comp[pl], ioff);
   }
@@ -46180,4 +45952,4884 @@ int ShowBits (uint8_t buffer[],int totbitoffset,int bitcount, int numbits) {
 
 
 
+void forward4x4(int **block, int **tblock, int pos_y, int pos_x)
+{
+  int i, ii;  
+  int tmp[16];
+  int *pTmp = tmp, *pblock;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  for (i=pos_y; i < pos_y + BLOCK_SIZE; i++)
+  {
+    pblock = &block[i][pos_x];
+    p0 = *(pblock++);
+    p1 = *(pblock++);
+    p2 = *(pblock++);
+    p3 = *(pblock  );
+
+    t0 = p0 + p3;
+    t1 = p1 + p2;
+    t2 = p1 - p2;
+    t3 = p0 - p3;
+
+    *(pTmp++) =  t0 + t1;
+    *(pTmp++) = (t3 << 1) + t2;
+    *(pTmp++) =  t0 - t1;    
+    *(pTmp++) =  t3 - (t2 << 1);
+  }
+
+  // Vertical 
+  for (i=0; i < BLOCK_SIZE; i++)
+  {
+    pTmp = tmp + i;
+    p0 = *pTmp;
+    p1 = *(pTmp += BLOCK_SIZE);
+    p2 = *(pTmp += BLOCK_SIZE);
+    p3 = *(pTmp += BLOCK_SIZE);
+
+    t0 = p0 + p3;
+    t1 = p1 + p2;
+    t2 = p1 - p2;
+    t3 = p0 - p3;
+
+    ii = pos_x + i;
+    tblock[pos_y    ][ii] = t0 +  t1;
+    tblock[pos_y + 1][ii] = t2 + (t3 << 1);
+    tblock[pos_y + 2][ii] = t0 -  t1;
+    tblock[pos_y + 3][ii] = t3 - (t2 << 1);
+  }
+}
+
+void inverse4x4(int **tblock, int **block, int pos_y, int pos_x)
+{
+  int i, ii;  
+  int tmp[16];
+  int *pTmp = tmp, *pblock;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  for (i = pos_y; i < pos_y + BLOCK_SIZE; i++)
+  {
+    pblock = &tblock[i][pos_x];
+    t0 = *(pblock++);
+    t1 = *(pblock++);
+    t2 = *(pblock++);
+    t3 = *(pblock  );
+
+    p0 =  t0 + t2;
+    p1 =  t0 - t2;
+    p2 = (t1 >> 1) - t3;
+    p3 =  t1 + (t3 >> 1);
+
+    *(pTmp++) = p0 + p3;
+    *(pTmp++) = p1 + p2;
+    *(pTmp++) = p1 - p2;
+    *(pTmp++) = p0 - p3;
+  }
+
+  //  Vertical 
+  for (i = 0; i < BLOCK_SIZE; i++)
+  {
+    pTmp = tmp + i;
+    t0 = *pTmp;
+    t1 = *(pTmp += BLOCK_SIZE);
+    t2 = *(pTmp += BLOCK_SIZE);
+    t3 = *(pTmp += BLOCK_SIZE);
+
+    p0 = t0 + t2;
+    p1 = t0 - t2;
+    p2 =(t1 >> 1) - t3;
+    p3 = t1 + (t3 >> 1);
+
+    ii = i + pos_x;
+    block[pos_y    ][ii] = p0 + p3;
+    block[pos_y + 1][ii] = p1 + p2;
+    block[pos_y + 2][ii] = p1 - p2;
+    block[pos_y + 3][ii] = p0 - p3;
+  }
+}
+
+
+void hadamard4x4(int **block, int **tblock)
+{
+  int i;
+  int tmp[16];
+  int *pTmp = tmp, *pblock;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  for (i = 0; i < BLOCK_SIZE; i++)
+  {
+    pblock = block[i];
+    p0 = *(pblock++);
+    p1 = *(pblock++);
+    p2 = *(pblock++);
+    p3 = *(pblock  );
+
+    t0 = p0 + p3;
+    t1 = p1 + p2;
+    t2 = p1 - p2;
+    t3 = p0 - p3;
+
+    *(pTmp++) = t0 + t1;
+    *(pTmp++) = t3 + t2;
+    *(pTmp++) = t0 - t1;    
+    *(pTmp++) = t3 - t2;
+  }
+
+  // Vertical 
+  for (i = 0; i < BLOCK_SIZE; i++)
+  {
+    pTmp = tmp + i;
+    p0 = *pTmp;
+    p1 = *(pTmp += BLOCK_SIZE);
+    p2 = *(pTmp += BLOCK_SIZE);
+    p3 = *(pTmp += BLOCK_SIZE);
+
+    t0 = p0 + p3;
+    t1 = p1 + p2;
+    t2 = p1 - p2;
+    t3 = p0 - p3;
+
+    tblock[0][i] = (t0 + t1) >> 1;
+    tblock[1][i] = (t2 + t3) >> 1;
+    tblock[2][i] = (t0 - t1) >> 1;
+    tblock[3][i] = (t3 - t2) >> 1;
+  }
+}
+
+
+void ihadamard4x4(int **tblock, int **block)
+{
+  int i;  
+  int tmp[16];
+  int *pTmp = tmp, *pblock;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  for (i = 0; i < BLOCK_SIZE; i++)
+  {
+    pblock = tblock[i];
+    t0 = *(pblock++);
+    t1 = *(pblock++);
+    t2 = *(pblock++);
+    t3 = *(pblock  );
+
+    p0 = t0 + t2;
+    p1 = t0 - t2;
+    p2 = t1 - t3;
+    p3 = t1 + t3;
+
+    *(pTmp++) = p0 + p3;
+    *(pTmp++) = p1 + p2;
+    *(pTmp++) = p1 - p2;
+    *(pTmp++) = p0 - p3;
+  }
+
+  //  Vertical 
+  for (i = 0; i < BLOCK_SIZE; i++)
+  {
+    pTmp = tmp + i;
+    t0 = *pTmp;
+    t1 = *(pTmp += BLOCK_SIZE);
+    t2 = *(pTmp += BLOCK_SIZE);
+    t3 = *(pTmp += BLOCK_SIZE);
+
+    p0 = t0 + t2;
+    p1 = t0 - t2;
+    p2 = t1 - t3;
+    p3 = t1 + t3;
+    
+    block[0][i] = p0 + p3;
+    block[1][i] = p1 + p2;
+    block[2][i] = p1 - p2;
+    block[3][i] = p0 - p3;
+  }
+}
+
+void hadamard4x2(int **block, int **tblock)
+{
+  int i;
+  int tmp[8];
+  int *pTmp = tmp;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  *(pTmp++) = block[0][0] + block[1][0];
+  *(pTmp++) = block[0][1] + block[1][1];
+  *(pTmp++) = block[0][2] + block[1][2];
+  *(pTmp++) = block[0][3] + block[1][3];
+
+  *(pTmp++) = block[0][0] - block[1][0];
+  *(pTmp++) = block[0][1] - block[1][1];
+  *(pTmp++) = block[0][2] - block[1][2];
+  *(pTmp  ) = block[0][3] - block[1][3];
+
+  // Vertical
+  pTmp = tmp;
+  for (i=0;i<2;i++)
+  {      
+    p0 = *(pTmp++);
+    p1 = *(pTmp++);
+    p2 = *(pTmp++);
+    p3 = *(pTmp++);
+
+    t0 = p0 + p3;
+    t1 = p1 + p2;
+    t2 = p1 - p2;
+    t3 = p0 - p3;
+
+    tblock[i][0] = (t0 + t1);
+    tblock[i][1] = (t3 + t2);
+    tblock[i][2] = (t0 - t1);      
+    tblock[i][3] = (t3 - t2);
+  }
+}
+
+void ihadamard4x2(int **tblock, int **block)
+{
+  int i;  
+  int tmp[8];
+  int *pTmp = tmp;
+  int p0,p1,p2,p3;
+  int t0,t1,t2,t3;
+
+  // Horizontal
+  *(pTmp++) = tblock[0][0] + tblock[1][0];
+  *(pTmp++) = tblock[0][1] + tblock[1][1];
+  *(pTmp++) = tblock[0][2] + tblock[1][2];
+  *(pTmp++) = tblock[0][3] + tblock[1][3];
+
+  *(pTmp++) = tblock[0][0] - tblock[1][0];
+  *(pTmp++) = tblock[0][1] - tblock[1][1];
+  *(pTmp++) = tblock[0][2] - tblock[1][2];
+  *(pTmp  ) = tblock[0][3] - tblock[1][3];
+
+  // Vertical
+  pTmp = tmp;
+  for (i = 0; i < 2; i++)
+  {
+    p0 = *(pTmp++);
+    p1 = *(pTmp++);
+    p2 = *(pTmp++);
+    p3 = *(pTmp++);
+
+    t0 = p0 + p2;
+    t1 = p0 - p2;
+    t2 = p1 - p3;
+    t3 = p1 + p3;
+
+    // coefficients (transposed)
+    block[0][i] = t0 + t3;
+    block[1][i] = t1 + t2;
+    block[2][i] = t1 - t2;
+    block[3][i] = t0 - t3;
+  }
+}
+
+//following functions perform 8 additions, 8 assignments. Should be a bit faster
+void hadamard2x2(int **block, int tblock[4])
+{
+  int p0,p1,p2,p3;
+
+  p0 = block[0][0] + block[0][4];
+  p1 = block[0][0] - block[0][4];
+  p2 = block[4][0] + block[4][4];
+  p3 = block[4][0] - block[4][4];
+ 
+  tblock[0] = (p0 + p2);
+  tblock[1] = (p1 + p3);
+  tblock[2] = (p0 - p2);
+  tblock[3] = (p1 - p3);
+}
+
+void ihadamard2x2(int tblock[4], int block[4])
+{
+  int t0,t1,t2,t3;
+
+  t0 = tblock[0] + tblock[1];
+  t1 = tblock[0] - tblock[1];
+  t2 = tblock[2] + tblock[3];
+  t3 = tblock[2] - tblock[3];
+
+  block[0] = (t0 + t2);
+  block[1] = (t1 + t3);
+  block[2] = (t0 - t2);
+  block[3] = (t1 - t3);
+}
+
+/*
+void hadamard2x2(int **block, int tblock[4])
+{
+  //12 additions, 4 assignments
+    tblock[0] = (block[0][0] + block[0][4] + block[4][0] + block[4][4]);
+    tblock[1] = (block[0][0] - block[0][4] + block[4][0] - block[4][4]);
+    tblock[2] = (block[0][0] + block[0][4] - block[4][0] - block[4][4]);
+    tblock[3] = (block[0][0] - block[0][4] - block[4][0] + block[4][4]);
+}
+
+void ihadamard2x2(int tblock[4], int block[4])
+{
+    block[0] = (tblock[0] + tblock[1] + tblock[2] + tblock[3]);
+    block[1] = (tblock[0] - tblock[1] + tblock[2] - tblock[3]);
+    block[2] = (tblock[0] + tblock[1] - tblock[2] - tblock[3]);
+    block[3] = (tblock[0] - tblock[1] - tblock[2] + tblock[3]);
+}
+
+*/
+
+
+void forward8x8(int **block, int **tblock, int pos_y, int pos_x)
+{
+  int i, ii;  
+  int tmp[64];
+  int *pTmp = tmp, *pblock;
+  int a0, a1, a2, a3;
+  int p0, p1, p2, p3, p4, p5 ,p6, p7;
+  int b0, b1, b2, b3, b4, b5, b6, b7;
+
+  // Horizontal
+  for (i=pos_y; i < pos_y + BLOCK_SIZE_8x8; i++)
+  {
+    pblock = &block[i][pos_x];
+    p0 = *(pblock++);
+    p1 = *(pblock++);
+    p2 = *(pblock++);
+    p3 = *(pblock++);
+    p4 = *(pblock++);
+    p5 = *(pblock++);
+    p6 = *(pblock++);
+    p7 = *(pblock  );
+
+    a0 = p0 + p7;
+    a1 = p1 + p6;
+    a2 = p2 + p5;
+    a3 = p3 + p4;
+
+    b0 = a0 + a3;
+    b1 = a1 + a2;
+    b2 = a0 - a3;
+    b3 = a1 - a2;
+
+    a0 = p0 - p7;
+    a1 = p1 - p6;
+    a2 = p2 - p5;
+    a3 = p3 - p4;
+
+    b4 = a1 + a2 + ((a0 >> 1) + a0);
+    b5 = a0 - a3 - ((a2 >> 1) + a2);
+    b6 = a0 + a3 - ((a1 >> 1) + a1);
+    b7 = a1 - a2 + ((a3 >> 1) + a3);
+
+    *(pTmp++) =  b0 + b1;
+    *(pTmp++) =  b4 + (b7 >> 2);
+    *(pTmp++) =  b2 + (b3 >> 1);
+    *(pTmp++) =  b5 + (b6 >> 2);
+    *(pTmp++) =  b0 - b1;
+    *(pTmp++) =  b6 - (b5 >> 2);
+    *(pTmp++) = (b2 >> 1) - b3;                 
+    *(pTmp++) = (b4 >> 2) - b7;
+  }
+
+  // Vertical 
+  for (i=0; i < BLOCK_SIZE_8x8; i++)
+  {
+    pTmp = tmp + i;
+    p0 = *pTmp;
+    p1 = *(pTmp += BLOCK_SIZE_8x8);
+    p2 = *(pTmp += BLOCK_SIZE_8x8);
+    p3 = *(pTmp += BLOCK_SIZE_8x8);
+    p4 = *(pTmp += BLOCK_SIZE_8x8);
+    p5 = *(pTmp += BLOCK_SIZE_8x8);
+    p6 = *(pTmp += BLOCK_SIZE_8x8);
+    p7 = *(pTmp += BLOCK_SIZE_8x8);
+
+    a0 = p0 + p7;
+    a1 = p1 + p6;
+    a2 = p2 + p5;
+    a3 = p3 + p4;
+
+    b0 = a0 + a3;
+    b1 = a1 + a2;
+    b2 = a0 - a3;
+    b3 = a1 - a2;
+
+    a0 = p0 - p7;
+    a1 = p1 - p6;
+    a2 = p2 - p5;
+    a3 = p3 - p4;
+
+    b4 = a1 + a2 + ((a0 >> 1) + a0);
+    b5 = a0 - a3 - ((a2 >> 1) + a2);
+    b6 = a0 + a3 - ((a1 >> 1) + a1);
+    b7 = a1 - a2 + ((a3 >> 1) + a3);
+
+    ii = pos_x + i;
+    tblock[pos_y    ][ii] =  b0 + b1;
+    tblock[pos_y + 1][ii] =  b4 + (b7 >> 2);
+    tblock[pos_y + 2][ii] =  b2 + (b3 >> 1);
+    tblock[pos_y + 3][ii] =  b5 + (b6 >> 2);
+    tblock[pos_y + 4][ii] =  b0 - b1;
+    tblock[pos_y + 5][ii] =  b6 - (b5 >> 2);
+    tblock[pos_y + 6][ii] = (b2 >> 1) - b3;
+    tblock[pos_y + 7][ii] = (b4 >> 2) - b7;
+  }
+}
+
+void inverse8x8(int **tblock, int **block, int pos_x)
+{
+  int i, ii;
+  int tmp[64];
+  int *pTmp = tmp, *pblock;
+  int a0, a1, a2, a3;
+  int p0, p1, p2, p3, p4, p5 ,p6, p7;  
+  int b0, b1, b2, b3, b4, b5, b6, b7;
+
+  // Horizontal  
+  for (i=0; i < BLOCK_SIZE_8x8; i++)
+  {
+    pblock = &tblock[i][pos_x];
+    p0 = *(pblock++);
+    p1 = *(pblock++);
+    p2 = *(pblock++);
+    p3 = *(pblock++);
+    p4 = *(pblock++);
+    p5 = *(pblock++);
+    p6 = *(pblock++);
+    p7 = *(pblock  );
+
+    a0 = p0 + p4;
+    a1 = p0 - p4;
+    a2 = p6 - (p2 >> 1);
+    a3 = p2 + (p6 >> 1);
+
+    b0 =  a0 + a3;
+    b2 =  a1 - a2;
+    b4 =  a1 + a2;
+    b6 =  a0 - a3;
+
+    a0 = -p3 + p5 - p7 - (p7 >> 1);    
+    a1 =  p1 + p7 - p3 - (p3 >> 1);    
+    a2 = -p1 + p7 + p5 + (p5 >> 1);    
+    a3 =  p3 + p5 + p1 + (p1 >> 1);
+
+    
+    b1 =  a0 + (a3>>2);    
+    b3 =  a1 + (a2>>2);    
+    b5 =  a2 - (a1>>2);
+    b7 =  a3 - (a0>>2);                
+
+    *(pTmp++) = b0 + b7;
+    *(pTmp++) = b2 - b5;
+    *(pTmp++) = b4 + b3;
+    *(pTmp++) = b6 + b1;
+    *(pTmp++) = b6 - b1;
+    *(pTmp++) = b4 - b3;
+    *(pTmp++) = b2 + b5;
+    *(pTmp++) = b0 - b7;
+  }
+
+  //  Vertical 
+  for (i=0; i < BLOCK_SIZE_8x8; i++)
+  {
+    pTmp = tmp + i;
+    p0 = *pTmp;
+    p1 = *(pTmp += BLOCK_SIZE_8x8);
+    p2 = *(pTmp += BLOCK_SIZE_8x8);
+    p3 = *(pTmp += BLOCK_SIZE_8x8);
+    p4 = *(pTmp += BLOCK_SIZE_8x8);
+    p5 = *(pTmp += BLOCK_SIZE_8x8);
+    p6 = *(pTmp += BLOCK_SIZE_8x8);
+    p7 = *(pTmp += BLOCK_SIZE_8x8);
+
+    a0 =  p0 + p4;
+    a1 =  p0 - p4;
+    a2 =  p6 - (p2>>1);
+    a3 =  p2 + (p6>>1);
+
+    b0 = a0 + a3;
+    b2 = a1 - a2;
+    b4 = a1 + a2;
+    b6 = a0 - a3;
+
+    a0 = -p3 + p5 - p7 - (p7 >> 1);
+    a1 =  p1 + p7 - p3 - (p3 >> 1);
+    a2 = -p1 + p7 + p5 + (p5 >> 1);
+    a3 =  p3 + p5 + p1 + (p1 >> 1);
+
+
+    b1 =  a0 + (a3 >> 2);
+    b7 =  a3 - (a0 >> 2);
+    b3 =  a1 + (a2 >> 2);
+    b5 =  a2 - (a1 >> 2);
+
+    ii = i + pos_x;
+    block[0][ii] = b0 + b7;
+    block[1][ii] = b2 - b5;
+    block[2][ii] = b4 + b3;
+    block[3][ii] = b6 + b1;
+    block[4][ii] = b6 - b1;
+    block[5][ii] = b4 - b3;
+    block[6][ii] = b2 + b5;
+    block[7][ii] = b0 - b7;
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Check if one of the frames/fields in frame store is used for short-term reference
+ ************************************************************************
+ */
+static int is_short_term_reference(FrameStore* fs)
+{
+
+  if (fs->is_used==3) // frame
+  {
+    if ((fs->frame->used_for_reference)&&(!fs->frame->is_long_term))
+    {
+      return 1;
+    }
+  }
+
+  if (fs->is_used & 1) // top field
+  {
+    if (fs->top_field)
+    {
+      if ((fs->top_field->used_for_reference)&&(!fs->top_field->is_long_term))
+      {
+        return 1;
+      }
+    }
+  }
+
+  if (fs->is_used & 2) // bottom field
+  {
+    if (fs->bottom_field)
+    {
+      if ((fs->bottom_field->used_for_reference)&&(!fs->bottom_field->is_long_term))
+      {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Check if one of the frames/fields in frame store is used for short-term reference
+ ************************************************************************
+ */
+static int is_long_term_reference(FrameStore* fs)
+{
+
+  if (fs->is_used==3) // frame
+  {
+    if ((fs->frame->used_for_reference)&&(fs->frame->is_long_term))
+    {
+      return 1;
+    }
+  }
+
+  if (fs->is_used & 1) // top field
+  {
+    if (fs->top_field)
+    {
+      if ((fs->top_field->used_for_reference)&&(fs->top_field->is_long_term))
+      {
+        return 1;
+      }
+    }
+  }
+
+  if (fs->is_used & 2) // bottom field
+  {
+    if (fs->bottom_field)
+    {
+      if ((fs->bottom_field->used_for_reference)&&(fs->bottom_field->is_long_term))
+      {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Generates a alternating field list from a given FrameStore list
+ *
+ ************************************************************************
+ */
+void gen_pic_list_from_frame_list(PictureStructure currStructure, FrameStore **fs_list, int list_idx, StorablePicture **list, char *list_size, int long_term)
+{
+  int top_idx = 0;
+  int bot_idx = 0;
+
+  int (*is_ref)(StorablePicture *s) = (long_term) ? is_long_ref : is_short_ref;
+
+
+  if (currStructure == TOP_FIELD)
+  {
+    while ((top_idx<list_idx)||(bot_idx<list_idx))
+    {
+      for ( ; top_idx<list_idx; top_idx++)
+      {
+        if(fs_list[top_idx]->is_used & 1)
+        {
+          if(is_ref(fs_list[top_idx]->top_field))
+          {
+            // short term ref pic
+            list[(short) *list_size] = fs_list[top_idx]->top_field;
+            (*list_size)++;
+            top_idx++;
+            break;
+          }
+        }
+      }
+      for ( ; bot_idx<list_idx; bot_idx++)
+      {
+        if(fs_list[bot_idx]->is_used & 2)
+        {
+          if(is_ref(fs_list[bot_idx]->bottom_field))
+          {
+            // short term ref pic
+            list[(short) *list_size] = fs_list[bot_idx]->bottom_field;
+            (*list_size)++;
+            bot_idx++;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (currStructure == BOTTOM_FIELD)
+  {
+    while ((top_idx<list_idx)||(bot_idx<list_idx))
+    {
+      for ( ; bot_idx<list_idx; bot_idx++)
+      {
+        if(fs_list[bot_idx]->is_used & 2)
+        {
+          if(is_ref(fs_list[bot_idx]->bottom_field))
+          {
+            // short term ref pic
+            list[(short) *list_size] = fs_list[bot_idx]->bottom_field;
+            (*list_size)++;
+            bot_idx++;
+            break;
+          }
+        }
+      }
+      for ( ; top_idx<list_idx; top_idx++)
+      {
+        if(fs_list[top_idx]->is_used & 1)
+        {
+          if(is_ref(fs_list[top_idx]->top_field))
+          {
+            // short term ref pic
+            list[(short) *list_size] = fs_list[top_idx]->top_field;
+            (*list_size)++;
+            top_idx++;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Returns long term pic with given LongtermPicNum
+ *
+ ************************************************************************
+ */
+StorablePicture*  get_long_term_pic(Slice *currSlice, DecodedPictureBuffer *p_Dpb, int LongtermPicNum) {
+  uint32_t i;
+
+  for (i=0; i<p_Dpb->ltref_frames_in_buffer; i++)  {
+    if (currSlice->structure==FRAME)    {
+      if (p_Dpb->fs_ltref[i]->is_reference == 3)
+        if ((p_Dpb->fs_ltref[i]->frame->is_long_term)&&(p_Dpb->fs_ltref[i]->frame->long_term_pic_num == LongtermPicNum))
+          return p_Dpb->fs_ltref[i]->frame;
+    }
+    else    {
+      if (p_Dpb->fs_ltref[i]->is_reference & 1)
+        if ((p_Dpb->fs_ltref[i]->top_field->is_long_term)&&(p_Dpb->fs_ltref[i]->top_field->long_term_pic_num == LongtermPicNum))
+          return p_Dpb->fs_ltref[i]->top_field;
+      if (p_Dpb->fs_ltref[i]->is_reference & 2)
+        if ((p_Dpb->fs_ltref[i]->bottom_field->is_long_term)&&(p_Dpb->fs_ltref[i]->bottom_field->long_term_pic_num == LongtermPicNum))
+          return p_Dpb->fs_ltref[i]->bottom_field;
+    }
+  }
+  return NULL;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Update the list of frame stores that contain reference frames/fields
+ *
+ ************************************************************************
+ */
+void update_ref_list(DecodedPictureBuffer *p_Dpb)
+{
+  unsigned i, j;
+  for (i=0, j=0; i<p_Dpb->used_size; i++)
+  {
+    if (is_short_term_reference(p_Dpb->fs[i]))
+    {
+      p_Dpb->fs_ref[j++]=p_Dpb->fs[i];
+    }
+  }
+
+  p_Dpb->ref_frames_in_buffer = j;
+
+  while (j<p_Dpb->size)
+  {
+    p_Dpb->fs_ref[j++]=NULL;
+  }
+}
+
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Update the list of frame stores that contain long-term reference
+ *    frames/fields
+ *
+ ************************************************************************
+ */
+void update_ltref_list(DecodedPictureBuffer *p_Dpb)
+{
+  unsigned i, j;
+  for (i=0, j=0; i<p_Dpb->used_size; i++)
+  {
+    if (is_long_term_reference(p_Dpb->fs[i]))
+    {
+      p_Dpb->fs_ltref[j++] = p_Dpb->fs[i];
+    }
+  }
+
+  p_Dpb->ltref_frames_in_buffer = j;
+
+  while (j<p_Dpb->size)
+  {
+    p_Dpb->fs_ltref[j++]=NULL;
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Calculate picNumX
+ ************************************************************************
+ */
+static int get_pic_num_x (StorablePicture *p, int difference_of_pic_nums_minus1)
+{
+  int currPicNum;
+
+  if (p->structure == FRAME)
+    currPicNum = p->frame_num;
+  else
+    currPicNum = 2 * p->frame_num + 1;
+
+  return currPicNum - (difference_of_pic_nums_minus1 + 1);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Adaptive Memory Management: Mark short term picture unused
+ ************************************************************************
+ */
+void mm_unmark_short_term_for_reference(DecodedPictureBuffer *p_Dpb, StorablePicture *p, int difference_of_pic_nums_minus1)
+{
+  int picNumX;
+
+  uint32_t i;
+
+  picNumX = get_pic_num_x(p, difference_of_pic_nums_minus1);
+
+  for (i=0; i<p_Dpb->ref_frames_in_buffer; i++)
+  {
+    if (p->structure == FRAME)
+    {
+      if ((p_Dpb->fs_ref[i]->is_reference==3) && (p_Dpb->fs_ref[i]->is_long_term==0))
+      {
+        if (p_Dpb->fs_ref[i]->frame->pic_num == picNumX)
+        {
+          unmark_for_reference(p_Dpb->fs_ref[i]);
+          return;
+        }
+      }
+    }
+    else
+    {
+      if ((p_Dpb->fs_ref[i]->is_reference & 1) && (!(p_Dpb->fs_ref[i]->is_long_term & 1)))
+      {
+        if (p_Dpb->fs_ref[i]->top_field->pic_num == picNumX)
+        {
+          p_Dpb->fs_ref[i]->top_field->used_for_reference = 0;
+          p_Dpb->fs_ref[i]->is_reference &= 2;
+          if (p_Dpb->fs_ref[i]->is_used == 3)
+          {
+            p_Dpb->fs_ref[i]->frame->used_for_reference = 0;
+          }
+          return;
+        }
+      }
+      if ((p_Dpb->fs_ref[i]->is_reference & 2) && (!(p_Dpb->fs_ref[i]->is_long_term & 2)))
+      {
+        if (p_Dpb->fs_ref[i]->bottom_field->pic_num == picNumX)
+        {
+          p_Dpb->fs_ref[i]->bottom_field->used_for_reference = 0;
+          p_Dpb->fs_ref[i]->is_reference &= 1;
+          if (p_Dpb->fs_ref[i]->is_used == 3)
+          {
+            p_Dpb->fs_ref[i]->frame->used_for_reference = 0;
+          }
+          return;
+        }
+      }
+    }
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Adaptive Memory Management: Mark long term picture unused
+ ************************************************************************
+ */
+void mm_unmark_long_term_for_reference(DecodedPictureBuffer *p_Dpb, StorablePicture *p, int long_term_pic_num)
+{
+  uint32_t i;
+  for (i=0; i<p_Dpb->ltref_frames_in_buffer; i++)
+  {
+    if (p->structure == FRAME)
+    {
+      if ((p_Dpb->fs_ltref[i]->is_reference==3) && (p_Dpb->fs_ltref[i]->is_long_term==3))
+      {
+        if (p_Dpb->fs_ltref[i]->frame->long_term_pic_num == long_term_pic_num)
+        {
+          unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+        }
+      }
+    }
+    else
+    {
+      if ((p_Dpb->fs_ltref[i]->is_reference & 1) && ((p_Dpb->fs_ltref[i]->is_long_term & 1)))
+      {
+        if (p_Dpb->fs_ltref[i]->top_field->long_term_pic_num == long_term_pic_num)
+        {
+          p_Dpb->fs_ltref[i]->top_field->used_for_reference = 0;
+          p_Dpb->fs_ltref[i]->top_field->is_long_term = 0;
+          p_Dpb->fs_ltref[i]->is_reference &= 2;
+          p_Dpb->fs_ltref[i]->is_long_term &= 2;
+          if (p_Dpb->fs_ltref[i]->is_used == 3)
+          {
+            p_Dpb->fs_ltref[i]->frame->used_for_reference = 0;
+            p_Dpb->fs_ltref[i]->frame->is_long_term = 0;
+          }
+          return;
+        }
+      }
+      if ((p_Dpb->fs_ltref[i]->is_reference & 2) && ((p_Dpb->fs_ltref[i]->is_long_term & 2)))
+      {
+        if (p_Dpb->fs_ltref[i]->bottom_field->long_term_pic_num == long_term_pic_num)
+        {
+          p_Dpb->fs_ltref[i]->bottom_field->used_for_reference = 0;
+          p_Dpb->fs_ltref[i]->bottom_field->is_long_term = 0;
+          p_Dpb->fs_ltref[i]->is_reference &= 1;
+          p_Dpb->fs_ltref[i]->is_long_term &= 1;
+          if (p_Dpb->fs_ltref[i]->is_used == 3)
+          {
+            p_Dpb->fs_ltref[i]->frame->used_for_reference = 0;
+            p_Dpb->fs_ltref[i]->frame->is_long_term = 0;
+          }
+          return;
+        }
+      }
+    }
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Mark a long-term reference frame or complementary field pair unused for referemce
+ ************************************************************************
+ */
+static void unmark_long_term_frame_for_reference_by_frame_idx(DecodedPictureBuffer *p_Dpb, int long_term_frame_idx)
+{
+  uint32_t i;
+  for(i=0; i<p_Dpb->ltref_frames_in_buffer; i++)
+  {
+    if (p_Dpb->fs_ltref[i]->long_term_frame_idx == long_term_frame_idx)
+      unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+  }
+}
+
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    mark a picture as long-term reference
+ ************************************************************************
+ */
+static void mark_pic_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture* p, int long_term_frame_idx, int picNumX)
+{
+  uint32_t i;
+  int add_top, add_bottom;
+
+  if (p->structure == FRAME)
+  {
+    for (i=0; i<p_Dpb->ref_frames_in_buffer; i++)
+    {
+      if (p_Dpb->fs_ref[i]->is_reference == 3)
+      {
+        if ((!p_Dpb->fs_ref[i]->frame->is_long_term)&&(p_Dpb->fs_ref[i]->frame->pic_num == picNumX))
+        {
+          p_Dpb->fs_ref[i]->long_term_frame_idx = p_Dpb->fs_ref[i]->frame->long_term_frame_idx
+                                             = long_term_frame_idx;
+          p_Dpb->fs_ref[i]->frame->long_term_pic_num = long_term_frame_idx;
+          p_Dpb->fs_ref[i]->frame->is_long_term = 1;
+
+          if (p_Dpb->fs_ref[i]->top_field && p_Dpb->fs_ref[i]->bottom_field)
+          {
+            p_Dpb->fs_ref[i]->top_field->long_term_frame_idx = p_Dpb->fs_ref[i]->bottom_field->long_term_frame_idx
+                                                          = long_term_frame_idx;
+            p_Dpb->fs_ref[i]->top_field->long_term_pic_num = long_term_frame_idx;
+            p_Dpb->fs_ref[i]->bottom_field->long_term_pic_num = long_term_frame_idx;
+
+            p_Dpb->fs_ref[i]->top_field->is_long_term = p_Dpb->fs_ref[i]->bottom_field->is_long_term
+                                                   = 1;
+
+          }
+          p_Dpb->fs_ref[i]->is_long_term = 3;
+          return;
+        }
+      }
+    }
+    printf ("Warning: reference frame for long term marking not found\n");
+  }
+  else  {
+    if (p->structure == TOP_FIELD)    {
+      add_top    = 1;
+      add_bottom = 0;
+    }
+    else    {
+      add_top    = 0;
+      add_bottom = 1;
+    }
+    for (i=0; i<p_Dpb->ref_frames_in_buffer; i++)    {
+      if (p_Dpb->fs_ref[i]->is_reference & 1)      {
+        if ((!p_Dpb->fs_ref[i]->top_field->is_long_term)&&(p_Dpb->fs_ref[i]->top_field->pic_num == picNumX))        {
+          if ((p_Dpb->fs_ref[i]->is_long_term) && (p_Dpb->fs_ref[i]->long_term_frame_idx != long_term_frame_idx))
+              printf ("Warning: assigning long_term_frame_idx different from other field\n");
+
+          p_Dpb->fs_ref[i]->long_term_frame_idx = p_Dpb->fs_ref[i]->top_field->long_term_frame_idx
+                                             = long_term_frame_idx;
+          p_Dpb->fs_ref[i]->top_field->long_term_pic_num = 2 * long_term_frame_idx + add_top;
+          p_Dpb->fs_ref[i]->top_field->is_long_term = 1;
+          p_Dpb->fs_ref[i]->is_long_term |= 1;
+          if (p_Dpb->fs_ref[i]->is_long_term == 3)
+          {
+            p_Dpb->fs_ref[i]->frame->is_long_term = 1;
+            p_Dpb->fs_ref[i]->frame->long_term_frame_idx = p_Dpb->fs_ref[i]->frame->long_term_pic_num = long_term_frame_idx;
+          }
+          return;
+        }
+      }
+      if (p_Dpb->fs_ref[i]->is_reference & 2)
+      {
+        if ((!p_Dpb->fs_ref[i]->bottom_field->is_long_term)&&(p_Dpb->fs_ref[i]->bottom_field->pic_num == picNumX))
+        {
+          if ((p_Dpb->fs_ref[i]->is_long_term) && (p_Dpb->fs_ref[i]->long_term_frame_idx != long_term_frame_idx))
+          {
+              printf ("Warning: assigning long_term_frame_idx different from other field\n");
+          }
+
+          p_Dpb->fs_ref[i]->long_term_frame_idx = p_Dpb->fs_ref[i]->bottom_field->long_term_frame_idx
+                                             = long_term_frame_idx;
+          p_Dpb->fs_ref[i]->bottom_field->long_term_pic_num = 2 * long_term_frame_idx + add_bottom;
+          p_Dpb->fs_ref[i]->bottom_field->is_long_term = 1;
+          p_Dpb->fs_ref[i]->is_long_term |= 2;
+          if (p_Dpb->fs_ref[i]->is_long_term == 3)
+          {
+            p_Dpb->fs_ref[i]->frame->is_long_term = 1;
+            p_Dpb->fs_ref[i]->frame->long_term_frame_idx = p_Dpb->fs_ref[i]->frame->long_term_pic_num = long_term_frame_idx;
+          }
+          return;
+        }
+      }
+    }
+    printf ("Warning: reference field for long term marking not found\n");
+  }
+}
+
+
+static void unmark_long_term_field_for_reference_by_frame_idx(DecodedPictureBuffer *p_Dpb, PictureStructure structure, int long_term_frame_idx, int mark_current, unsigned curr_frame_num, int curr_pic_num);
+/*!
+ ************************************************************************
+ * \brief
+ *    Assign a long term frame index to a short term picture
+ ************************************************************************
+ */
+void mm_assign_long_term_frame_idx(DecodedPictureBuffer *p_Dpb, StorablePicture* p, int difference_of_pic_nums_minus1, int long_term_frame_idx) {
+  int picNumX = get_pic_num_x(p, difference_of_pic_nums_minus1);
+
+  // remove frames/fields with same long_term_frame_idx
+  if (p->structure == FRAME)
+    unmark_long_term_frame_for_reference_by_frame_idx(p_Dpb, long_term_frame_idx);
+  else {
+    unsigned i;
+    PictureStructure structure = FRAME;
+
+    for (i=0; i<p_Dpb->ref_frames_in_buffer; i++)    {
+      if (p_Dpb->fs_ref[i]->is_reference & 1)      {
+        if (p_Dpb->fs_ref[i]->top_field->pic_num == picNumX)        {
+          structure = TOP_FIELD;
+          break;
+        }
+      }
+      if (p_Dpb->fs_ref[i]->is_reference & 2)      {
+        if (p_Dpb->fs_ref[i]->bottom_field->pic_num == picNumX)        {
+          structure = BOTTOM_FIELD;
+          break;
+        }
+      }
+    }
+    if (structure==FRAME)
+      error ("field for long term marking not found",200);
+
+    unmark_long_term_field_for_reference_by_frame_idx(p_Dpb, structure, long_term_frame_idx, 0, 0, picNumX);
+  }
+
+  mark_pic_long_term(p_Dpb, p, long_term_frame_idx, picNumX);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Set new max long_term_frame_idx
+ ************************************************************************
+ */
+void mm_update_max_long_term_frame_idx(DecodedPictureBuffer *p_Dpb, int max_long_term_frame_idx_plus1) {
+  uint32_t i;
+
+  p_Dpb->max_long_term_pic_idx = max_long_term_frame_idx_plus1 - 1;
+
+  // check for invalid frames
+  for (i=0; i<p_Dpb->ltref_frames_in_buffer; i++)  {
+    if (p_Dpb->fs_ltref[i]->long_term_frame_idx > p_Dpb->max_long_term_pic_idx)
+      unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Mark all long term reference pictures unused for reference
+ ************************************************************************
+ */
+void mm_unmark_all_long_term_for_reference (DecodedPictureBuffer *p_Dpb) {
+  mm_update_max_long_term_frame_idx(p_Dpb, 0);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Mark all short term reference pictures unused for reference
+ ************************************************************************
+ */
+void mm_unmark_all_short_term_for_reference (DecodedPictureBuffer *p_Dpb) {
+  unsigned int i;
+
+  for (i=0; i<p_Dpb->ref_frames_in_buffer; i++)
+    unmark_for_reference(p_Dpb->fs_ref[i]);
+  update_ref_list(p_Dpb);
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Mark the current picture used for long term reference
+ ************************************************************************
+ */
+void mm_mark_current_picture_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture *p, int long_term_frame_idx) {
+
+  // remove long term pictures with same long_term_frame_idx
+  if (p->structure == FRAME)
+    unmark_long_term_frame_for_reference_by_frame_idx(p_Dpb, long_term_frame_idx);
+  else
+    unmark_long_term_field_for_reference_by_frame_idx(p_Dpb, p->structure, long_term_frame_idx, 1, p->pic_num, 0);
+
+  p->is_long_term = 1;
+  p->long_term_frame_idx = long_term_frame_idx;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Check if one of the frames/fields in frame store is used for reference
+ ************************************************************************
+ */
+int is_used_for_reference(FrameStore* fs) {
+
+  if (fs->is_reference)
+    return 1;
+
+  if (fs->is_used == 3) // frame
+  {
+    if (fs->frame->used_for_reference)
+    {
+      return 1;
+    }
+  }
+
+  if (fs->is_used & 1) // top field
+  {
+    if (fs->top_field)
+    {
+      if (fs->top_field->used_for_reference)
+      {
+        return 1;
+      }
+    }
+  }
+
+  if (fs->is_used & 2) // bottom field
+  {
+    if (fs->bottom_field)
+    {
+      if (fs->bottom_field->used_for_reference)
+      {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    find smallest POC in the DPB.
+ ************************************************************************
+ */
+void get_smallest_poc(DecodedPictureBuffer *p_Dpb, int *poc,int * pos) {
+  uint32_t i;
+
+  if (p_Dpb->used_size<1)
+    error("Cannot determine smallest POC, DPB empty.",150);
+
+  *pos=-1;
+  *poc = INT_MAX;
+  for (i = 0; i < p_Dpb->used_size; i++)  {
+    if ((*poc > p_Dpb->fs[i]->poc)&&(!p_Dpb->fs[i]->is_output))    {
+      *poc = p_Dpb->fs[i]->poc;
+      *pos = i;
+    }
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Remove a picture from DPB which is no longer needed.
+ ************************************************************************
+ */
+int remove_unused_frame_from_dpb(DecodedPictureBuffer *p_Dpb) {
+  uint32_t i;
+
+  // check for frames that were already output and no longer used for reference
+  for (i = 0; i < p_Dpb->used_size; i++)  {
+    if (p_Dpb->fs[i]->is_output && (!is_used_for_reference(p_Dpb->fs[i])))    {
+      remove_frame_from_dpb(p_Dpb, i);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Mark a long-term reference field unused for reference only if it's not
+ *    the complementary field of the picture indicated by picNumX
+ ************************************************************************
+ */
+static void unmark_long_term_field_for_reference_by_frame_idx(DecodedPictureBuffer *p_Dpb, PictureStructure structure, int long_term_frame_idx, int mark_current, unsigned curr_frame_num, int curr_pic_num){
+  VideoParameters *p_Vid = p_Dpb->p_Vid;
+  unsigned i;
+
+  assert(structure!=FRAME);
+  if (curr_pic_num<0)
+    curr_pic_num += (2 * p_Vid->max_frame_num);
+
+  for(i=0; i<p_Dpb->ltref_frames_in_buffer; i++)  {
+    if (p_Dpb->fs_ltref[i]->long_term_frame_idx == long_term_frame_idx)    {
+      if (structure == TOP_FIELD)      {
+        if (p_Dpb->fs_ltref[i]->is_long_term == 3)        {
+          unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+        }
+        else        {
+          if (p_Dpb->fs_ltref[i]->is_long_term == 1)          {
+            unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+          }
+          else          {
+            if (mark_current)            {
+              if (p_Dpb->last_picture)              {
+                if ( ( p_Dpb->last_picture != p_Dpb->fs_ltref[i] )|| p_Dpb->last_picture->frame_num != curr_frame_num)
+                  unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+              }
+              else
+                unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+            }
+            else            {
+              if ((p_Dpb->fs_ltref[i]->frame_num) != (unsigned)(curr_pic_num >> 1))
+                unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+            }
+          }
+        }
+      }
+      if (structure == BOTTOM_FIELD)      {
+        if (p_Dpb->fs_ltref[i]->is_long_term == 3)
+          unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+        else        {
+          if (p_Dpb->fs_ltref[i]->is_long_term == 2)          {
+            unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+          }
+          else          {
+            if (mark_current)            {
+              if (p_Dpb->last_picture)              {
+                if ( ( p_Dpb->last_picture != p_Dpb->fs_ltref[i] )|| p_Dpb->last_picture->frame_num != curr_frame_num)
+                  unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+              }
+              else
+                unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+            }
+            else            {
+              if ((p_Dpb->fs_ltref[i]->frame_num) != (unsigned)(curr_pic_num >> 1))
+                unmark_for_long_term_reference(p_Dpb->fs_ltref[i]);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Initialize 2-dimensional top and bottom field to point to the proper
+ *    lines in frame
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int init_top_bot_planes(imgpel **imgFrame, int dim0, imgpel ***imgTopField, imgpel ***imgBotField)
+{
+  int i;
+
+  if((*imgTopField   = (imgpel**)mem_malloc((dim0>>1) * sizeof(imgpel*))) == NULL)
+    no_mem_exit("init_top_bot_planes: imgTopField");
+
+  if((*imgBotField   = (imgpel**)mem_malloc((dim0>>1) * sizeof(imgpel*))) == NULL)
+    no_mem_exit("init_top_bot_planes: imgBotField");
+
+  for(i = 0; i < (dim0>>1); i++)
+  {
+    (*imgTopField)[i] =  imgFrame[2 * i    ];
+    (*imgBotField)[i] =  imgFrame[2 * i + 1];
+  }
+
+  return dim0 * sizeof(imgpel*);
+}
+
+ /*!
+ ************************************************************************
+ * \brief
+ *    free 2-dimensional top and bottom fields without freeing target memory
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+void free_top_bot_planes(imgpel **imgTopField, imgpel **imgBotField)
+{
+  mem_free (imgTopField);
+  mem_free (imgBotField);
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> DistortionData array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Ddist(DistortionData ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (DistortionData**)mem_malloc(dim0 *      sizeof(DistortionData*))) == NULL)
+    no_mem_exit("get_mem2Ddist: array2D");
+  if((*(*array2D) = (DistortionData* )mem_calloc(dim0 * dim1,sizeof(DistortionData ))) == NULL)
+    no_mem_exit("get_mem2Ddist: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(DistortionData*) + dim1 * sizeof(DistortionData));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> LambdaParams array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dlm(LambdaParams ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (LambdaParams**)mem_malloc(dim0 *      sizeof(LambdaParams*))) == NULL)
+    no_mem_exit("get_mem2Dlm: array2D");
+  if((*(*array2D) = (LambdaParams* )mem_calloc(dim0 * dim1,sizeof(LambdaParams ))) == NULL)
+    no_mem_exit("get_mem2Dlm: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(LambdaParams*) + dim1 * sizeof(LambdaParams));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Ddist()
+ ************************************************************************
+ */
+void free_mem2Ddist(DistortionData **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Ddist: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Ddist: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dlm()
+ ************************************************************************
+ */
+void free_mem2Dlm(LambdaParams **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dlm: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dlm: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> PicMotionParams array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dmp(PicMotionParams ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (PicMotionParams**)mem_malloc(dim0 *      sizeof(PicMotionParams*))) == NULL)
+    no_mem_exit("get_mem2Dmp: array2D");
+  if((*(*array2D) = (PicMotionParams* )mem_calloc(dim0 * dim1, sizeof(PicMotionParams ))) == NULL)
+    no_mem_exit("get_mem2Dmp: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(PicMotionParams*) + dim1 * sizeof(PicMotionParams));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> PicMotionParams array3D[frames][dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dmp(PicMotionParams ****array3D, int dim0, int dim1, int dim2)
+{
+  int i, mem_size = dim0 * sizeof(PicMotionParams**);
+
+  if(((*array3D) = (PicMotionParams***)mem_malloc(dim0 * sizeof(PicMotionParams**))) == NULL)
+    no_mem_exit("get_mem3Dmp: array3D");
+
+  mem_size += get_mem2Dmp(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] = (*array3D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dmp()
+ ************************************************************************
+ */
+void free_mem2Dmp(PicMotionParams **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dmp: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dmp: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dmp()
+ ************************************************************************
+ */
+void free_mem3Dmp(PicMotionParams ***array3D)
+{
+  if (array3D)
+  {
+    free_mem2Dmp(*array3D);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dmp: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> LevelQuantParams array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dquant(LevelQuantParams ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (LevelQuantParams**) mem_malloc(dim0 *      sizeof(LevelQuantParams*))) == NULL)
+    no_mem_exit("get_mem2Dquant: array2D");
+  if((*(*array2D) = (LevelQuantParams* ) mem_calloc(dim0 * dim1,sizeof(LevelQuantParams ))) == NULL)
+    no_mem_exit("get_mem2Dquant: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(LevelQuantParams*) + dim1 * sizeof(LevelQuantParams));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> LevelQuantParams array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dquant(LevelQuantParams ****array3D, int dim0, int dim1, int dim2)
+{
+  int i, mem_size = dim0 * sizeof(LevelQuantParams**);
+
+  if(((*array3D) = (LevelQuantParams***)mem_malloc(dim0 * sizeof(LevelQuantParams**))) == NULL)
+    no_mem_exit("get_mem3Dquant: array3D");
+
+  mem_size += get_mem2Dquant(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] = (*array3D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory array -> LevelQuantParams array3D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Dquant(LevelQuantParams *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int i, mem_size = dim0 * sizeof(LevelQuantParams***);
+
+  if(((*array4D) = (LevelQuantParams****)mem_malloc(dim0 * sizeof(LevelQuantParams***))) == NULL)
+    no_mem_exit("get_mem4Dquant: array4D");
+
+  mem_size += get_mem3Dquant(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] = (*array4D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 5D memory array -> LevelQuantParams array3D[dim0][dim1][dim2][dim3][dim4]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem5Dquant(LevelQuantParams ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4)
+{
+  int i, mem_size = dim0 * sizeof(LevelQuantParams***);
+
+  if(((*array5D) = (LevelQuantParams*****)mem_malloc(dim0 * sizeof(LevelQuantParams****))) == NULL)
+    no_mem_exit("get_mem5Dquant: array5D");
+
+  mem_size += get_mem4Dquant(*array5D, dim0 * dim1, dim2, dim3, dim4);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] = (*array5D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> WPParams array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dwp(WPParams ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (WPParams**)mem_malloc(dim0 *      sizeof(WPParams*))) == NULL)
+    no_mem_exit("get_mem2Dwp: array2D");
+  if((*(*array2D) = (WPParams* )mem_calloc(dim0 * dim1,sizeof(WPParams ))) == NULL)
+    no_mem_exit("get_mem2Dwp: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(WPParams*) + dim1 * sizeof(WPParams));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dwp()
+ ************************************************************************
+ */
+void free_mem2Dwp(WPParams **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dwp: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dwp: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dquant()
+ ************************************************************************
+ */
+void free_mem2Dquant(LevelQuantParams **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dquant: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dquant: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dquant()
+ ************************************************************************
+ */
+void free_mem3Dquant(LevelQuantParams ***array3D)
+{
+  if (array3D)
+  {
+    free_mem2Dquant(*array3D);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dquant: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D memory array
+ *    which was allocated with get_mem4Dquant()
+ ************************************************************************
+ */
+void free_mem4Dquant(LevelQuantParams ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Dquant(*array4D);
+    mem_free (array4D);
+  }
+  else
+  {
+    error ("free_mem4Dquant: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 5D memory array
+ *    which was allocated with get_mem5Dquant()
+ ************************************************************************
+ */
+void free_mem5Dquant(LevelQuantParams *****array5D)
+{
+  if (array5D)
+  {
+    free_mem4Dquant(*array5D);
+    mem_free (array5D);
+  }
+  else
+  {
+    error ("free_mem5Dquant: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> StorablePicturePtr array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2D_spp(StorablePicturePtr ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (StorablePicturePtr**)mem_malloc(dim0 *      sizeof(StorablePicturePtr*))) == NULL)
+    no_mem_exit("get_mem2D_spp: array2D");
+  if((*(*array2D) = (StorablePicturePtr* )mem_calloc(dim0 * dim1,sizeof(StorablePicturePtr ))) == NULL)
+    no_mem_exit("get_mem2D_spp: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(StorablePicturePtr*) + dim1 * sizeof(StorablePicturePtr));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> StorablePicturePtr array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3D_spp(StorablePicturePtr ****array3D, int dim0, int dim1, int dim2)
+{
+  int i, mem_size = dim0 * sizeof(StorablePicturePtr**);
+
+  if(((*array3D) = (StorablePicturePtr***)mem_malloc(dim0 * sizeof(StorablePicturePtr**))) == NULL)
+    no_mem_exit("get_mem3D_spp: array3D");
+
+  mem_size += get_mem2D_spp(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] = (*array3D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> MotionVector array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dmv(MotionVector ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (MotionVector**)mem_malloc(dim0 *      sizeof(MotionVector*))) == NULL)
+    no_mem_exit("get_mem2Dmv: array2D");
+  if((*(*array2D) = (MotionVector* )mem_calloc(dim0 * dim1,sizeof(MotionVector ))) == NULL)
+    no_mem_exit("get_mem2Dmv: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(MotionVector*) + dim1 * sizeof(MotionVector));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> MotionVector array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dmv(MotionVector ****array3D, int dim0, int dim1, int dim2)
+{
+  int i, mem_size = dim0 * sizeof(MotionVector**);
+
+  if(((*array3D) = (MotionVector***)mem_malloc(dim0 * sizeof(MotionVector**))) == NULL)
+    no_mem_exit("get_mem3Dmv: array3D");
+
+  mem_size += get_mem2Dmv(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] = (*array3D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory array -> MotionVector array3D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Dmv(MotionVector *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int i, mem_size = dim0 * sizeof(MotionVector***);
+
+  if(((*array4D) = (MotionVector****)mem_malloc(dim0 * sizeof(MotionVector***))) == NULL)
+    no_mem_exit("get_mem4Dpel: array4D");
+
+  mem_size += get_mem3Dmv(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] = (*array4D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 5D memory array -> MotionVector array3D[dim0][dim1][dim2][dim3][dim4]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem5Dmv(MotionVector ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4)
+{
+  int i, mem_size = dim0 * sizeof(MotionVector***);
+
+  if(((*array5D) = (MotionVector*****)mem_malloc(dim0 * sizeof(MotionVector****))) == NULL)
+    no_mem_exit("get_mem5Dmv: array5D");
+
+  mem_size += get_mem4Dmv(*array5D, dim0 * dim1, dim2, dim3, dim4);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] = (*array5D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 6D memory array -> MotionVector array6D[dim0][dim1][dim2][dim3][dim4][dim5]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem6Dmv(MotionVector *******array6D, int dim0, int dim1, int dim2, int dim3, int dim4, int dim5)
+{
+  int i, mem_size = dim0 * sizeof(MotionVector*****);
+
+  if(((*array6D) = (MotionVector******)mem_malloc(dim0 * sizeof(MotionVector*****))) == NULL)
+    no_mem_exit("get_mem6Dmv: array6D");
+
+  mem_size += get_mem5Dmv(*array6D, dim0 * dim1, dim2, dim3, dim4, dim5);
+
+  for(i = 1; i < dim0; i++)
+    (*array6D)[i] = (*array6D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 7D memory array -> MotionVector array6D[dim0][dim1][dim2][dim3][dim4][dim5][dim6]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem7Dmv(MotionVector ********array7D, int dim0, int dim1, int dim2, int dim3, int dim4, int dim5, int dim6)
+{
+  int i, mem_size = dim0 * sizeof(MotionVector*****);
+
+  if(((*array7D) = (MotionVector*******)mem_malloc(dim0 * sizeof(MotionVector******))) == NULL)
+    no_mem_exit("get_mem7Dmv: array7D");
+
+  mem_size += get_mem6Dmv(*array7D, dim0 * dim1, dim2, dim3, dim4, dim5, dim6);
+
+  for(i = 1; i < dim0; i++)
+    (*array7D)[i] = (*array7D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2D_spp()
+ ************************************************************************
+ */
+void free_mem2D_spp(StorablePicturePtr **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2D_spp: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2D_spp: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3D_spp()
+ ************************************************************************
+ */
+void free_mem3D_spp(StorablePicturePtr ***array3D)
+{
+  if (array3D)
+  {
+    free_mem2D_spp(*array3D);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3D_spp: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dmv()
+ ************************************************************************
+ */
+void free_mem2Dmv(MotionVector **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dmv: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dmv: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dmv()
+ ************************************************************************
+ */
+void free_mem3Dmv(MotionVector ***array3D)
+{
+  if (array3D)
+  {
+    free_mem2Dmv(*array3D);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dmv: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D memory array
+ *    which was allocated with get_mem4Dmv()
+ ************************************************************************
+ */
+void free_mem4Dmv(MotionVector ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Dmv(*array4D);
+    mem_free (array4D);
+  }
+  else
+  {
+    error ("free_mem4Dmv: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 5D memory array
+ *    which was allocated with get_mem5Dmv()
+ ************************************************************************
+ */
+void free_mem5Dmv(MotionVector *****array5D)
+{
+  if (array5D)
+  {
+    free_mem4Dmv(*array5D);
+    mem_free (array5D);
+  }
+  else
+  {
+    error ("free_mem5Dmv: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 6D memory array
+ *    which was allocated with get_mem6Dmv()
+ ************************************************************************
+ */
+void free_mem6Dmv(MotionVector ******array6D)
+{
+  if (array6D)
+  {
+    free_mem5Dmv(*array6D);
+    mem_free (array6D);
+  }
+  else
+  {
+    error ("free_mem6Dmv: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 7D memory array
+ *    which was allocated with get_mem7Dmv()
+ ************************************************************************
+ */
+void free_mem7Dmv(MotionVector *******array7D)
+{
+  if (array7D)
+  {
+    free_mem6Dmv(*array7D);
+    mem_free (array7D);
+  }
+  else
+  {
+    error ("free_mem7Dmv: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 1D memory array -> imgpel array1D[dim0
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem1Dpel(imgpel **array1D, int dim0)
+{
+  if((*array1D    = (imgpel*)mem_calloc(dim0,       sizeof(imgpel))) == NULL)
+    no_mem_exit("get_mem1Dpel: array1D");
+
+  return (sizeof(imgpel*) + dim0 * sizeof(imgpel));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> imgpel array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2Dpel(imgpel ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (imgpel**)mem_malloc(dim0 *        sizeof(imgpel*))) == NULL)
+    no_mem_exit("get_mem2Dpel: array2D");
+  if((*(*array2D) = (imgpel* )mem_malloc(dim0 * dim1 * sizeof(imgpel ))) == NULL)
+    no_mem_exit("get_mem2Dpel: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+  {
+    (*array2D)[i] = (*array2D)[i-1] + dim1;
+  }
+
+  return dim0 * (sizeof(imgpel*) + dim1 * sizeof(imgpel));
+}
+
+int get_mem2Dpel_pad(imgpel ***array2D, int dim0, int dim1, int iPadY, int iPadX)
+{
+  int i;
+  imgpel *curr = NULL;
+  int iHeight, iWidth;
+  
+  iHeight = dim0+2*iPadY;
+  iWidth = dim1+2*iPadX;
+  if((*array2D    = (imgpel**)mem_malloc(iHeight*sizeof(imgpel*))) == NULL)
+    no_mem_exit("get_mem2Dpel_pad: array2D");
+  if((*(*array2D) = (imgpel* )mem_calloc(iHeight * iWidth, sizeof(imgpel ))) == NULL)
+    no_mem_exit("get_mem2Dpel_pad: array2D");
+
+  (*array2D)[0] += iPadX;
+  curr = (*array2D)[0];
+  for(i = 1 ; i < iHeight; i++)
+  {
+    curr += iWidth;
+    (*array2D)[i] = curr;
+  }
+  (*array2D) = &((*array2D)[iPadY]);
+
+  return iHeight * (sizeof(imgpel*) + iWidth * sizeof(imgpel));
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> imgpel array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dpel(imgpel ****array3D, int dim0, int dim1, int dim2)
+{
+  int i, mem_size = dim0 * sizeof(imgpel**);
+
+  if(((*array3D) = (imgpel***)malloc(dim0 * sizeof(imgpel**))) == NULL)
+    no_mem_exit("get_mem3Dpel: array3D");
+
+  mem_size += get_mem2Dpel(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] = (*array3D)[i - 1] + dim1;
+  
+  return mem_size;
+}
+
+int get_mem3Dpel_pad(imgpel ****array3D, int dim0, int dim1, int dim2, int iPadY, int iPadX)
+{
+  int i, mem_size = dim0 * sizeof(imgpel**);
+
+  if(((*array3D) = (imgpel***)mem_malloc(dim0*sizeof(imgpel**))) == NULL)
+    no_mem_exit("get_mem3Dpel_pad: array3D");
+
+  for(i = 0; i < dim0; i++)
+    mem_size += get_mem2Dpel_pad((*array3D)+i, dim1, dim2, iPadY, iPadX);
+  
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory array -> imgpel array4D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Dpel(imgpel *****array4D, int dim0, int dim1, int dim2, int dim3)
+{  
+  int  i, mem_size = dim0 * sizeof(imgpel***);
+
+  if(((*array4D) = (imgpel****)mem_malloc(dim0 * sizeof(imgpel***))) == NULL)
+    no_mem_exit("get_mem4Dpel: array4D");
+
+  mem_size += get_mem3Dpel(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] = (*array4D)[i - 1] + dim1;
+
+  return mem_size;
+}
+
+
+int get_mem4Dpel_pad(imgpel *****array4D, int dim0, int dim1, int dim2, int dim3, int iPadY, int iPadX)
+{  
+  int  i, mem_size = dim0 * sizeof(imgpel***);
+
+  if(((*array4D) = (imgpel****)mem_malloc(dim0 * sizeof(imgpel***))) == NULL)
+    no_mem_exit("get_mem4Dpel_pad: array4D");
+
+  mem_size += get_mem3Dpel_pad(*array4D, dim0 * dim1, dim2, dim3, iPadY, iPadX);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] = (*array4D)[i - 1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 5D memory array -> imgpel array5D[dim0][dim1][dim2][dim3][dim4]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem5Dpel(imgpel ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4)
+{
+  int  i, mem_size = dim0 * sizeof(imgpel****);
+
+  if(((*array5D) = (imgpel*****)mem_malloc(dim0 * sizeof(imgpel****))) == NULL)
+    no_mem_exit("get_mem5Dpel: array5D");
+
+  mem_size += get_mem4Dpel(*array5D, dim0 * dim1, dim2, dim3, dim4);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] = (*array5D)[i - 1] + dim1;
+
+  return mem_size;
+}
+
+int get_mem5Dpel_pad(imgpel ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4, int iPadY, int iPadX)
+{
+  int  i, mem_size = dim0 * sizeof(imgpel****);
+
+  if(((*array5D) = (imgpel*****)mem_malloc(dim0 * sizeof(imgpel****))) == NULL)
+    no_mem_exit("get_mem5Dpel_pad: array5D");
+
+  mem_size += get_mem4Dpel_pad(*array5D, dim0 * dim1, dim2, dim3, dim4, iPadY, iPadX);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] = (*array5D)[i - 1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 1D memory array
+ *    which was allocated with get_mem1Dpel()
+ ************************************************************************
+ */
+void free_mem1Dpel(imgpel *array1D)
+{
+  if (array1D)
+  {
+    mem_free (array1D);
+  } 
+  else
+  {
+    error ("free_mem1Dpel: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dpel()
+ ************************************************************************
+ */
+void free_mem2Dpel(imgpel **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+     error ("free_mem2Dpel: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dpel: trying to free unused memory",100);
+  }
+}
+
+void free_mem2Dpel_pad(imgpel **array2D, int iPadY, int iPadX)
+{
+  if (array2D)
+  {
+    if (*array2D)
+    {
+      mem_free (array2D[-iPadY]-iPadX);
+    }
+    else 
+      error ("free_mem2Dpel_pad: trying to free unused memory",100);
+
+    mem_free (&array2D[-iPadY]);
+  } 
+  else
+  {
+    error ("free_mem2Dpel_pad: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dpel()
+ ************************************************************************
+ */
+void free_mem3Dpel(imgpel ***array3D)
+{
+  if (array3D)
+  {
+    free_mem2Dpel(*array3D);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dpel: trying to free unused memory",100);
+  }
+}
+
+void free_mem3Dpel_pad(imgpel ***array3D, int iDim12, int iPadY, int iPadX)
+{
+  if (array3D)
+  {
+    int i;
+    for(i=0; i<iDim12; i++)
+      if(array3D[i])
+      {
+        free_mem2Dpel_pad(array3D[i], iPadY, iPadX);
+        array3D[i] = NULL;
+      }
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dpel_pad: trying to free unused memory",100);
+  }
+  
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D memory array
+ *    which was allocated with get_mem4Dpel()
+ ************************************************************************
+ */
+void free_mem4Dpel(imgpel ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Dpel(*array4D);
+    mem_free (array4D);
+  }
+  else
+  {
+    error ("free_mem4Dpel: trying to free unused memory",100);
+  }
+}
+
+void free_mem4Dpel_pad(imgpel  ****array4D, int iFrames, int iPadY, int iPadX)
+{
+  if (array4D)
+  {
+    free_mem3Dpel_pad(*array4D, iFrames, iPadY, iPadX);
+    mem_free (array4D);
+  }
+  else
+  {
+    error ("free_mem4Dpel_pad: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 5D memory array
+ *    which was allocated with get_mem5Dpel()
+ ************************************************************************
+ */
+void free_mem5Dpel(imgpel *****array5D)
+{
+  if (array5D)
+  {
+    free_mem4Dpel(*array5D);
+    mem_free (array5D);
+  }
+  else
+  {
+    error ("free_mem5Dpel: trying to free unused memory",100);
+  }
+}
+
+void free_mem5Dpel_pad(imgpel *****array5D, int iFrames, int iPadY, int iPadX)
+{
+  if (array5D)
+  {
+    free_mem4Dpel_pad(*array5D, iFrames, iPadY, iPadX);
+    mem_free(array5D);
+  }
+  else
+  {
+    error ("free_mem5Dpel_pad: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Create 2D memory array -> byte array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    byte type array of size dim0 * dim1
+ ************************************************************************
+ */
+byte** new_mem2D(int dim0, int dim1)
+{
+  int i;
+  byte **array2D;
+
+  if((  array2D  = (byte**)mem_malloc(dim0 *      sizeof(byte*))) == NULL)
+    no_mem_exit("get_mem2D: array2D");
+  if((*(array2D) = (byte* )mem_calloc(dim0 * dim1,sizeof(byte ))) == NULL)
+    no_mem_exit("get_mem2D: array2D");
+
+  for(i = 1; i < dim0; i++)
+    array2D[i] = array2D[i-1] + dim1;
+
+  return (array2D);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> unsigned char array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************/
+int get_mem2D(byte ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((  *array2D  = (byte**)mem_malloc(dim0 *      sizeof(byte*))) == NULL)
+    no_mem_exit("get_mem2D: array2D");
+  if((*(*array2D) = (byte* )mem_calloc(dim0 * dim1,sizeof(byte ))) == NULL)
+    no_mem_exit("get_mem2D: array2D");
+
+  for(i = 1; i < dim0; i++)
+    (*array2D)[i] = (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(byte*) + dim1 * sizeof(byte));
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Create 2D memory array -> int array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    int type array of size dim0 * dim1
+ ************************************************************************
+ */
+int** new_mem2Dint(int dim0, int dim1)
+{
+  int i;
+  int **array2D;
+
+  if((array2D    = (int**)mem_malloc(dim0 *       sizeof(int*))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+  if((*(array2D) = (int* )mem_calloc(dim0 * dim1, sizeof(int ))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (array2D)[i] =  (array2D)[i-1] + dim1;
+
+  return (array2D);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> int array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Dint(int ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (int**)mem_malloc(dim0 *       sizeof(int*))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+  if((*(*array2D) = (int* )mem_calloc(dim0 * dim1, sizeof(int ))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+
+  for(i = 1 ; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(int*) + dim1 * sizeof(int));
+}
+
+int get_mem2Dint_pad(int ***array2D, int dim0, int dim1, int iPadY, int iPadX)
+{
+  int i;
+  int *curr = NULL;
+  int iHeight, iWidth;
+  
+  iHeight = dim0+2*iPadY;
+  iWidth = dim1+2*iPadX;
+  if((*array2D    = (int**)mem_malloc(iHeight*sizeof(int*))) == NULL)
+    no_mem_exit("get_mem2Dint_pad: array2D");
+  if((*(*array2D) = (int* )mem_calloc(iHeight * iWidth, sizeof(int ))) == NULL)
+    no_mem_exit("get_mem2Dint_pad: array2D");
+
+  (*array2D)[0] += iPadX;
+  curr = (*array2D)[0];
+  for(i = 1 ; i < iHeight; i++)
+  {
+    curr += iWidth;
+    (*array2D)[i] = curr;
+  }
+  (*array2D) = &((*array2D)[iPadY]);
+
+  return iHeight * (sizeof(int*) + iWidth * sizeof(int));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> int64_t array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Dint64(int64_t ***array2D, int dim0, int dim1) {
+  int i;
+
+  if((*array2D    = (int64_t**)mem_malloc(dim0 *      sizeof(int64_t*))) == NULL)
+    no_mem_exit("get_mem2Dint64: array2D");
+  if((*(*array2D) = (int64_t* )mem_calloc(dim0 * dim1,sizeof(int64_t ))) == NULL)
+    no_mem_exit("get_mem2Dint64: array2D");
+
+  for(i = 1; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(int64_t*) + dim1 * sizeof(int64_t));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> unsigned char array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3D(byte ****array3D, int dim0, int dim1, int dim2) {
+  int  i, mem_size = dim0 * sizeof(byte**);
+
+  if(!((*array3D) = (byte***)mem_malloc(dim0 * sizeof(byte**))))
+    no_mem_exit("get_mem3D: array3D");
+
+  mem_size += get_mem2D(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory array -> unsigned char array4D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4D(byte *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(byte***);
+
+  if(((*array4D) = (byte****)mem_malloc(dim0 * sizeof(byte***))) == NULL)
+    no_mem_exit("get_mem4D: array4D");
+
+  mem_size += get_mem3D(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> int array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dint(int ****array3D, int dim0, int dim1, int dim2)
+{
+  int  i, mem_size = dim0 * sizeof(int**);
+
+  if(((*array3D) = (int***)mem_malloc(dim0 * sizeof(int**))) == NULL)
+    no_mem_exit("get_mem3Dint: array3D");
+
+  mem_size += get_mem2Dint(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory array -> int64_t array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dint64(int64_t ****array3D, int dim0, int dim1, int dim2)
+{
+  int  i, mem_size = dim0 * sizeof(int64_t**);
+
+  if(((*array3D) = (int64_t***)mem_malloc(dim0 * sizeof(int64_t**))) == NULL)
+    no_mem_exit("get_mem3Dint64: array3D");
+
+  mem_size += get_mem2Dint64(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+int get_mem2Ddistblk(distblk ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D    = (distblk**)mem_malloc(dim0 *      sizeof(distblk*))) == NULL)
+    no_mem_exit("get_mem2Ddistblk: array2D");
+  if((*(*array2D) = (distblk* )mem_calloc(dim0 * dim1,sizeof(distblk ))) == NULL)
+    no_mem_exit("get_mem2Ddistblk: array2D");
+
+  for(i = 1; i < dim0; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(distblk*) + dim1 * sizeof(distblk));
+}
+
+int get_mem3Ddistblk(distblk ****array3D, int dim0, int dim1, int dim2)
+{
+  int  i, mem_size = dim0 * sizeof(distblk**);
+
+  if(((*array3D) = (distblk***)mem_malloc(dim0 * sizeof(distblk**))) == NULL)
+    no_mem_exit("get_mem3Ddistblk: array3D");
+
+  mem_size += get_mem2Ddistblk(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+int get_mem4Ddistblk(distblk *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(distblk***);
+
+  if(((*array4D) = (distblk****)mem_malloc(dim0 * sizeof(distblk***))) == NULL)
+    no_mem_exit("get_mem4Ddistblk: array4D");
+
+  mem_size += get_mem3Ddistblk(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory array -> int array4D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Dint(int *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(int***);
+
+  if(((*array4D) = (int****)mem_malloc(dim0 * sizeof(int***))) == NULL)
+    no_mem_exit("get_mem4Dint: array4D");
+
+  mem_size += get_mem3Dint(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+int get_mem4Dint64(int64_t *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(int64_t***);
+
+  if(((*array4D) = (int64_t****)mem_malloc(dim0 * sizeof(int64_t***))) == NULL)
+    no_mem_exit("get_mem4Dint64: array4D");
+
+  mem_size += get_mem3Dint64(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 5D memory array -> int array5D[dim0][dim1][dim2][dim3][dim4]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem5Dint(int ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4)
+{
+  int  i, mem_size = dim0 * sizeof(int****);
+
+  if(((*array5D) = (int*****)mem_malloc(dim0 * sizeof(int****))) == NULL)
+    no_mem_exit("get_mem5Dint: array5D");
+
+  mem_size += get_mem4Dint(*array5D, dim0 * dim1, dim2, dim3, dim4);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] =  (*array5D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2D()
+ ************************************************************************
+ */
+void free_mem2D(byte **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2D: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2D: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dint()
+ ************************************************************************
+ */
+void free_mem2Dint(int **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dint: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dint: trying to free unused memory",100);
+  }
+}
+
+void free_mem2Dint_pad(int **array2D, int iPadY, int iPadX)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (array2D[-iPadY]-iPadX);
+    else 
+      error ("free_mem2Dint_pad: trying to free unused memory",100);
+
+    mem_free (&array2D[-iPadY]);
+  } 
+  else
+  {
+    error ("free_mem2Dint_pad: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D memory array
+ *    which was allocated with get_mem2Dint64()
+ ************************************************************************
+ */
+void free_mem2Dint64(int64_t **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Dint64: trying to free unused memory",100);
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dint64: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3D()
+ ************************************************************************
+ */
+void free_mem3D(byte ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2D(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3D: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D memory array
+ *    which was allocated with get_mem3D()
+ ************************************************************************
+ */
+void free_mem4D(byte ****array4D)
+{
+  if (array4D)
+  {
+   free_mem3D(*array4D);
+   mem_free (array4D);
+  } 
+  else
+  {
+    error ("free_mem4D: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dint()
+ ************************************************************************
+ */
+void free_mem3Dint(int ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2Dint(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3Dint: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was allocated with get_mem3Dint64()
+ ************************************************************************
+ */
+void free_mem3Dint64(int64_t ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2Dint64(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3Dint64: trying to free unused memory",100);
+  }
+}
+
+void free_mem3Ddistblk(distblk ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2Ddistblk(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3Ddistblk: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D memory array
+ *    which was allocated with get_mem4Dint()
+ ************************************************************************
+ */
+void free_mem4Dint(int ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Dint( *array4D);
+    mem_free (array4D);
+  } else
+  {
+    error ("free_mem4Dint: trying to free unused memory",100);
+  }
+}
+
+void free_mem4Dint64(int64_t ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Dint64( *array4D);
+    mem_free (array4D);
+  } else
+  {
+    error ("free_mem4Dint64: trying to free unused memory",100);
+  }
+}
+
+void free_mem4Ddistblk(distblk ****array4D)
+{
+  if (array4D)
+  {
+    free_mem3Ddistblk( *array4D);
+    mem_free (array4D);
+  } else
+  {
+    error ("free_mem4Ddistblk: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 5D int memory array
+ *    which was allocated with get_mem5Dint()
+ ************************************************************************
+ */
+void free_mem5Dint(int *****array5D) {
+
+  if (array5D)  {
+    free_mem4Dint( *array5D);
+    mem_free (array5D);
+  } 
+	else
+    error ("free_mem5Dint: trying to free unused memory",100);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Exit program if memory allocation failed (using error())
+ * \param where
+ *    string indicating which memory allocation failed
+ ************************************************************************
+ */
+void no_mem_exit(char *where) {
+   wsprintf(errortext, "Could not allocate memory: %s",where);
+   error (errortext, 100);
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Create 2D memory array -> uint16_t array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    uint16_t type array of size dim0 * dim1
+ ************************************************************************
+ */
+uint16_t** new_mem2Duint16(int dim0, int dim1) {
+  int i;
+  uint16_t **array2D;
+
+  if(( array2D = (uint16_t**)mem_malloc(dim0 *      sizeof(uint16_t*))) == NULL)
+    no_mem_exit("get_mem2Duint16: array2D");
+  if((*array2D = (uint16_t* )mem_calloc(dim0 * dim1,sizeof(uint16_t ))) == NULL)
+    no_mem_exit("get_mem2Duint16: array2D");
+
+  for(i = 1; i < dim0; i++)
+    array2D[i] = array2D[i-1] + dim1;
+
+  return (array2D);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D uint16_t memory array -> uint16_t array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Duint16(uint16_t ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((  *array2D  = (uint16_t**)mem_malloc(dim0 *      sizeof(uint16_t*))) == NULL)
+    no_mem_exit("get_mem2Duint16: array2D");
+
+  if((*(*array2D) = (uint16_t* )mem_calloc(dim0 * dim1,sizeof(uint16_t ))) == NULL)
+    no_mem_exit("get_mem2Duint16: array2D");
+
+  for(i = 1; i < dim0; i++)
+    (*array2D)[i] = (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(uint16_t*) + dim1 * sizeof(uint16_t));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory uint16_t array -> uint16_t array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Duint16(uint16_t ****array3D,int dim0, int dim1, int dim2)
+{
+  int  i, mem_size = dim0 * sizeof(uint16_t**);
+
+  if(((*array3D) = (uint16_t***)mem_malloc(dim0 * sizeof(uint16_t**))) == NULL)
+    no_mem_exit("get_mem3Duint16: array3D");
+
+  mem_size += get_mem2Duint16(*array3D, dim0 * dim1, dim2);
+
+  for(i = 1; i < dim0; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory uint16_t array -> uint16_t array3D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Duint16(uint16_t *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(uint16_t***);
+
+  if(((*array4D) = (uint16_t****)mem_malloc(dim0 * sizeof(uint16_t***))) == NULL)
+    no_mem_exit("get_mem4Duint16: array4D");
+
+  mem_size += get_mem3Duint16(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D short memory array -> short array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Dshort(short ***array2D, int dim0, int dim1)
+{
+  int i;
+  short *curr = NULL;
+
+  if((  *array2D  = (short**)mem_malloc(dim0 *      sizeof(short*))) == NULL)
+    no_mem_exit("get_mem2Dshort: array2D");
+  if((*(*array2D) = (short* )mem_calloc(dim0 * dim1,sizeof(short ))) == NULL)
+    no_mem_exit("get_mem2Dshort: array2D");
+  
+  curr = (*array2D)[0];
+  for(i = 1; i < dim0; i++)
+  {
+    curr += dim1;
+    (*array2D)[i] = curr;    
+  }
+
+  return dim0 * (sizeof(short*) + dim1 * sizeof(short));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory short array -> short array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dshort(short ****array3D,int dim0, int dim1, int dim2)
+{
+  int  i, mem_size = dim0 * sizeof(short**);
+  short **curr = NULL;
+
+  if(((*array3D) = (short***)mem_malloc(dim0 * sizeof(short**))) == NULL)
+    no_mem_exit("get_mem3Dshort: array3D");
+
+  mem_size += get_mem2Dshort(*array3D, dim0 * dim1, dim2);
+
+  curr = (*array3D)[0];
+  for(i = 1; i < dim0; i++)
+  {
+    curr += dim1;
+    (*array3D)[i] = curr;    
+  }
+
+  return mem_size;
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 4D memory short array -> short array3D[dim0][dim1][dim2][dim3]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem4Dshort(short *****array4D, int dim0, int dim1, int dim2, int dim3)
+{
+  int  i, mem_size = dim0 * sizeof(short***);
+
+  if(((*array4D) = (short****)mem_malloc(dim0 * sizeof(short***))) == NULL)
+    no_mem_exit("get_mem4Dshort: array4D");
+
+  mem_size += get_mem3Dshort(*array4D, dim0 * dim1, dim2, dim3);
+
+  for(i = 1; i < dim0; i++)
+    (*array4D)[i] =  (*array4D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 5D memory array -> short array5D[dim0][dim1][dim2][dim3][dim4]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem5Dshort(short ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4)
+{
+  int  i, mem_size = dim0 * sizeof(short****);
+
+  if(((*array5D) = (short*****)mem_malloc(dim0 * sizeof(short****))) == NULL)
+    no_mem_exit("get_mem5Dshort: array5D");
+
+  mem_size += get_mem4Dshort(*array5D, dim0 * dim1, dim2, dim3, dim4);
+
+  for(i = 1; i < dim0; i++)
+    (*array5D)[i] =  (*array5D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 6D memory array -> short array6D[dim0][dim1][dim2][dim3][dim4][dim5]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem6Dshort(short *******array6D, int dim0, int dim1, int dim2, int dim3, int dim4, int dim5)
+{
+  int  i, mem_size = dim0 * sizeof(short*****);
+
+  if(((*array6D) = (short******)mem_malloc(dim0 * sizeof(short*****))) == NULL)
+    no_mem_exit("get_mem6Dshort: array6D");
+
+  mem_size += get_mem5Dshort(*array6D, dim0 * dim1, dim2, dim3, dim4, dim5);
+
+  for(i = 1; i < dim0; i++)
+    (*array6D)[i] =  (*array6D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 7D memory array -> short array7D[dim0][dim1][dim2][dim3][dim4][dim5][dim6]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem7Dshort(short ********array7D, int dim0, int dim1, int dim2, int dim3, int dim4, int dim5, int dim6)
+{
+  int  i, mem_size = dim0 * sizeof(short******);
+
+  if(((*array7D) = (short*******)mem_malloc(dim0 * sizeof(short******))) == NULL)
+    no_mem_exit("get_mem7Dshort: array7D");
+
+  mem_size += get_mem6Dshort(*array7D, dim0 * dim1, dim2, dim3, dim4, dim5, dim6);
+
+  for(i = 1; i < dim0; i++)
+    (*array7D)[i] =  (*array7D)[i-1] + dim1;
+
+  return mem_size;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D uint16_t memory array
+ *    which was allocated with get_mem2Duint16()
+ ************************************************************************
+ */
+void free_mem2Duint16(uint16_t **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else error ("free_mem2Duint16: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Duint16: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D uint16_t memory array
+ *    which was allocated with get_mem3Duint16()
+ ************************************************************************
+ */
+void free_mem3Duint16(uint16_t ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2Duint16(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3Duint16: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D uint16_t memory array
+ *    which was allocated with get_mem4Duint16()
+ ************************************************************************
+ */
+void free_mem4Duint16(uint16_t ****array4D)
+{  
+  if (array4D)
+  {
+    free_mem3Duint16( *array4D);
+    mem_free (array4D);
+  } 
+  else
+  {
+    error ("free_mem4Duint16: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D short memory array
+ *    which was allocated with get_mem2Dshort()
+ ************************************************************************
+ */
+void free_mem2Dshort(short **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else error ("free_mem2Dshort: trying to free unused memory",100);
+
+    mem_free (array2D);
+  } 
+  else
+  {
+    error ("free_mem2Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D short memory array
+ *    which was allocated with get_mem3Dshort()
+ ************************************************************************
+ */
+void free_mem3Dshort(short ***array3D)
+{
+  if (array3D)
+  {
+   free_mem2Dshort(*array3D);
+   mem_free (array3D);
+  } 
+  else
+  {
+    error ("free_mem3Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 4D short memory array
+ *    which was allocated with get_mem4Dshort()
+ ************************************************************************
+ */
+void free_mem4Dshort(short ****array4D)
+{  
+  if (array4D)
+  {
+    free_mem3Dshort( *array4D);
+    mem_free (array4D);
+  } 
+  else
+  {
+    error ("free_mem4Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 5D short memory array
+ *    which was allocated with get_mem5Dshort()
+ ************************************************************************
+ */
+void free_mem5Dshort(short *****array5D)
+{
+  if (array5D)
+  {
+    free_mem4Dshort( *array5D) ;
+    mem_free (array5D);
+  }
+  else
+  {
+    error ("free_mem5Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 6D short memory array
+ *    which was allocated with get_mem6Dshort()
+ ************************************************************************
+ */
+void free_mem6Dshort(short ******array6D)
+{
+  if (array6D)
+  {
+    free_mem5Dshort( *array6D);
+    mem_free (array6D);
+  }
+  else
+  {
+    error ("free_mem6Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 7D short memory array
+ *    which was allocated with get_mem7Dshort()
+ ************************************************************************
+ */
+void free_mem7Dshort(short *******array7D)
+{
+  if (array7D)
+  {
+    free_mem6Dshort( *array7D);
+    mem_free (array7D);
+  }
+  else
+  {
+    error ("free_mem7Dshort: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> double array2D[dim0][dim1]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Ddouble(double ***array2D, int dim0, int dim1)
+{
+  int i;
+
+  if((*array2D      = (double**)mem_malloc(dim0 *       sizeof(double*))) == NULL)
+    no_mem_exit("get_mem2Ddouble: array2D");
+  
+  if(((*array2D)[0] = (double* )mem_calloc(dim0 * dim1, sizeof(double ))) == NULL)
+    no_mem_exit("get_mem2Ddouble: array2D");
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1  ;
+
+  return dim0 * (sizeof(double*) + dim1 * sizeof(double));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 1D memory array -> double array1D[dim0]
+ *    Note that array is shifted towards offset allowing negative values
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem1Dodouble(double **array1D, int dim0, int offset)
+{
+  if((*array1D      = (double*)mem_calloc(dim0, sizeof(double))) == NULL)
+    no_mem_exit("get_mem1Dodouble: array2D");
+
+  *array1D += offset;
+
+  return dim0 * sizeof(double);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> double array2D[dim0][dim1]
+ *    Note that array is shifted towards offset allowing negative values
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Dodouble(double ***array2D, int dim0, int dim1, int offset)
+{
+  int i;
+
+  if((*array2D      = (double**)mem_malloc(dim0 *      sizeof(double*))) == NULL)
+    no_mem_exit("get_mem2Dodouble: array2D");
+  if(((*array2D)[0] = (double* )mem_calloc(dim0 * dim1,sizeof(double ))) == NULL)
+    no_mem_exit("get_mem2Dodouble: array2D");
+
+  (*array2D)[0] += offset;
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1  ;
+
+  return dim0 * (sizeof(double*) + dim1 * sizeof(double));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory double array -> double array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Dodouble(double ****array3D, int dim0, int dim1, int dim2, int offset)
+{
+  int  i,j;
+
+  if(((*array3D) = (double***)mem_malloc(dim0 * sizeof(double**))) == NULL)
+    no_mem_exit("get_mem3Dodouble: array3D");
+
+  if(((*array3D)[0] = (double** )mem_calloc(dim0 * dim1,sizeof(double*))) == NULL)
+    no_mem_exit("get_mem3Dodouble: array3D");
+
+  (*array3D) [0] += offset;
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1  ;
+
+  for (i = 0; i < dim0; i++)
+    for (j = -offset; j < dim1 - offset; j++)
+      if(((*array3D)[i][j] = (double* )mem_calloc(dim2, sizeof(double))) == NULL)
+        no_mem_exit("get_mem3Dodouble: array3D");
+
+  return dim0*( sizeof(double**) + dim1 * ( sizeof(double*) + dim2 * sizeof(double)));
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> int array2D[dim0][dim1]
+ *    Note that array is shifted towards offset allowing negative values
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_offset_mem2Dshort(short ***array2D, int dim0, int dim1, int offset_y, int offset_x)
+{
+  int i;
+
+  if((*array2D      = (short**)mem_malloc(dim0 * sizeof(short*))) == NULL)
+    no_mem_exit("get_offset_mem2Dshort: array2D");
+
+  if(((*array2D)[0] = (short* )mem_calloc(dim0 * dim1,sizeof(short))) == NULL)
+    no_mem_exit("get_offset_mem2Dshort: array2D");
+  (*array2D)[0] += offset_x + offset_y * dim1;
+
+  for(i=-1 ; i > -offset_y - 1; i--)
+  {
+    (*array2D)[i] =  (*array2D)[i+1] - dim1;
+  }
+
+  for(i=1 ; i < dim1 - offset_y; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1;
+
+  return dim0 * (sizeof(short*) + dim1 * sizeof(short));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 3D memory int array -> int array3D[dim0][dim1][dim2]
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem3Doint(int ****array3D, int dim0, int dim1, int dim2, int offset)
+{
+  int  i,j;
+
+  if(((*array3D) = (int***)mem_malloc(dim0 * sizeof(int**))) == NULL)
+    no_mem_exit("get_mem3Doint: array3D");
+
+  if(((*array3D)[0] = (int** )mem_calloc(dim0 * dim1,sizeof(int*))) == NULL)
+    no_mem_exit("get_mem3Doint: array3D");
+
+  (*array3D) [0] += offset;
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array3D)[i] =  (*array3D)[i-1] + dim1  ;
+
+  for (i = 0; i < dim0; i++)
+    for (j = -offset; j < dim1 - offset; j++)
+      if(((*array3D)[i][j] = (int* )mem_calloc(dim2,sizeof(int))) == NULL)
+        no_mem_exit("get_mem3Doint: array3D");
+
+  return dim0 * (sizeof(int**) + dim1 * (sizeof(int*) + dim2 * sizeof(int)));
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> int array2D[dim0][dim1]
+ *    Note that array is shifted towards offset allowing negative values
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Doint(int ***array2D, int dim0, int dim1, int offset)
+{
+  int i;
+
+  if((*array2D      = (int**)mem_malloc(dim0 * sizeof(int*))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+  if(((*array2D)[0] = (int* )mem_calloc(dim0 * dim1,sizeof(int))) == NULL)
+    no_mem_exit("get_mem2Dint: array2D");
+
+  (*array2D)[0] += offset;
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1  ;
+
+  return dim0 * (sizeof(int*) + dim1 * sizeof(int));
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 2D double memory array
+ *    which was allocated with get_mem2Ddouble()
+ ************************************************************************
+ */
+void free_mem2Ddouble(double **array2D)
+{
+  if (array2D)
+  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Ddouble: trying to free unused memory",100);
+
+    mem_free (array2D);
+
+  }
+  else
+  {
+    error ("free_mem2Ddouble: trying to free unused memory",100);
+  }
+}
+
+/*!
+************************************************************************
+* \brief
+*    free 1D double memory array (with offset)
+*    which was allocated with get_mem1Ddouble()
+************************************************************************
+*/
+void free_mem1Dodouble(double *array1D, int offset)
+{
+  if (array1D)
+  {
+    array1D -= offset;
+    mem_free (array1D);
+  } 
+  else
+  {
+    error ("free_mem1Dodouble: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+************************************************************************
+* \brief
+*    free 2D double memory array (with offset)
+*    which was allocated with get_mem2Ddouble()
+************************************************************************
+*/
+void free_mem2Dodouble(double **array2D, int offset)
+{
+  if (array2D)
+  {
+    array2D[0] -= offset;
+    if (array2D[0])
+      mem_free (array2D[0]);
+    else error ("free_mem2Dodouble: trying to free unused memory",100);
+
+    mem_free (array2D);
+
+  } else
+  {
+    error ("free_mem2Dodouble: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array with offset
+ ************************************************************************
+ */
+void free_mem3Dodouble(double ***array3D, int dim0, int dim1, int offset)
+{
+  int i, j;
+
+  if (array3D)
+  {
+    for (i = 0; i < dim0; i++)
+    {
+      for (j = -offset; j < dim1 - offset; j++)
+      {
+        if (array3D[i][j])
+          mem_free (array3D[i][j]);
+        else
+          error ("free_mem3Dodouble: trying to free unused memory",100);
+      }
+    }
+    array3D[0] -= offset;
+    if (array3D[0])
+      mem_free (array3D[0]);
+    else
+      error ("free_mem3Dodouble: trying to free unused memory",100);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Dodouble: trying to free unused memory",100);
+  }
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array with offset
+ ************************************************************************
+ */
+void free_mem3Doint(int ***array3D, int dim0, int dim1, int offset)
+{
+  int i, j;
+
+  if (array3D)
+  {
+    for (i = 0; i < dim0; i++)
+    {
+      for (j = -offset; j < dim1 - offset; j++)
+      {
+        if (array3D[i][j])
+          mem_free (array3D[i][j]);
+        else
+          error ("free_mem3Doint: trying to free unused memory",100);
+      }
+    }
+    array3D[0] -= offset;
+    if (array3D[0])
+      mem_free (array3D[0]);
+    else
+      error ("free_mem3Doint: trying to free unused memory",100);
+    mem_free (array3D);
+  }
+  else
+  {
+    error ("free_mem3Doint: trying to free unused memory",100);
+  }
+}
+
+
+/*!
+************************************************************************
+* \brief
+*    free 2D double memory array (with offset)
+*    which was allocated with get_mem2Ddouble()
+************************************************************************
+*/
+void free_mem2Doint(int **array2D, int offset)
+{
+  if (array2D)
+  {
+    array2D[0] -= offset;
+    if (array2D[0])
+      mem_free (array2D[0]);
+    else 
+      error ("free_mem2Doint: trying to free unused memory",100);
+
+    mem_free (array2D);
+
+  } 
+  else
+  {
+    error ("free_mem2Doint: trying to free unused memory",100);
+  }
+}
+
+/*!
+************************************************************************
+* \brief
+*    free 2D double memory array (with offset)
+*    which was allocated with get_mem2Ddouble()
+************************************************************************
+*/
+void free_offset_mem2Dshort(short **array2D, int dim1, int offset_y, int offset_x) {
+
+  if (array2D)  {
+    array2D[0] -= offset_x + offset_y * dim1;
+    if (array2D[0])
+      mem_free (array2D[0]);
+    else 
+      error ("free_offset_mem2Dshort: trying to free unused memory",100);
+
+    mem_free (array2D);
+
+  } 
+  else
+    error ("free_offset_mem2Dshort: trying to free unused memory",100);
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    free 3D memory array
+ *    which was alocated with get_mem3Dint()
+ ************************************************************************
+ */
+void free_mem3Ddouble(double ***array3D) {
+
+  if (array3D)  {
+    free_mem2Ddouble(*array3D);
+    mem_free (array3D);
+  } 
+  else
+    error ("free_mem3D: trying to free unused memory",100);
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Allocate 2D memory array -> LambdaParams array2D[dim0][dim1]
+ *    Note that array is shifted towards offset allowing negative values
+ *
+ * \par Output:
+ *    memory size in bytes
+ ************************************************************************
+ */
+int get_mem2Dolm(LambdaParams ***array2D, int dim0, int dim1, int offset) {
+  int i;
+
+  if(!(*array2D      = (LambdaParams**)mem_malloc(dim0 * sizeof(LambdaParams*))))
+    no_mem_exit("get_mem2Dolm: array2D");
+  if(!((*array2D)[0] = (LambdaParams* )mem_calloc(dim0 * dim1, sizeof(LambdaParams))))
+    no_mem_exit("get_mem2Dolm: array2D");
+
+  (*array2D)[0] += offset;
+
+  for(i=1 ; i<dim0 ; i++)
+    (*array2D)[i] =  (*array2D)[i-1] + dim1  ;
+
+  return dim0 * (sizeof(LambdaParams*) + dim1 * sizeof(LambdaParams));
+}
+
+
+/*!
+************************************************************************
+* \brief
+*    free 2D LambdaParams memory array (with offset)
+*    which was allocated with get_mem2Dlm()
+************************************************************************
+*/
+void free_mem2Dolm(LambdaParams **array2D, int offset) {
+
+  if (array2D)  {
+    array2D[0] -= offset;
+    if (array2D[0])
+      mem_free (array2D[0]);
+    else 
+      error ("free_mem2Dolm: trying to free unused memory",100);
+
+    mem_free (array2D);
+
+  } 
+  else
+    error ("free_mem2Dolm: trying to free unused memory",100);
+	}
+
+void free_mem2Ddistblk(distblk **array2D) {
+
+  if (array2D)  {
+    if (*array2D)
+      mem_free (*array2D);
+    else 
+      error ("free_mem2Ddistblk: trying to free unused memory",100);
+    free (array2D);
+  } 
+  else
+    error ("free_mem2Ddistblk: trying to free unused memory",100);
+	}
+
+
+
+
+/*!
+ *************************************************************************************
+ * \brief
+ *    Allocates memory for a picture paramater set
+ *
+ * \return
+ *    pointer to a pps
+ *************************************************************************************
+ */
+
+pic_parameter_set_rbsp_t *AllocPPS() {
+   pic_parameter_set_rbsp_t *p;
+
+   if (!(p=(pic_parameter_set_rbsp_t*)calloc (1, sizeof (pic_parameter_set_rbsp_t))))
+     no_mem_exit ("AllocPPS: PPS");
+   p->slice_group_id = NULL;
+   return p;
+ }
+
+
+/*!
+ *************************************************************************************
+ * \brief
+ *    Allocates memory for am sequence paramater set
+ *
+ * \return
+ *    pointer to a sps
+ *************************************************************************************
+ */
+
+seq_parameter_set_rbsp_t *AllocSPS() {
+   seq_parameter_set_rbsp_t *p;
+
+   if (!(p=(seq_parameter_set_rbsp_t*)calloc (1, sizeof (seq_parameter_set_rbsp_t))))
+     no_mem_exit ("AllocSPS: SPS");
+   return p;
+ }
+
+
+/*!
+ *************************************************************************************
+ * \brief
+ *    Frees a picture parameter set
+ *
+ * \param pps to be freed
+ *   Picture parameter set to be freed
+ *************************************************************************************
+ */
+ void FreePPS (pic_parameter_set_rbsp_t *pps) {
+
+   assert (pps != NULL);
+   if (pps->slice_group_id != NULL) 
+     free (pps->slice_group_id);
+   free (pps);
+ }
+
+
+ /*!
+ *************************************************************************************
+ * \brief
+ *    Frees a sps
+ *
+ * \param sps
+ *   Sequence parameter set to be freed
+ *************************************************************************************
+ */
+ void FreeSPS (seq_parameter_set_rbsp_t *sps) {
+   assert (sps != NULL);
+   free (sps);
+ }
+
+
+int sps_is_equal(seq_parameter_set_rbsp_t *sps1, seq_parameter_set_rbsp_t *sps2) {
+  unsigned i;
+  int equal = 1;
+
+  if ((!sps1->Valid) || (!sps2->Valid))
+    return 0;
+
+  equal &= (sps1->profile_idc == sps2->profile_idc);
+  equal &= (sps1->constrained_set0_flag == sps2->constrained_set0_flag);
+  equal &= (sps1->constrained_set1_flag == sps2->constrained_set1_flag);
+  equal &= (sps1->constrained_set2_flag == sps2->constrained_set2_flag);
+  equal &= (sps1->level_idc == sps2->level_idc);
+  equal &= (sps1->seq_parameter_set_id == sps2->seq_parameter_set_id);
+  equal &= (sps1->log2_max_frame_num_minus4 == sps2->log2_max_frame_num_minus4);
+  equal &= (sps1->pic_order_cnt_type == sps2->pic_order_cnt_type);
+
+  if (!equal) 
+		return equal;
+
+  if( sps1->pic_order_cnt_type == 0 )  {
+    equal &= (sps1->log2_max_pic_order_cnt_lsb_minus4 == sps2->log2_max_pic_order_cnt_lsb_minus4);
+  }
+
+  else if( sps1->pic_order_cnt_type == 1 )  {
+    equal &= (sps1->delta_pic_order_always_zero_flag == sps2->delta_pic_order_always_zero_flag);
+    equal &= (sps1->offset_for_non_ref_pic == sps2->offset_for_non_ref_pic);
+    equal &= (sps1->offset_for_top_to_bottom_field == sps2->offset_for_top_to_bottom_field);
+    equal &= (sps1->num_ref_frames_in_pic_order_cnt_cycle == sps2->num_ref_frames_in_pic_order_cnt_cycle);
+    if (!equal) 
+			return equal;
+
+    for ( i = 0 ; i< sps1->num_ref_frames_in_pic_order_cnt_cycle ;i ++)
+      equal &= (sps1->offset_for_ref_frame[i] == sps2->offset_for_ref_frame[i]);
+  }
+
+  equal &= (sps1->num_ref_frames == sps2->num_ref_frames);
+  equal &= (sps1->gaps_in_frame_num_value_allowed_flag == sps2->gaps_in_frame_num_value_allowed_flag);
+  equal &= (sps1->pic_width_in_mbs_minus1 == sps2->pic_width_in_mbs_minus1);
+  equal &= (sps1->pic_height_in_map_units_minus1 == sps2->pic_height_in_map_units_minus1);
+  equal &= (sps1->frame_mbs_only_flag == sps2->frame_mbs_only_flag);
+
+  if (!equal) 
+		return equal;
+  if( !sps1->frame_mbs_only_flag )
+    equal &= (sps1->mb_adaptive_frame_field_flag == sps2->mb_adaptive_frame_field_flag);
+
+  equal &= (sps1->direct_8x8_inference_flag == sps2->direct_8x8_inference_flag);
+  equal &= (sps1->frame_cropping_flag == sps2->frame_cropping_flag);
+  if (!equal) 
+		return equal;
+  if (sps1->frame_cropping_flag)  {
+    equal &= (sps1->frame_crop_left_offset == sps2->frame_crop_left_offset);
+    equal &= (sps1->frame_crop_right_offset == sps2->frame_crop_right_offset);
+    equal &= (sps1->frame_crop_top_offset == sps2->frame_crop_top_offset);
+    equal &= (sps1->frame_crop_bottom_offset == sps2->frame_crop_bottom_offset);
+  }
+  equal &= (sps1->vui_parameters_present_flag == sps2->vui_parameters_present_flag);
+
+  return equal;
+}
+
+int pps_is_equal(pic_parameter_set_rbsp_t *pps1, pic_parameter_set_rbsp_t *pps2) {
+  unsigned i, j;
+  int equal = 1;
+
+  if ((!pps1->Valid) || (!pps2->Valid))
+    return 0;
+
+  equal &= (pps1->pic_parameter_set_id == pps2->pic_parameter_set_id);
+  equal &= (pps1->seq_parameter_set_id == pps2->seq_parameter_set_id);
+  equal &= (pps1->entropy_coding_mode_flag == pps2->entropy_coding_mode_flag);
+  equal &= (pps1->bottom_field_pic_order_in_frame_present_flag == pps2->bottom_field_pic_order_in_frame_present_flag);
+  equal &= (pps1->num_slice_groups_minus1 == pps2->num_slice_groups_minus1);
+
+  if (!equal) 
+		return equal;
+
+  if (pps1->num_slice_groups_minus1>0)  {
+      equal &= (pps1->slice_group_map_type == pps2->slice_group_map_type);
+      if (!equal) 
+				return equal;
+      if (pps1->slice_group_map_type == 0)      {
+        for (i=0; i<=pps1->num_slice_groups_minus1; i++)
+          equal &= (pps1->run_length_minus1[i] == pps2->run_length_minus1[i]);
+      }
+      else if( pps1->slice_group_map_type == 2 )      {
+        for (i=0; i<pps1->num_slice_groups_minus1; i++)        {
+          equal &= (pps1->top_left[i] == pps2->top_left[i]);
+          equal &= (pps1->bottom_right[i] == pps2->bottom_right[i]);
+        }
+      }
+      else if( pps1->slice_group_map_type == 3 || pps1->slice_group_map_type==4 || pps1->slice_group_map_type==5 )      {
+        equal &= (pps1->slice_group_change_direction_flag == pps2->slice_group_change_direction_flag);
+        equal &= (pps1->slice_group_change_rate_minus1 == pps2->slice_group_change_rate_minus1);
+      }
+      else if( pps1->slice_group_map_type == 6 )      {
+        equal &= (pps1->pic_size_in_map_units_minus1 == pps2->pic_size_in_map_units_minus1);
+        if (!equal) 
+					return equal;
+        for (i=0; i<=pps1->pic_size_in_map_units_minus1; i++)
+          equal &= (pps1->slice_group_id[i] == pps2->slice_group_id[i]);
+      }
+  }
+
+  equal &= (pps1->num_ref_idx_l0_default_active_minus1 == pps2->num_ref_idx_l0_default_active_minus1);
+  equal &= (pps1->num_ref_idx_l1_default_active_minus1 == pps2->num_ref_idx_l1_default_active_minus1);
+  equal &= (pps1->weighted_pred_flag == pps2->weighted_pred_flag);
+  equal &= (pps1->weighted_bipred_idc == pps2->weighted_bipred_idc);
+  equal &= (pps1->pic_init_qp_minus26 == pps2->pic_init_qp_minus26);
+  equal &= (pps1->pic_init_qs_minus26 == pps2->pic_init_qs_minus26);
+  equal &= (pps1->chroma_qp_index_offset == pps2->chroma_qp_index_offset);
+  equal &= (pps1->deblocking_filter_control_present_flag == pps2->deblocking_filter_control_present_flag);
+  equal &= (pps1->constrained_intra_pred_flag == pps2->constrained_intra_pred_flag);
+  equal &= (pps1->redundant_pic_cnt_present_flag == pps2->redundant_pic_cnt_present_flag);
+
+  if (!equal) 
+		return equal;
+
+  //Fidelity Range Extensions Stuff
+  //It is initialized to zero, so should be ok to check all the time.
+  equal &= (pps1->transform_8x8_mode_flag == pps2->transform_8x8_mode_flag);
+  equal &= (pps1->pic_scaling_matrix_present_flag == pps2->pic_scaling_matrix_present_flag);
+  if(pps1->pic_scaling_matrix_present_flag)  {
+    for(i = 0; i < (6 + ((unsigned)pps1->transform_8x8_mode_flag << 1)); i++)    {
+      equal &= (pps1->pic_scaling_list_present_flag[i] == pps2->pic_scaling_list_present_flag[i]);
+      if(pps1->pic_scaling_list_present_flag[i])      {
+        if(i < 6)        {
+          for (j = 0; j < 16; j++)
+            equal &= (pps1->ScalingList4x4[i][j] == pps2->ScalingList4x4[i][j]);
+        }
+        else        {
+          for (j = 0; j < 64; j++)
+            equal &= (pps1->ScalingList8x8[i-6][j] == pps2->ScalingList8x8[i-6][j]);
+        }
+      }
+    }
+  }
+  equal &= (pps1->second_chroma_qp_index_offset == pps2->second_chroma_qp_index_offset);
+
+  return equal;
+	}
+
+
+/*!
+ *************************************************************************************
+ * \brief
+ *    Allocates memory for a NALU
+ *
+ * \param buffersize
+ *     size of NALU buffer
+ *
+ * \return
+ *    pointer to a NALU
+ *************************************************************************************
+ */
+NALU_t *AllocNALU(int buffersize) {
+  NALU_t *n;
+
+  if(!(n = (NALU_t*)calloc (1, sizeof (NALU_t))))
+    no_mem_exit ("AllocNALU: n");
+
+  n->max_size=buffersize;
+  if(!(n->buf = (byte*)calloc (buffersize, sizeof (byte)))) {
+    free (n);
+    no_mem_exit ("AllocNALU: n->buf");
+  }
+
+  return n;
+}
+
+
+/*!
+ *************************************************************************************
+ * \brief
+ *    Frees a NALU
+ *
+ * \param n
+ *    NALU to be freed
+ *
+ *************************************************************************************
+ */
+void FreeNALU(NALU_t *n) {
+
+  if (n)  {
+    if (n->buf)    {
+      free(n->buf);
+      n->buf=NULL;
+    }
+    free (n);
+  }
+}
+
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Get motion vector predictor
+ ************************************************************************
+ */
+static void GetMotionVectorPredictorMBAFF (Macroblock *currMB, 
+                                    PixelPos *block,        // <--> block neighbors
+                                    MotionVector *pmv,
+                                    short  ref_frame,
+                                    PicMotionParams **mv_info,
+                                    int    list,
+                                    int    mb_x,int    mb_y,
+                                    int    blockshape_x,int    blockshape_y) {
+  int mv_a, mv_b, mv_c, pred_vec=0;
+  int mvPredType, rFrameL, rFrameU, rFrameUR;
+  int hv;
+  VideoParameters *p_Vid = currMB->p_Vid;
+
+  mvPredType = MVPRED_MEDIAN;
+
+
+  if (currMB->mb_field)  {
+    rFrameL  = block[0].available
+      ? (p_Vid->mb_data[block[0].mb_addr].mb_field
+      ? mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list]
+    : mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list] * 2) : -1;
+    rFrameU  = block[1].available
+      ? (p_Vid->mb_data[block[1].mb_addr].mb_field
+      ? mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list]
+    : mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list] * 2) : -1;
+    rFrameUR = block[2].available
+      ? (p_Vid->mb_data[block[2].mb_addr].mb_field
+      ? mv_info[block[2].pos_y][block[2].pos_x].ref_idx[list]
+    : mv_info[block[2].pos_y][block[2].pos_x].ref_idx[list] * 2) : -1;
+  }
+  else  {
+    rFrameL = block[0].available
+      ? (p_Vid->mb_data[block[0].mb_addr].mb_field
+      ? mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list] >>1
+      : mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list]) : -1;
+    rFrameU  = block[1].available
+      ? (p_Vid->mb_data[block[1].mb_addr].mb_field
+      ? mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list] >>1
+      : mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list]) : -1;
+    rFrameUR = block[2].available
+      ? (p_Vid->mb_data[block[2].mb_addr].mb_field
+      ? mv_info[block[2].pos_y][block[2].pos_x].ref_idx[list] >>1
+      : mv_info[block[2].pos_y][block[2].pos_x].ref_idx[list]) : -1;
+  }
+
+
+  /* Prediction if only one of the neighbors uses the reference frame
+  *  we are checking
+  */
+  if(rFrameL == ref_frame && rFrameU != ref_frame && rFrameUR != ref_frame)       
+    mvPredType = MVPRED_L;
+  else if(rFrameL != ref_frame && rFrameU == ref_frame && rFrameUR != ref_frame)  
+    mvPredType = MVPRED_U;
+  else if(rFrameL != ref_frame && rFrameU != ref_frame && rFrameUR == ref_frame)  
+    mvPredType = MVPRED_UR;
+  // Directional predictions
+  if(blockshape_x == 8 && blockshape_y == 16)  {
+    if(mb_x == 0)    {
+      if(rFrameL == ref_frame)
+        mvPredType = MVPRED_L;
+    }
+    else    {
+      if( rFrameUR == ref_frame)
+        mvPredType = MVPRED_UR;
+    }
+  }
+  else if(blockshape_x == 16 && blockshape_y == 8)  {
+    if(mb_y == 0)    {
+      if(rFrameU == ref_frame)
+        mvPredType = MVPRED_U;
+    }
+    else    {
+      if(rFrameL == ref_frame)
+        mvPredType = MVPRED_L;
+    }
+  }
+
+  for (hv=0; hv < 2; hv++)  {
+    if (hv == 0)    {
+      mv_a = block[0].available ? mv_info[block[0].pos_y][block[0].pos_x].mv[list].mv_x : 0;
+      mv_b = block[1].available ? mv_info[block[1].pos_y][block[1].pos_x].mv[list].mv_x : 0;
+      mv_c = block[2].available ? mv_info[block[2].pos_y][block[2].pos_x].mv[list].mv_x : 0;
+    }
+    else    {
+      if (currMB->mb_field)      {
+        mv_a = block[0].available  ? p_Vid->mb_data[block[0].mb_addr].mb_field
+          ? mv_info[block[0].pos_y][block[0].pos_x].mv[list].mv_y
+        : mv_info[block[0].pos_y][block[0].pos_x].mv[list].mv_y / 2
+          : 0;
+        mv_b = block[1].available  ? p_Vid->mb_data[block[1].mb_addr].mb_field
+          ? mv_info[block[1].pos_y][block[1].pos_x].mv[list].mv_y
+        : mv_info[block[1].pos_y][block[1].pos_x].mv[list].mv_y / 2
+          : 0;
+        mv_c = block[2].available  ? p_Vid->mb_data[block[2].mb_addr].mb_field
+          ? mv_info[block[2].pos_y][block[2].pos_x].mv[list].mv_y
+        : mv_info[block[2].pos_y][block[2].pos_x].mv[list].mv_y / 2
+          : 0;
+      }
+      else      {
+        mv_a = block[0].available  ? p_Vid->mb_data[block[0].mb_addr].mb_field
+          ? mv_info[block[0].pos_y][block[0].pos_x].mv[list].mv_y * 2
+          : mv_info[block[0].pos_y][block[0].pos_x].mv[list].mv_y
+        : 0;
+        mv_b = block[1].available  ? p_Vid->mb_data[block[1].mb_addr].mb_field
+          ? mv_info[block[1].pos_y][block[1].pos_x].mv[list].mv_y * 2
+          : mv_info[block[1].pos_y][block[1].pos_x].mv[list].mv_y
+        : 0;
+        mv_c = block[2].available  ? p_Vid->mb_data[block[2].mb_addr].mb_field
+          ? mv_info[block[2].pos_y][block[2].pos_x].mv[list].mv_y * 2
+          : mv_info[block[2].pos_y][block[2].pos_x].mv[list].mv_y
+        : 0;
+				}
+			}
+
+    switch (mvPredType)    {
+			case MVPRED_MEDIAN:
+				if(!(block[1].available || block[2].available))
+					pred_vec = mv_a;
+				else
+					pred_vec = imedian(mv_a, mv_b, mv_c);
+				break;
+			case MVPRED_L:
+				pred_vec = mv_a;
+				break;
+			case MVPRED_U:
+				pred_vec = mv_b;
+				break;
+			case MVPRED_UR:
+				pred_vec = mv_c;
+				break;
+			default:
+				break;
+			}
+
+    if (hv == 0)
+      pmv->mv_x = (short) pred_vec;
+    else
+      pmv->mv_y = (short) pred_vec;
+		}
+	}
+
+/*!
+ ************************************************************************
+ * \brief
+ *    Get motion vector predictor
+ ************************************************************************
+ */
+static void GetMotionVectorPredictorNormal (Macroblock *currMB, 
+                                            PixelPos *block,      // <--> block neighbors
+                                            MotionVector *pmv,
+                                            short  ref_frame,
+                                            PicMotionParams **mv_info,
+                                            int    list,
+                                            int    mb_x,int    mb_y,
+                                            int    blockshape_x,int    blockshape_y) {
+  int mvPredType = MVPRED_MEDIAN;
+
+  int rFrameL    = block[0].available ? mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list] : -1;
+  int rFrameU    = block[1].available ? mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list] : -1;
+  int rFrameUR   = block[2].available ? mv_info[block[2].pos_y][block[2].pos_x].ref_idx[list] : -1;
+
+  /* Prediction if only one of the neighbors uses the reference frame
+  *  we are checking
+  */
+  if(rFrameL == ref_frame && rFrameU != ref_frame && rFrameUR != ref_frame)       
+    mvPredType = MVPRED_L;
+  else if(rFrameL != ref_frame && rFrameU == ref_frame && rFrameUR != ref_frame)  
+    mvPredType = MVPRED_U;
+  else if(rFrameL != ref_frame && rFrameU != ref_frame && rFrameUR == ref_frame)  
+    mvPredType = MVPRED_UR;
+
+  // Directional predictions
+  if(blockshape_x == 8 && blockshape_y == 16)  {
+    if(mb_x == 0)    {
+      if(rFrameL == ref_frame)
+        mvPredType = MVPRED_L;
+    }
+    else    {
+      if(rFrameUR == ref_frame)
+        mvPredType = MVPRED_UR;
+    }
+  }
+  else if(blockshape_x == 16 && blockshape_y == 8)  {
+    if(mb_y == 0)    {
+      if(rFrameU == ref_frame)
+        mvPredType = MVPRED_U;
+    }
+    else    {
+      if(rFrameL == ref_frame)
+        mvPredType = MVPRED_L;
+    }
+  }
+
+  switch (mvPredType)	{
+		case MVPRED_MEDIAN:
+			if(!(block[1].available || block[2].available))			{
+				if (block[0].available)
+					*pmv = mv_info[block[0].pos_y][block[0].pos_x].mv[list];
+				else
+					*pmv = zero_mv;
+			}
+			else			{
+				MotionVector *mv_a = block[0].available ? &mv_info[block[0].pos_y][block[0].pos_x].mv[list] : (MotionVector *) &zero_mv;
+				MotionVector *mv_b = block[1].available ? &mv_info[block[1].pos_y][block[1].pos_x].mv[list] : (MotionVector *) &zero_mv;
+				MotionVector *mv_c = block[2].available ? &mv_info[block[2].pos_y][block[2].pos_x].mv[list] : (MotionVector *) &zero_mv;
+
+				pmv->mv_x = (short) imedian(mv_a->mv_x, mv_b->mv_x, mv_c->mv_x);
+				pmv->mv_y = (short) imedian(mv_a->mv_y, mv_b->mv_y, mv_c->mv_y);
+			}    
+			break;
+		case MVPRED_L:
+			if (block[0].available)
+				*pmv = mv_info[block[0].pos_y][block[0].pos_x].mv[list];
+			else
+				*pmv = zero_mv;
+			break;
+		case MVPRED_U:
+			if (block[1].available)
+				*pmv = mv_info[block[1].pos_y][block[1].pos_x].mv[list];
+			else
+				*pmv = zero_mv;
+			break;
+		case MVPRED_UR:
+			if (block[2].available)
+				*pmv = mv_info[block[2].pos_y][block[2].pos_x].mv[list];
+			else
+				*pmv = zero_mv;
+			break;
+		default:
+			break;
+		}
+	}
+
+void init_motion_vector_prediction(Macroblock *currMB, int mb_aff_frame_flag) {
+
+  if (mb_aff_frame_flag)
+    currMB->GetMVPredictor = GetMotionVectorPredictorMBAFF;
+  else
+    currMB->GetMVPredictor = GetMotionVectorPredictorNormal;
+}
+
+/*!
+ ************************************************************************
+ * \brief
+ *      checks if the System is big- or little-endian
+ * \return
+ *      0, little-endian (e.g. Intel architectures)
+ *      1, big-endian (e.g. SPARC, MIPS, PowerPC)
+ ************************************************************************
+ */
+int testEndian(void) {
+  short s;
+  uint8_t *p;
+
+  p=(byte*)&s;
+
+  s=1;
+
+  return (*p==0);
+}
+
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    Sets initial values for encoding parameters.
+ * \return
+ *    -1 for error
+ ***********************************************************************
+ */
+int InitParams(Mapping *Map) {
+  int i = 0;
+
+  while (Map[i].TokenName)  {
+    if (Map[i].Type == 0)
+        * (int *) (Map[i].Place) = (int) Map[i].Default;
+    else if (Map[i].Type == 2)
+    * (double *) (Map[i].Place) = Map[i].Default;
+      i++;
+		}
+  return -1;
+	}
+
+#define MAX_ITEMS_TO_PARSE  10000
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    allocates memory buf, opens file Filename in f, reads contents into
+ *    buf and returns buf
+ * \param Filename
+ *    name of config file
+ * \return
+ *    if successfull, content of config file
+ *    NULL in case of error. Error message will be set in errortext
+ ***********************************************************************
+ */
+char *GetConfigFileContent (char *Filename)
+{
+  long FileSize;
+  FILE *f;
+  char *buf;
+
+  if (NULL == (f = fopen (Filename, "r")))  {
+      wsprintf (errortext, "Cannot open configuration file %s.", Filename);
+      return NULL;
+  }
+
+  if (0 != fseek (f, 0, SEEK_END))  {
+    wsprintf(errortext, "Cannot fseek in configuration file %s.", Filename);
+    return NULL;
+  }
+
+  FileSize = ftell (f);
+
+  if (FileSize < 0 || FileSize > 150000)  {
+    wsprintf (errortext, "\nUnreasonable Filesize %ld reported by ftell for configuration file %s.", FileSize, Filename);
+    return NULL;
+  }
+  if (0 != fseek (f, 0, SEEK_SET))  {
+    wsprintf (errortext, "Cannot fseek in configuration file %s.", Filename);
+    return NULL;
+  }
+
+  if(!(buf = (char*)malloc (FileSize + 1))) 
+		no_mem_exit("GetConfigFileContent: buf");
+
+  // Note that ftell() gives us the file size as the file system sees it.  The actual file size,
+  // as reported by fread() below will be often smaller due to CR/LF to CR conversion and/or
+  // control characters after the dos EOF marker in the file.
+
+  FileSize = (long) fread (buf, 1, FileSize, f);
+  buf[FileSize] = '\0';
+
+
+  fclose (f);
+  return buf;
+}
+
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    Returns the index number from Map[] for a given parameter name.
+ * \param Map
+ *    Mapping structure
+ * \param s
+ *    parameter name string
+ * \return
+ *    the index number if the string is a valid parameter name,         \n
+ *    -1 for error
+ ***********************************************************************
+ */
+static int ParameterNameToMapIndex (Mapping *Map, char *s) {
+  int i = 0;
+
+  while(Map[i].TokenName)
+    if (!stricmp(Map[i].TokenName, s))
+      return i;
+    else
+      i++;
+  return -1;
+}
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    Parses the character array buf and writes global variable input, which is defined in
+ *    configfile.h.  This hack will continue to be necessary to facilitate the addition of
+ *    new parameters through the Map[] mechanism (Need compiler-generated addresses in map[]).
+ * \param p_Inp
+ *    InputParameters of configuration
+ * \param Map
+ *    Mapping structure to specify the name and value mapping relation
+ * \param buf
+ *    buffer to be parsed
+ * \param bufsize
+ *    buffer size of buffer
+ ***********************************************************************
+ */
+void ParseContent (InputParameters *p_Inp, Mapping *Map, char *buf, int bufsize) {
+  char *items[MAX_ITEMS_TO_PARSE] = {NULL};
+  int MapIdx;
+  int item = 0;
+  int InString = 0, InItem = 0;
+  char *p = buf;
+  char *bufend = &buf[bufsize];
+  int IntContent;
+  double DoubleContent;
+  int i;
+
+  // Stage one: Generate an argc/argv-type list in items[], without comments and whitespace.
+  // This is context insensitive and could be done most easily with lex(1).
+
+  while (p < bufend)  {
+    switch (*p)    {
+			case 13:
+				++p;
+				break;
+			case '#':                 // Found comment
+				*p = '\0';              // Replace '#' with '\0' in case of comment immediately following integer or string
+				while (*p != '\n' && p < bufend)  // Skip till EOL or EOF, whichever comes first
+					++p;
+				InString = 0;
+				InItem = 0;
+				break;
+			case '\n':
+				InItem = 0;
+				InString = 0;
+				*p++='\0';
+				break;
+			case ' ':
+			case '\t':              // Skip whitespace, leave state unchanged
+				if (InString)
+					p++;
+				else				{                     // Terminate non-strings once whitespace is found
+					*p++ = '\0';
+					InItem = 0;
+				}
+				break;
+
+			case '"':               // Begin/End of String
+				*p++ = '\0';
+				if (!InString)				{
+					items[item++] = p;
+					InItem = ~InItem;
+				}
+				else
+					InItem = 0;
+				InString = ~InString; // Toggle
+				break;
+
+			default:
+				if (!InItem)				{
+					items[item++] = p;
+					InItem = ~InItem;
+				}
+				p++;
+			}
+		}
+
+  item--;
+
+  for (i=0; i<item; i+= 3)  {
+    if (0 > (MapIdx = ParameterNameToMapIndex (Map, items[i])))    {
+      //wsprintf (errortext, " Parsing error in config file: Parameter Name '%s' not recognized.", items[i]);
+      //error (errortext, 300);
+      printf ("\n\tParsing error in config file: Parameter Name '%s' not recognized.", items[i]);
+      i -= 2 ;
+      continue;
+    }
+    if (stricmp ("=", items[i+1]))    {
+      wsprintf (errortext, " Parsing error in config file: '=' expected as the second token in each line.");
+      error (errortext, 300);
+    }
+
+    // Now interpret the Value, context sensitive...
+
+    switch (Map[MapIdx].Type)
+    {
+    case 0:           // Numerical
+      if (1 != sscanf (items[i+2], "%d", &IntContent))      {
+        wsprintf (errortext, " Parsing error: Expected numerical value for Parameter of %s, found '%s'.", items[i], items[i+2]);
+        error (errortext, 300);
+      }
+      * (int *) (Map[MapIdx].Place) = IntContent;
+      printf (".");
+      break;
+    case 1:
+      if (items[i + 2] == NULL)
+        memset((char *) Map[MapIdx].Place, 0, Map[MapIdx].char_size);
+      else
+        strncpy ((char *) Map[MapIdx].Place, items [i+2], Map[MapIdx].char_size);
+      printf (".");
+      break;
+    case 2:           // Numerical double
+      if (1 != sscanf (items[i+2], "%lf", &DoubleContent))      {
+        wsprintf (errortext, " Parsing error: Expected numerical value for Parameter of %s, found '%s'.", items[i], items[i+2]);
+        error (errortext, 300);
+      }
+      * (double *) (Map[MapIdx].Place) = DoubleContent;
+      printf (".");
+      break;
+    default:
+      error ("Unknown value type in the map definition of configfile.h",-1);
+			}
+		}
+  *p_Inp = cfgparams;
+	}
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    Validates encoding parameters.
+ * \return
+ *    -1 for error
+ ***********************************************************************
+ */
+int TestParams(Mapping *Map, int bitdepth_qp_scale[3]) {
+  int i = 0;
+
+  while (Map[i].TokenName)  {
+    if (Map[i].param_limits == 1)    {
+      if (Map[i].Type == 0)      {
+        if ( * (int *) (Map[i].Place) < (int) Map[i].min_limit || * (int *) (Map[i].Place) > (int) Map[i].max_limit )        {
+          wsprintf(errortext, "Error in input parameter %s. Check configuration file. Value should be in [%d, %d] range.", Map[i].TokenName, (int) Map[i].min_limit,(int)Map[i].max_limit );
+          error (errortext, 400);
+        }
+
+      }
+      else if (Map[i].Type == 2)      {
+        if ( * (double *) (Map[i].Place) < Map[i].min_limit || * (double *) (Map[i].Place) > Map[i].max_limit )        {
+          wsprintf(errortext, "Error in input parameter %s. Check configuration file. Value should be in [%.2f, %.2f] range.", Map[i].TokenName,Map[i].min_limit ,Map[i].max_limit );
+          error (errortext, 400);
+        }
+      }
+    }
+    else if (Map[i].param_limits == 2)    {
+      if (Map[i].Type == 0)      {
+        if ( * (int *) (Map[i].Place) < (int) Map[i].min_limit )        {
+          wsprintf(errortext, "Error in input parameter %s. Check configuration file. Value should not be smaller than %d.", Map[i].TokenName, (int) Map[i].min_limit);
+          error (errortext, 400);
+        }
+      }
+      else if (Map[i].Type == 2)      {
+        if ( * (double *) (Map[i].Place) < Map[i].min_limit )        {
+          wsprintf(errortext, "Error in input parameter %s. Check configuration file. Value should not be smaller than %2.f.", Map[i].TokenName,Map[i].min_limit);
+          error (errortext, 400);
+        }
+      }
+    }
+    else if (Map[i].param_limits == 3) // Only used for QPs
+    {
+      
+      if (Map[i].Type == 0)      {
+        int cur_qp = * (int *) (Map[i].Place);
+        int min_qp = (int) (Map[i].min_limit - (bitdepth_qp_scale? bitdepth_qp_scale[0]: 0));
+        int max_qp = (int) Map[i].max_limit;
+        
+        if (( cur_qp < min_qp ) || ( cur_qp > max_qp ))        {
+          wsprintf(errortext, "Error in input parameter %s. Check configuration file. Value should be in [%d, %d] range.", Map[i].TokenName, min_qp, max_qp );
+          error (errortext, 400);
+        }
+      }
+    }
+
+    i++;
+		}
+  return -1;
+	}
+
+
+
+/*!
+ ***********************************************************************
+ * \brief
+ *    Outputs encoding parameters.
+ * \return
+ *    -1 for error
+ ***********************************************************************
+ */
+int DisplayParams(Mapping *Map, char *message) {
+  int i = 0;
+
+  printf("******************************************************\n");
+  printf("*               %s                   *\n", message);
+  printf("******************************************************\n");
+  while (Map[i].TokenName)  {
+    if (Map[i].Type == 0)
+      printf("Parameter %s = %d\n",Map[i].TokenName,* (int *) (Map[i].Place));
+    else if (Map[i].Type == 1)
+      printf("Parameter %s = ""%s""\n",Map[i].TokenName,(char *)  (Map[i].Place));
+    else if (Map[i].Type == 2)
+      printf("Parameter %s = %.2f\n",Map[i].TokenName,* (double *) (Map[i].Place));
+      i++;
+  }
+  printf("******************************************************\n");
+  return i;
+	}
+
+
+
+void sample_reconstruct(imgpel **curImg, imgpel **mpr, int **mb_rres, int mb_x, int opix_x, int width, int height, int max_imgpel_value, int dq_bits) {
+  imgpel *imgOrg, *imgPred;
+  int    *m7;
+  int i, j;
+
+  for (j = 0; j < height; j++)  {
+    imgOrg = &curImg[j][opix_x];
+    imgPred = &mpr[j][mb_x];
+    m7 = &mb_rres[j][mb_x]; 
+    for (i=0;i<width;i++)
+      *imgOrg++ = (imgpel) iClip1( max_imgpel_value, rshift_rnd_sf(*m7++, dq_bits) + *imgPred++);
+  }
+}
+
+
+// Mapping_Map Syntax:
+// {NAMEinConfigFile,  &cfgparams.VariableName, Type, InitialValue, LimitType, MinLimit, MaxLimit, CharSize}
+// Types : {0:int, 1:text, 2: double}
+// LimitType: {0:none, 1:both, 2:minimum, 3: QP based}
+// We could separate this based on types to make it more flexible and allow also defaults for text types.
+Mapping Map[] = {
+    {"InputFile",                &cfgparams.infile,                       1,   0.0,                       0,  0.0,              0.0,             FILE_NAME_SIZE, },
+    {"OutputFile",               &cfgparams.outfile,                      1,   0.0,                       0,  0.0,              0.0,             FILE_NAME_SIZE, },
+    {"RefFile",                  &cfgparams.reffile,                      1,   0.0,                       0,  0.0,              0.0,             FILE_NAME_SIZE, },
+    {"WriteUV",                  &cfgparams.write_uv,                     0,   1.0,                       1,  0.0,              1.0,                             },
+    {"FileFormat",               &cfgparams.FileFormat,                   0,   0.0,                       1,  0.0,              1.0,                             },
+    {"RefOffset",                &cfgparams.ref_offset,                   0,   0.0,                       1,  0.0,              256.0,                             },
+    {"POCScale",                 &cfgparams.poc_scale,                    0,   2.0,                       1,  1.0,              10.0,                            },
+#ifdef _LEAKYBUCKET_
+    {"R_decoder",                &cfgparams.R_decoder,                    0,   500000.0,                  2,  0.0,              0.0,                             },
+    {"B_decoder",                &cfgparams.B_decoder,                    0,   104000.0,                  2,  0.0,              0.0,                             },
+    {"F_decoder",                &cfgparams.F_decoder,                    0,   73000.0,                   2,  0.0,              0.0,                             },
+    {"LeakyBucketParamFile",     &cfgparams.LeakyBucketParamFile,         1,   0.0,                       0,  0.0,              0.0,             FILE_NAME_SIZE, },
+#endif
+    {"DisplayDecParams",         &cfgparams.bDisplayDecParams,            0,   1.0,                       1,  0.0,              1.0,                             },
+    {"ConcealMode",              &cfgparams.conceal_mode,                 0,   0.0,                       1,  0.0,              2.0,                             },
+    {"RefPOCGap",                &cfgparams.ref_poc_gap,                  0,   2.0,                       1,  0.0,              4.0,                             },
+    {"POCGap",                   &cfgparams.poc_gap,                      0,   2.0,                       1,  0.0,              4.0,                             },
+    {"Silent",                   &cfgparams.silent,                       0,   0.0,                       1,  0.0,              1.0,                             },
+    {"IntraProfileDeblocking",   &cfgparams.intra_profile_deblocking,     0,   1.0,                       1,  0.0,              1.0,                             },
+    {"DecFrmNum",                &cfgparams.iDecFrmNum,                   0,   0.0,                       2,  0.0,              0.0,                             },
+#if (MVC_EXTENSION_ENABLE)
+    {"DecodeAllLayers",          &cfgparams.DecodeAllLayers,              0,   0.0,                       1,  0.0,              1.0,                             },
+#endif
+    {"DPBPLUS0",                 &cfgparams.dpb_plus[0],                  0,   1.0,                       1,  -16.0,            16.0,                             },
+    {"DPBPLUS1",                 &cfgparams.dpb_plus[1],                  0,   0.0,                       1,  -16.0,            16.0,                             },
+    {NULL,                       NULL,                                   -1,   0.0,                       0,  0.0,              0.0,                             },
+};
 
