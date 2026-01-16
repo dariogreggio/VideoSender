@@ -12,17 +12,17 @@
 #include <time.h>
 #include <sys/timeb.h>
 
-#define JTRACE 0
+#define JTRACE 1
 #define TIMING_DISABLE
 
 #define JM                  "19 (FRExt)"
 #define VERSION             "19.0"
 #define EXT_VERSION         "(FRExt)"
 
-#define DUMP_DPB                  0    //!< Dump DPB info for debug purposes
-#define PRINTREFLIST              0    //!< Print ref list info for debug purposes
+#define DUMP_DPB                  1    //!< Dump DPB info for debug purposes
+#define PRINTREFLIST              1    //!< Print ref list info for debug purposes
 #define PAIR_FIELDS_IN_OUTPUT     0    //!< Pair field pictures for output purposes
-#define IMGTYPE                   1    //!< Define imgpel size type. 0 implies uint8_t (cannot handle >8 bit depths) and 1 implies unsigned short
+#define IMGTYPE                   0    //!< Define imgpel size type. 0 implies uint8_t (cannot handle >8 bit depths) and 1 implies uint16_t
 #define ENABLE_FIELD_CTX          1    //!< Enables Field mode related context types for CABAC
 #define ENABLE_HIGH444_CTX        1    //!< Enables High 444 profile context types for CABAC. 
 #define ZEROSNR                   0    //!< PSNR computation method
@@ -33,7 +33,7 @@
 #define SIMULCAST_ENABLE          0    //!< to test the decoder
 
 #define MVC_EXTENSION_ENABLE      1    //!< enable support for the Multiview High Profile
-#define ENABLE_DEC_STATS          0    //!< enable decoder statistics collection
+#define ENABLE_DEC_STATS          1    //!< enable decoder statistics collection
 
 #define MVC_INIT_VIEW_ID          -1
 #define MAX_VIEW_NUM              1024   
@@ -92,7 +92,7 @@ typedef int32_t  transpel;
 #define MAXPPS  256
 
 //#define MAX_NUM_SLICES 150
-#define MAX_NUM_SLICES     50
+#define MAX_NUM_SLICES     100		// era 50
 #define MAX_REFERENCE_PICTURES 32               //!< H.264 allows 32 fields
 #define MAX_CODED_FRAME_SIZE 8000000         //!< bytes for one frame
 #define MAX_NUM_DECSLICES  16
@@ -119,18 +119,18 @@ typedef struct {
 
 typedef struct {
   bool      aspect_ratio_info_present_flag;                   // u(1)
-  unsigned int aspect_ratio_idc;                                 // u(8)
-  unsigned short sar_width;                                      // u(16)
-  unsigned short sar_height;                                     // u(16)
+  uint8_t aspect_ratio_idc;                                 // u(8)
+  uint16_t sar_width;                                      // u(16)
+  uint16_t sar_height;                                     // u(16)
   bool      overscan_info_present_flag;                       // u(1)
   bool      overscan_appropriate_flag;                        // u(1)
   bool      video_signal_type_present_flag;                   // u(1)
-  unsigned int video_format;                                     // u(3)
+  uint8_t video_format;                                     // u(3)
   bool      video_full_range_flag;                            // u(1)
   bool      colour_description_present_flag;                  // u(1)
-  unsigned int colour_primaries;                                 // u(8)
-  unsigned int transfer_characteristics;                         // u(8)
-  unsigned int matrix_coefficients;                              // u(8)
+  uint8_t colour_primaries;                                 // u(8)
+  uint8_t transfer_characteristics;                         // u(8)
+  uint8_t matrix_coefficients;                              // u(8)
   bool      chroma_location_info_present_flag;                // u(1)
   unsigned int  chroma_sample_loc_type_top_field;                // ue(v)
   unsigned int  chroma_sample_loc_type_bottom_field;             // ue(v)
@@ -165,7 +165,7 @@ typedef struct {
   bool   transform_8x8_mode_flag;                             // u(1)
 
   bool   pic_scaling_matrix_present_flag;                     // u(1)
-  int       pic_scaling_list_present_flag[12];                   // u(1)
+  uint8_t   pic_scaling_list_present_flag[12];                   // u(1)
   int       ScalingList4x4[6][16];                               // se(v)
   int       ScalingList8x8[6][64];                               // se(v)
   bool   UseDefaultScalingMatrix4x4Flag[6];
@@ -190,7 +190,7 @@ typedef struct {
   int num_ref_idx_l0_default_active_minus1;                     // ue(v)
   int num_ref_idx_l1_default_active_minus1;                     // ue(v)
   bool   weighted_pred_flag;                               // u(1)
-  unsigned int  weighted_bipred_idc;                              // u(2)
+  uint8_t weighted_bipred_idc;                              // u(2)
   int       pic_init_qp_minus26;                              // se(v)
   int       pic_init_qs_minus26;                              // se(v)
   int       chroma_qp_index_offset;                           // se(v)
@@ -210,7 +210,7 @@ typedef struct {
 typedef struct {
   bool   Valid;                  // indicates the parameter set is valid
 
-  unsigned int profile_idc;                                       // u(8)
+  uint8_t profile_idc;                                       // u(8)
   bool   constrained_set0_flag;                                // u(1)
   bool   constrained_set1_flag;                                // u(1)
   bool   constrained_set2_flag;                                // u(1)
@@ -219,12 +219,12 @@ typedef struct {
   bool   constrained_set4_flag;                                // u(1)
   bool   constrained_set5_flag;                                // u(2)
 #endif
-  unsigned  int level_idc;                                        // u(8)
+  uint8_t level_idc;                                        // u(8)
   unsigned  int seq_parameter_set_id;                             // ue(v)
   unsigned  int chroma_format_idc;                                // ue(v)
 
   bool   seq_scaling_matrix_present_flag;                   // u(1)
-  int       seq_scaling_list_present_flag[12];                 // u(1)
+  uint8_t seq_scaling_list_present_flag[12];                 // u(1)
   int       ScalingList4x4[6][16];                             // se(v)
   int       ScalingList8x8[6][64];                             // se(v)
   bool   UseDefaultScalingMatrix4x4Flag[6];
@@ -258,7 +258,7 @@ typedef struct {
   unsigned int frame_crop_bottom_offset;              // ue(v)
   bool   vui_parameters_present_flag;                      // u(1)
   vui_seq_parameters_t vui_seq_parameters;                  // vui_seq_parameters_t
-  unsigned  separate_colour_plane_flag;                       // u(1)
+  uint8_t separate_colour_plane_flag;                       // u(1)
 #if (MVC_EXTENSION_ENABLE)
   int max_dec_frame_buffering;
 #endif
@@ -350,8 +350,8 @@ typedef struct annex_b_struct {
 #define MAX_PLANE       3
 
 typedef struct {
-  short x;
-  short y;
+  int16_t x;
+  int16_t y;
 } BlockPos;
 
 //! cbp structure
@@ -542,10 +542,10 @@ typedef enum {
 typedef struct pix_pos {
   int   available;
   int   mb_addr;
-  short x;
-  short y;
-  short pos_x;
-  short pos_y;
+  int16_t x;
+  int16_t y;
+  int16_t pos_x;
+  int16_t pos_y;
 } PixelPos;
 
 //! struct to characterize the state of the arithmetic coding engine
@@ -553,7 +553,7 @@ typedef struct {
   unsigned int    Drange;
   unsigned int    Dvalue;
   int             DbitsLeft;
-  uint8_t            *Dcodestrm;
+  uint8_t         *Dcodestrm;
   int             *Dcodestrm_len;
 } DecodingEnvironment;
 
@@ -561,8 +561,8 @@ typedef DecodingEnvironment *DecodingEnvironmentPtr;
 
 // Motion Vector structure
 typedef struct {
-  short mv_x;
-  short mv_y;
+  int16_t mv_x;
+  int16_t mv_y;
 } MotionVector;
 
 static const MotionVector zero_mv = {0, 0};
@@ -604,11 +604,11 @@ typedef struct macroblock_dec {
   bool       is_v_block;
   int           DeblockCall;
 
-  short         slice_nr;
-  char          ei_flag;             //!< error indicator flag that enables concealment
-  char          dpl_flag;            //!< error indicator flag that signals a missing data partition
-  short         delta_quant;          //!< for rate control
-  short         list_offset;
+  int16_t         slice_nr;
+  bool          ei_flag;             //!< error indicator flag that enables concealment
+  bool          dpl_flag;            //!< error indicator flag that signals a missing data partition
+  int16_t         delta_quant;          //!< for rate control
+  int16_t         list_offset;
 
   struct macroblock_dec   *mb_up;   //!< pointer to neighboring MB (CABAC)
   struct macroblock_dec   *mb_left; //!< pointer to neighboring MB (CABAC)
@@ -617,9 +617,9 @@ typedef struct macroblock_dec {
   struct macroblock_dec   *mbleft; // neighbors for loopfilter
 
   // some storage of macroblock syntax elements for global access
-  short         mb_type;
-  short         mvd[2][BLOCK_MULTIPLE][BLOCK_MULTIPLE][2];      //!< indices correspond to [forw,backw][block_y][block_x][x,y]
-  //short         ****mvd;      //!< indices correspond to [forw,backw][block_y][block_x][x,y]
+  int16_t         mb_type;
+  int16_t         mvd[2][BLOCK_MULTIPLE][BLOCK_MULTIPLE][2];      //!< indices correspond to [forw,backw][block_y][block_x][x,y]
+  //int16_t         ****mvd;      //!< indices correspond to [forw,backw][block_y][block_x][x,y]
   int           cbp;
   CBPStructure  s_cbp[3];
 
@@ -628,10 +628,10 @@ typedef struct macroblock_dec {
   char          b8pdir[4];
   char          ipmode_DPCM;
   char          c_ipred_mode;       //!< chroma intra prediction mode
-  char          skip_flag;
-  short         DFDisableIdc;
-  short         DFAlphaC0Offset;
-  short         DFBetaOffset;
+  bool          skip_flag;
+  int16_t         DFDisableIdc;
+  int16_t         DFAlphaC0Offset;
+  int16_t         DFBetaOffset;
 
   bool       mb_field;
   //Flag for MBAFF deblocking;
@@ -649,7 +649,7 @@ typedef struct macroblock_dec {
   void (*itrans_8x8)(struct macroblock_dec *currMB, ColorPlane pl, int ioff, int joff);
 
   void (*GetMVPredictor) (struct macroblock_dec *currMB, PixelPos *block, 
-    MotionVector *pmv, short ref_frame, struct pic_motion_params **mv_info, int list, int mb_x, int mb_y, int blockshape_x, int blockshape_y);
+    MotionVector *pmv, int16_t ref_frame, struct pic_motion_params **mv_info, int list, int mb_x, int mb_y, int blockshape_x, int blockshape_y);
 
   int  (*read_and_store_CBP_block_bit)  (struct macroblock_dec *currMB, DecodingEnvironmentPtr  dep_dp, int type);
   char (*readRefPictureIdx)             (struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, struct datapartition_dec *dP, char b8mode, int list);
@@ -670,8 +670,8 @@ typedef struct coding_par {
   int height_cr;                              //!< height chroma
 
   int pic_unit_bitsize_on_disk;
-  short bitdepth_luma;
-  short bitdepth_chroma;
+  int16_t bitdepth_luma;
+  int16_t bitdepth_chroma;
   int bitdepth_scale[2];
   int bitdepth_luma_qp_scale;
   int bitdepth_chroma_qp_scale;
@@ -824,8 +824,8 @@ typedef struct nalunitheadermvcext_tag {
 #endif
 
 typedef struct wp_params {
-  short weight[3];
-  short offset[3];
+  int16_t weight[3];
+  int16_t offset[3];
 } WPParams;
 
 //! Slice
@@ -876,7 +876,7 @@ typedef struct slice {
   //information need to move to slice;
   unsigned int current_mb_nr; // bitstream order
   unsigned int num_dec_mb;
-  short        current_slice_nr;
+  int16_t        current_slice_nr;
   //int mb_x;
   //int mb_y;
   //int block_x;
@@ -948,9 +948,9 @@ typedef struct slice {
   NALUnitHeaderMVCExt_t NaluHeaderMVCExt;
 #endif
   int                 layer_id;
-  short               DFDisableIdc;     //!< Disable deblocking filter on slice
-  short               DFAlphaC0Offset;  //!< Alpha and C0 offset for filtering slice
-  short               DFBetaOffset;     //!< Beta offset for filtering slice
+  int16_t               DFDisableIdc;     //!< Disable deblocking filter on slice
+  int16_t               DFAlphaC0Offset;  //!< Alpha and C0 offset for filtering slice
+  int16_t               DFBetaOffset;     //!< Beta offset for filtering slice
 
   int                 pic_parameter_set_id;   //!<the ID of the picture parameter set the slice is reffering to
 
@@ -988,19 +988,19 @@ typedef struct slice {
 
 
   //weighted prediction
-  unsigned short weighted_pred_flag;
-  unsigned short weighted_bipred_idc;
+  uint16_t weighted_pred_flag;
+  uint16_t weighted_bipred_idc;
 
-  unsigned short luma_log2_weight_denom;
-  unsigned short chroma_log2_weight_denom;
+  uint16_t luma_log2_weight_denom;
+  uint16_t chroma_log2_weight_denom;
   
   WPParams **wp_params; // wp parameters in [list][index]
 
   int ***wp_weight;  // weight in [list][index][component] order
   int ***wp_offset;  // offset in [list][index][component] order
   int ****wbp_weight; //weight in [list][fw_index][bw_index][component] order
-  short wp_round_luma;
-  short wp_round_chroma;
+  int16_t wp_round_luma;
+  int16_t wp_round_chroma;
 
 #if (MVC_EXTENSION_ENABLE)
   int listinterviewidx0;
@@ -1043,9 +1043,9 @@ typedef struct slice {
 
 #define  TIMEB    timeb
 #define  TIME_T   struct timeval
-#define  OPENFLAGS_WRITE _O_WRONLY|_O_CREAT|_O_BINARY|_O_TRUNC
+#define  OPENFLAGS_WRITE OF_WRITE //_O_WRONLY|_O_CREAT|_O_BINARY|_O_TRUNC
 #define  OPEN_PERMISSIONS _S_IREAD | _S_IWRITE
-#define  OPENFLAGS_READ  _O_RDONLY|_O_BINARY
+#define  OPENFLAGS_READ  OF_READ //_O_RDONLY|_O_BINARY
 #define FORMAT_OFF_T "I64d"
 
 typedef enum {
@@ -1339,7 +1339,7 @@ typedef struct video_par {
 
   void (*buf2img)          (imgpel** imgX, unsigned char* buf, int size_x, int size_y, int o_size_x, int o_size_y, int symbol_size_in_bytes, int bitshift);
   void (*getNeighbour)     (Macroblock *currMB, int xN, int yN, int mb_size[2], PixelPos *pix);
-  void (*get_mb_block_pos) (BlockPos *PicPos, int mb_addr, short *x, short *y);
+  void (*get_mb_block_pos) (BlockPos *PicPos, int mb_addr, int16_t *x, int16_t *y);
   void (*GetStrengthVer)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
   void (*GetStrengthHor)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
   void (*EdgeLoopLumaVer)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge);
@@ -1376,8 +1376,8 @@ typedef struct video_par {
   int height_cr;                              //!< height chroma
   // Fidelity Range Extensions Stuff
   int pic_unit_bitsize_on_disk;
-  short bitdepth_luma;
-  short bitdepth_chroma;
+  int16_t bitdepth_luma;
+  int16_t bitdepth_chroma;
   int bitdepth_scale[2];
   int bitdepth_luma_qp_scale;
   int bitdepth_chroma_qp_scale;
@@ -1454,8 +1454,7 @@ typedef enum {
 } NalRefIdc;
 
 //! NAL unit structure
-typedef struct nalu_t
-{
+typedef struct nalu_t {
   int       startcodeprefix_len;   //!< 4 for parameter sets and first slice in picture, 3 for everything else (suggested)
   unsigned  len;                   //!< Length of the NAL unit (Excluding the start code, which does not belong to the NALU)
   unsigned  max_size;              //!< NAL Unit Buffer size
@@ -1499,104 +1498,6 @@ extern void reset_annex_b    (ANNEXB_t *annex_b);
 
 
 
-/************************************************************************
- * D e f i n i t i o n s
- ***********************************************************************
- */
-
-/* Range table for  LPS */
-static const uint8_t rLPS_table_64x4[64][4]={
-  { 128, 176, 208, 240},
-  { 128, 167, 197, 227},
-  { 128, 158, 187, 216},
-  { 123, 150, 178, 205},
-  { 116, 142, 169, 195},
-  { 111, 135, 160, 185},
-  { 105, 128, 152, 175},
-  { 100, 122, 144, 166},
-  {  95, 116, 137, 158},
-  {  90, 110, 130, 150},
-  {  85, 104, 123, 142},
-  {  81,  99, 117, 135},
-  {  77,  94, 111, 128},
-  {  73,  89, 105, 122},
-  {  69,  85, 100, 116},
-  {  66,  80,  95, 110},
-  {  62,  76,  90, 104},
-  {  59,  72,  86,  99},
-  {  56,  69,  81,  94},
-  {  53,  65,  77,  89},
-  {  51,  62,  73,  85},
-  {  48,  59,  69,  80},
-  {  46,  56,  66,  76},
-  {  43,  53,  63,  72},
-  {  41,  50,  59,  69},
-  {  39,  48,  56,  65},
-  {  37,  45,  54,  62},
-  {  35,  43,  51,  59},
-  {  33,  41,  48,  56},
-  {  32,  39,  46,  53},
-  {  30,  37,  43,  50},
-  {  29,  35,  41,  48},
-  {  27,  33,  39,  45},
-  {  26,  31,  37,  43},
-  {  24,  30,  35,  41},
-  {  23,  28,  33,  39},
-  {  22,  27,  32,  37},
-  {  21,  26,  30,  35},
-  {  20,  24,  29,  33},
-  {  19,  23,  27,  31},
-  {  18,  22,  26,  30},
-  {  17,  21,  25,  28},
-  {  16,  20,  23,  27},
-  {  15,  19,  22,  25},
-  {  14,  18,  21,  24},
-  {  14,  17,  20,  23},
-  {  13,  16,  19,  22},
-  {  12,  15,  18,  21},
-  {  12,  14,  17,  20},
-  {  11,  14,  16,  19},
-  {  11,  13,  15,  18},
-  {  10,  12,  15,  17},
-  {  10,  12,  14,  16},
-  {   9,  11,  13,  15},
-  {   9,  11,  12,  14},
-  {   8,  10,  12,  14},
-  {   8,   9,  11,  13},
-  {   7,   9,  11,  12},
-  {   7,   9,  10,  12},
-  {   7,   8,  10,  11},
-  {   6,   8,   9,  11},
-  {   6,   7,   9,  10},
-  {   6,   7,   8,   9},
-  {   2,   2,   2,   2}
-};
-
-
-static const uint8_t AC_next_state_MPS_64[64] =    
-{
-  1,2,3,4,5,6,7,8,9,10,
-  11,12,13,14,15,16,17,18,19,20,
-  21,22,23,24,25,26,27,28,29,30,
-  31,32,33,34,35,36,37,38,39,40,
-  41,42,43,44,45,46,47,48,49,50,
-  51,52,53,54,55,56,57,58,59,60,
-  61,62,62,63
-};
-
-
-static const uint8_t AC_next_state_LPS_64[64] =    
-{
-  0, 0, 1, 2, 2, 4, 4, 5, 6, 7,
-  8, 9, 9,11,11,12,13,13,15,15,
-  16,16,18,18,19,19,21,21,22,22,
-  23,24,24,25,26,26,27,27,28,29,
-  29,30,30,30,31,32,32,33,33,33,
-  34,34,35,35,35,36,36,36,37,37,
-  37,38,38,63
-};
-
-static const uint8_t renorm_table_32[32]={6,5,4,4,3,3,3,3,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
 
 extern void arideco_start_decoding(DecodingEnvironmentPtr eep, unsigned char *code_buffer, int firstbyte, int *code_len);
@@ -1612,83 +1513,6 @@ extern unsigned int biari_decode_final(DecodingEnvironmentPtr dep);
 //#include "global.h"
 //#include "transform8x8.h"
 
-static const uint8_t QP_SCALE_CR[52]={
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,
-   12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
-   28,29,29,30,31,32,32,33,34,34,35,35,36,36,37,37,
-   37,38,38,38,39,39,39,39
-
-};
-
-//! look up tables for FRExt_chroma support
-static const unsigned char subblk_offset_x[3][8][4] ={
-  {
-    {0, 4, 0, 4},
-    {0, 4, 0, 4},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0}, 
-  },
-  { 
-    {0, 4, 0, 4},
-    {0, 4, 0, 4},
-    {0, 4, 0, 4},
-    {0, 4, 0, 4},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0}, 
-  },
-  {
-    {0, 4, 0, 4},
-    {8,12, 8,12},
-    {0, 4, 0, 4},
-    {8,12, 8,12},
-    {0, 4, 0, 4},
-    {8,12, 8,12},
-    {0, 4, 0, 4},
-    {8,12, 8,12}  
-  }
-};
-
-
-static const unsigned char subblk_offset_y[3][8][4] ={
-  {
-    {0, 0, 4, 4},
-    {0, 0, 4, 4},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0}
-  },
-  { 
-    {0, 0, 4, 4},
-    {8, 8,12,12},
-    {0, 0, 4, 4},
-    {8, 8,12,12},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0}
-  },
-  { 
-    {0, 0, 4, 4},
-    {0, 0, 4, 4},
-    {8, 8,12,12},
-    {8, 8,12,12},
-    {0, 0, 4, 4},
-    {0, 0, 4, 4},
-    {8, 8,12,12},
-    {8, 8,12,12}
-  }
-};
-
-static const uint8_t decode_block_scan[16] = {0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15};
 
 extern void iMBtrans4x4(Macroblock *currMB, ColorPlane pl, int smb);
 extern void iMBtrans8x8(Macroblock *currMB, ColorPlane pl);
@@ -1950,7 +1774,7 @@ extern void delete_dec_stats(DecStatParameters *stats);
 #undef TRACE
 #endif
 #if defined _DEBUG
-# define TRACE           0     //!< 0:Trace off 1:Trace on 2:detailed CABAC context information
+# define TRACE           2     //!< 0:Trace off 1:Trace on 2:detailed CABAC context information
 #else
 # define TRACE           0     //!< 0:Trace off 1:Trace on 2:detailed CABAC context information
 #endif
@@ -2093,13 +1917,13 @@ enum {
   PICTURE_DECODED = 2
 };
 
-#define  LAMBDA_ACCURACY_BITS         16
+#define LAMBDA_ACCURACY_BITS         16
 #define INVALIDINDEX  (-135792468)
 
 #define RC_MAX_TEMPORAL_LEVELS   5
 
 //Start code and Emulation Prevention need this to be defined in identical manner at encoder and decoder
-#define ZEROBYTES_SHORTSTARTCODE 2 //indicates the number of zero bytes in the short start-code prefix
+#define ZEROBYTES_SHORTSTARTCODE 2 //indicates the number of zero bytes in the int16_t start-code prefix
 
 
 
@@ -2180,13 +2004,6 @@ enum {
  */
 
 
-static const uint8_t assignSE2partition[][SE_MAX_ELEMENTS] = {
-  // 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19  // element number (do not uncomment)
-  {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },   //!< all elements in one partition no data partitioning
-  {  0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 2, 2, 2, 2, 0, 0, 0, 0 }    //!< three partitions per slice
-};
-
-
 
 
 /*
@@ -2209,24 +2026,14 @@ threshold, concealByCopy is used, otherwise concealByTrial is used. */
 /*
 * Functions to convert MBNum representation to blockNum
 */
-
-#define xPosYBlock(currYBlockNum,picSizeX) \
-((currYBlockNum)%((picSizeX)>>3))
-
-#define yPosYBlock(currYBlockNum,picSizeX) \
-((currYBlockNum)/((picSizeX)>>3))
-
-#define xPosMB(currMBNum,picSizeX) \
-((currMBNum)%((picSizeX)>>4))
-
-#define yPosMB(currMBNum,picSizeX) \
-((currMBNum)/((picSizeX)>>4))
-
+#define xPosYBlock(currYBlockNum,picSizeX) ((currYBlockNum)%((picSizeX)>>3))
+#define yPosYBlock(currYBlockNum,picSizeX) ((currYBlockNum)/((picSizeX)>>3))
+#define xPosMB(currMBNum,picSizeX) ((currMBNum)%((picSizeX)>>4))
+#define yPosMB(currMBNum,picSizeX) ((currMBNum)/((picSizeX)>>4))
 #define MBxy2YBlock(currXPos,currYPos,comp,picSizeX) \
-((((currYPos)<<1)+((comp)>>1))*((picSizeX)>>3)+((currXPos)<<1)+((comp)&1))
-
+	((((currYPos)<<1)+((comp)>>1))*((picSizeX)>>3)+((currXPos)<<1)+((comp)&1))
 #define MBNum2YBlock(currMBNum,comp,picSizeX) \
-MBxy2YBlock(xPosMB((currMBNum),(picSizeX)),yPosMB((currMBNum),(picSizeX)),(comp),(picSizeX))
+	MBxy2YBlock(xPosMB((currMBNum),(picSizeX)),yPosMB((currMBNum),(picSizeX)),(comp),(picSizeX))
 
 
 /*
@@ -2235,8 +2042,8 @@ MBxy2YBlock(xPosMB((currMBNum),(picSizeX)),yPosMB((currMBNum),(picSizeX)),(comp)
 
 /* segment data structure */
 typedef struct ercSegment_s {
-  short     startMBPos;
-  short     endMBPos;
+  int16_t     startMBPos;
+  int16_t     endMBPos;
   char      fCorrupted;
 } ercSegment_t;
 
@@ -2318,7 +2125,7 @@ int ercConcealInterFrame( frame *recfr, objectBuffer_t *object_list,
 //! definition of pic motion parameters
 typedef struct pic_motion_params_old {
   uint8_t *      mb_field;      //!< field macroblock indicator
-} PicMotionParamsOld;
+	} PicMotionParamsOld;
 
 //! definition a picture (field or frame)
 typedef struct storable_picture {
@@ -2341,7 +2148,7 @@ typedef struct storable_picture {
   int         non_existing;
   int         separate_colour_plane_flag;
 
-  short       max_slice_id;
+  int16_t       max_slice_id;
 
   int         size_x, size_y, size_x_cr, size_y_cr;
   int         size_x_m1, size_y_m1, size_x_cr_m1, size_y_cr_m1;
@@ -2502,7 +2309,6 @@ extern int comp(const void *, const void *);
 
 
 void ercPixConcealIMB    (VideoParameters *p_Vid, imgpel *currFrame, int row, int column, int predBlocks[], int frameWidth, int mbWidthInBlocks);
-
 int ercCollect8PredBlocks( int predBlocks[], int currRow, int currColumn, char *condition,
                           int maxRow, int maxColumn, int step, uint8_t fNoCornerNeigh );
 int ercCollectColumnBlocks( int predBlocks[], int currRow, int currColumn, char *condition, int maxRow, int maxColumn, int step );
@@ -2580,7 +2386,7 @@ struct pic_motion_params;
 typedef enum {
    DEC_OPENED = 0,
    DEC_STOPPED,
-}DecoderStatus_e;
+} DecoderStatus_e;
 
 typedef enum {
   LumaComp = 0,
@@ -2593,7 +2399,6 @@ typedef enum {
  * C O N T E X T S   F O R   T M L   S Y N T A X   E L E M E N T S
  **********************************************************************
  */
-
 // structures that will be declared somewhere else
 struct storable_picture;
 struct datapartition_dec;
@@ -2610,8 +2415,6 @@ struct syntaxelement_dec;
  */
 
 
-
-
 //! Bitstream
 struct bit_stream_dec {
   // CABAC Decoding
@@ -2621,8 +2424,8 @@ struct bit_stream_dec {
   int           frame_bitoffset;    //!< actual position in the codebuffer, bit-oriented, CAVLC only
   int           bitstream_length;   //!< over codebuffer lnegth, uint8_t oriented, CAVLC only
   // ErrorConcealment
-  uint8_t          *streamBuffer;      //!< actual codebuffer for read bytes
-  int           ei_flag;            //!< error indication, 0: no error, else unspecified error
+  uint8_t       *streamBuffer;      //!< actual codebuffer for read bytes
+  bool          ei_flag;            //!< error indication, 0: no error, else unspecified error
 };
 
 
@@ -2744,8 +2547,7 @@ typedef enum{
 //  DEC_ERRMASK = 0x80000000
 }DecErrCode;
 
-typedef struct dec_set_t
-{
+typedef struct dec_set_t {
   int iPostprocLevel; // valid interval are [0..100]
   int bDBEnable;
   int bAllLayers;
@@ -2839,160 +2641,6 @@ void calc_buffer(InputParameters *p_Inp);
 //       Alpha( qp ) = 0.8 * (2^(qp/6)  -  1)
 //       Beta ( qp ) = 0.5 * qp  -  7
 
-// The tables actually used have been "hand optimized" though (by Anthony Joch). So, the
-// table values might be a little different to formula-generated values. Also, the first
-// few values of both tables is set to zero to force the filter off at low qp’s
-
-static const uint8_t ALPHA_TABLE[52]  = {0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,4,4,5,6,  7,8,9,10,12,13,15,17,  20,22,25,28,32,36,40,45,  50,56,63,71,80,90,101,113,  127,144,162,182,203,226,255,255} ;
-static const uint8_t  BETA_TABLE[52]  = {0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,2,2,2,3,  3,3,3, 4, 4, 4, 6, 6,   7, 7, 8, 8, 9, 9,10,10,  11,11,12,12,13,13, 14, 14,   15, 15, 16, 16, 17, 17, 18, 18} ;
-static const uint8_t CLIP_TAB[52][5]  = {
-  { 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},
-  { 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},{ 0, 0, 0, 0, 0},
-  { 0, 0, 0, 0, 0},{ 0, 0, 0, 1, 1},{ 0, 0, 0, 1, 1},{ 0, 0, 0, 1, 1},{ 0, 0, 0, 1, 1},{ 0, 0, 1, 1, 1},{ 0, 0, 1, 1, 1},{ 0, 1, 1, 1, 1},
-  { 0, 1, 1, 1, 1},{ 0, 1, 1, 1, 1},{ 0, 1, 1, 1, 1},{ 0, 1, 1, 2, 2},{ 0, 1, 1, 2, 2},{ 0, 1, 1, 2, 2},{ 0, 1, 1, 2, 2},{ 0, 1, 2, 3, 3},
-  { 0, 1, 2, 3, 3},{ 0, 2, 2, 3, 3},{ 0, 2, 2, 4, 4},{ 0, 2, 3, 4, 4},{ 0, 2, 3, 4, 4},{ 0, 3, 3, 5, 5},{ 0, 3, 4, 6, 6},{ 0, 3, 4, 6, 6},
-  { 0, 4, 5, 7, 7},{ 0, 4, 5, 8, 8},{ 0, 4, 6, 9, 9},{ 0, 5, 7,10,10},{ 0, 6, 8,11,11},{ 0, 6, 8,13,13},{ 0, 7,10,14,14},{ 0, 8,11,16,16},
-  { 0, 9,12,18,18},{ 0,10,13,20,20},{ 0,11,15,23,23},{ 0,13,17,25,25}
-} ;
-
-static const char chroma_edge[2][4][4] = //[dir][edge][yuv_format]
-{ { {-4, 0, 0, 0},
-    {-4,-4,-4, 4},
-    {-4, 4, 4, 8},
-    {-4,-4,-4, 12}},
-
-  { {-4, 0,  0,  0},
-    {-4,-4,  4,  4},
-    {-4, 4,  8,  8},
-    {-4,-4, 12, 12}}};
-
-static const int pelnum_cr[2][4] =  {{0,8,16,16}, {0,8, 8,16}};  //[dir:0=vert, 1=hor.][yuv_format]
-
-int iabs(int x);
-static inline int compare_mvs(const MotionVector *mv0, const MotionVector *mv1, int mvlimit) {
-  return ((iabs( mv0->mv_x - mv1->mv_x) >= 4) | (iabs( mv0->mv_y - mv1->mv_y) >= mvlimit));
-}
-
-
-
-extern void DeblockPicture(VideoParameters *p_Vid, StorablePicture *p) ;
-
-void  init_Deblock(VideoParameters *p_Vid, int mb_aff_frame_flag);
-
-
-
-//! single scan pattern
-static const uint8_t SNGL_SCAN[16][2] = {
-  {0,0},{1,0},{0,1},{0,2},
-  {1,1},{2,0},{3,0},{2,1},
-  {1,2},{0,3},{1,3},{2,2},
-  {3,1},{3,2},{2,3},{3,3}
-};
-
-//! field scan pattern
-static const uint8_t FIELD_SCAN[16][2] = {
-  {0,0},{0,1},{1,0},{0,2},
-  {0,3},{1,1},{1,2},{1,3},
-  {2,0},{2,1},{2,2},{2,3},
-  {3,0},{3,1},{3,2},{3,3}
-};
-
-//! used to control block sizes : Not used/16x16/16x8/8x16/8x8/8x4/4x8/4x4
-static const int BLOCK_STEP[8][2]= {
-  {0,0},{4,4},{4,2},{2,4},{2,2},{2,1},{1,2},{1,1}
-};
-
-//! single scan pattern
-static const uint8_t SNGL_SCAN8x8[64][2] = {
-  {0,0}, {1,0}, {0,1}, {0,2}, {1,1}, {2,0}, {3,0}, {2,1}, {1,2}, {0,3}, {0,4}, {1,3}, {2,2}, {3,1}, {4,0}, {5,0},
-  {4,1}, {3,2}, {2,3}, {1,4}, {0,5}, {0,6}, {1,5}, {2,4}, {3,3}, {4,2}, {5,1}, {6,0}, {7,0}, {6,1}, {5,2}, {4,3},
-  {3,4}, {2,5}, {1,6}, {0,7}, {1,7}, {2,6}, {3,5}, {4,4}, {5,3}, {6,2}, {7,1}, {7,2}, {6,3}, {5,4}, {4,5}, {3,6},
-  {2,7}, {3,7}, {4,6}, {5,5}, {6,4}, {7,3}, {7,4}, {6,5}, {5,6}, {4,7}, {5,7}, {6,6}, {7,5}, {7,6}, {6,7}, {7,7}
-};
-
-
-//! field scan pattern
-static const uint8_t FIELD_SCAN8x8[64][2] = {   // 8x8
-  {0,0}, {0,1}, {0,2}, {1,0}, {1,1}, {0,3}, {0,4}, {1,2}, {2,0}, {1,3}, {0,5}, {0,6}, {0,7}, {1,4}, {2,1}, {3,0},
-  {2,2}, {1,5}, {1,6}, {1,7}, {2,3}, {3,1}, {4,0}, {3,2}, {2,4}, {2,5}, {2,6}, {2,7}, {3,3}, {4,1}, {5,0}, {4,2},
-  {3,4}, {3,5}, {3,6}, {3,7}, {4,3}, {5,1}, {6,0}, {5,2}, {4,4}, {4,5}, {4,6}, {4,7}, {5,3}, {6,1}, {6,2}, {5,4},
-  {5,5}, {5,6}, {5,7}, {6,3}, {7,0}, {7,1}, {6,4}, {6,5}, {6,6}, {6,7}, {7,2}, {7,3}, {7,4}, {7,5}, {7,6}, {7,7}
-};
-
-//! single scan pattern
-static const uint8_t SCAN_YUV422[8][2] = {
-  {0,0},{0,1},
-  {1,0},{0,2},
-  {0,3},{1,1},
-  {1,2},{1,3}
-};
-
-static const unsigned char cbp_blk_chroma[8][4] = { {16, 17, 18, 19},
-  {20, 21, 22, 23},
-  {24, 25, 26, 27},
-  {28, 29, 30, 31},
-  {32, 33, 34, 35},
-  {36, 37, 38, 39},
-  {40, 41, 42, 43},
-  {44, 45, 46, 47} 
-};
-
-static const unsigned char cofuv_blk_x[3][8][4] = { { {0, 1, 0, 1},
-    {0, 1, 0, 1},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0} },
-
-  { {0, 1, 0, 1},
-    {0, 1, 0, 1},
-    {0, 1, 0, 1},
-    {0, 1, 0, 1},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0} },
-
-  { {0, 1, 0, 1},
-    {2, 3, 2, 3},
-    {0, 1, 0, 1},
-    {2, 3, 2, 3},
-    {0, 1, 0, 1},
-    {2, 3, 2, 3},
-    {0, 1, 0, 1},
-    {2, 3, 2, 3} }
-};
-
-static const unsigned char cofuv_blk_y[3][8][4] = {
-  { { 0, 0, 1, 1},
-    { 0, 0, 1, 1},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0} },
-
-  { { 0, 0, 1, 1},
-    { 2, 2, 3, 3},
-    { 0, 0, 1, 1},
-    { 2, 2, 3, 3},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0},
-    { 0, 0, 0, 0} },
-
-  { { 0, 0, 1, 1},
-    { 0, 0, 1, 1},
-    { 2, 2, 3, 3},
-    { 2, 2, 3, 3},
-    { 0, 0, 1, 1},
-    { 0, 0, 1, 1},
-    { 2, 2, 3, 3},
-    { 2, 2, 3, 3}}
-};
 
 extern void setup_slice_methods_mbaff(Slice *currSlice);
 extern void setup_slice_methods      (Slice *currSlice);
@@ -3047,7 +2695,7 @@ extern void              free_frame_store (FrameStore* f);
 extern StorablePicture*  alloc_storable_picture(VideoParameters *p_Vid, PictureStructure type, int size_x, int size_y, int size_x_cr, int size_y_cr, int is_output);
 extern void              free_storable_picture (StorablePicture* p);
 extern void              store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
-extern StorablePicture*  get_short_term_pic (Slice *currSlice, DecodedPictureBuffer *p_Dpb, int picNum);
+extern StorablePicture*  get_int16_t_term_pic (Slice *currSlice, DecodedPictureBuffer *p_Dpb, int picNum);
 
 #if (MVC_EXTENSION_ENABLE)
 extern void             idr_memory_management(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
@@ -3139,16 +2787,6 @@ extern void init_output(CodingParameters *p_CodingParams, int symbol_size_in_byt
 
 
 
-static const uint8_t ZZ_SCAN[16]  =
-{  0,  1,  4,  8,  5,  2,  3,  6,  9, 12, 13, 10,  7, 11, 14, 15
-};
-
-static const uint8_t ZZ_SCAN8[64] =
-{  0,  1,  8, 16,  9,  2,  3, 10, 17, 24, 32, 25, 18, 11,  4,  5,
-   12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13,  6,  7, 14, 21, 28,
-   35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
-   58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63
-};
 
 extern void Scaling_List(int *scalingList, int sizeOfScalingList, bool *UseDefaultScalingMatrix, Bitstream *s);
 
@@ -3185,147 +2823,6 @@ extern void get_max_dec_frame_buf_size(seq_parameter_set_rbsp_t *sps);
 #endif
 
 
-
-// exported variables
-static const int dequant_coef8[6][8][8] =
-{
-  {
-    {20,  19, 25, 19, 20, 19, 25, 19},
-    {19,  18, 24, 18, 19, 18, 24, 18},
-    {25,  24, 32, 24, 25, 24, 32, 24},
-    {19,  18, 24, 18, 19, 18, 24, 18},
-    {20,  19, 25, 19, 20, 19, 25, 19},
-    {19,  18, 24, 18, 19, 18, 24, 18},
-    {25,  24, 32, 24, 25, 24, 32, 24},
-    {19,  18, 24, 18, 19, 18, 24, 18}
-  },
-  {
-    {22,  21, 28, 21, 22, 21, 28, 21},
-    {21,  19, 26, 19, 21, 19, 26, 19},
-    {28,  26, 35, 26, 28, 26, 35, 26},
-    {21,  19, 26, 19, 21, 19, 26, 19},
-    {22,  21, 28, 21, 22, 21, 28, 21},
-    {21,  19, 26, 19, 21, 19, 26, 19},
-    {28,  26, 35, 26, 28, 26, 35, 26},
-    {21,  19, 26, 19, 21, 19, 26, 19}
-  },
-  {
-    {26,  24, 33, 24, 26, 24, 33, 24},
-    {24,  23, 31, 23, 24, 23, 31, 23},
-    {33,  31, 42, 31, 33, 31, 42, 31},
-    {24,  23, 31, 23, 24, 23, 31, 23},
-    {26,  24, 33, 24, 26, 24, 33, 24},
-    {24,  23, 31, 23, 24, 23, 31, 23},
-    {33,  31, 42, 31, 33, 31, 42, 31},
-    {24,  23, 31, 23, 24, 23, 31, 23}
-  },
-  {
-    {28,  26, 35, 26, 28, 26, 35, 26},
-    {26,  25, 33, 25, 26, 25, 33, 25},
-    {35,  33, 45, 33, 35, 33, 45, 33},
-    {26,  25, 33, 25, 26, 25, 33, 25},
-    {28,  26, 35, 26, 28, 26, 35, 26},
-    {26,  25, 33, 25, 26, 25, 33, 25},
-    {35,  33, 45, 33, 35, 33, 45, 33},
-    {26,  25, 33, 25, 26, 25, 33, 25}
-  },
-  {
-    {32,  30, 40, 30, 32, 30, 40, 30},
-    {30,  28, 38, 28, 30, 28, 38, 28},
-    {40,  38, 51, 38, 40, 38, 51, 38},
-    {30,  28, 38, 28, 30, 28, 38, 28},
-    {32,  30, 40, 30, 32, 30, 40, 30},
-    {30,  28, 38, 28, 30, 28, 38, 28},
-    {40,  38, 51, 38, 40, 38, 51, 38},
-    {30,  28, 38, 28, 30, 28, 38, 28}
-  },
-  {
-    {36,  34, 46, 34, 36, 34, 46, 34},
-    {34,  32, 43, 32, 34, 32, 43, 32},
-    {46,  43, 58, 43, 46, 43, 58, 43},
-    {34,  32, 43, 32, 34, 32, 43, 32},
-    {36,  34, 46, 34, 36, 34, 46, 34},
-    {34,  32, 43, 32, 34, 32, 43, 32},
-    {46,  43, 58, 43, 46, 43, 58, 43},
-    {34,  32, 43, 32, 34, 32, 43, 32}
-  }
-};
-
-
-//! Dequantization coefficients
-static const int dequant_coef[6][4][4] = {
-  {
-    { 10, 13, 10, 13},
-    { 13, 16, 13, 16},
-    { 10, 13, 10, 13},
-    { 13, 16, 13, 16}},
-  {
-    { 11, 14, 11, 14},
-    { 14, 18, 14, 18},
-    { 11, 14, 11, 14},
-    { 14, 18, 14, 18}},
-  {
-    { 13, 16, 13, 16},
-    { 16, 20, 16, 20},
-    { 13, 16, 13, 16},
-    { 16, 20, 16, 20}},
-  {
-    { 14, 18, 14, 18},
-    { 18, 23, 18, 23},
-    { 14, 18, 14, 18},
-    { 18, 23, 18, 23}},
-  {
-    { 16, 20, 16, 20},
-    { 20, 25, 20, 25},
-    { 16, 20, 16, 20},
-    { 20, 25, 20, 25}},
-  {
-    { 18, 23, 18, 23},
-    { 23, 29, 23, 29},
-    { 18, 23, 18, 23},
-    { 23, 29, 23, 29}}
-};
-
-static const int quant_coef[6][4][4] = {
-  {
-    { 13107,  8066, 13107,  8066},
-    {  8066,  5243,  8066,  5243},
-    { 13107,  8066, 13107,  8066},
-    {  8066,  5243,  8066,  5243}},
-  {
-    { 11916,  7490, 11916,  7490},
-    {  7490,  4660,  7490,  4660},
-    { 11916,  7490, 11916,  7490},
-    {  7490,  4660,  7490,  4660}},
-  {
-    { 10082,  6554, 10082,  6554},
-    {  6554,  4194,  6554,  4194},
-    { 10082,  6554, 10082,  6554},
-    {  6554,  4194,  6554,  4194}},
-  {
-    {  9362,  5825,  9362,  5825},
-    {  5825,  3647,  5825,  3647},
-    {  9362,  5825,  9362,  5825},
-    {  5825,  3647,  5825,  3647}},
-  {
-    {  8192,  5243,  8192,  5243},
-    {  5243,  3355,  5243,  3355},
-    {  8192,  5243,  8192,  5243},
-    {  5243,  3355,  5243,  3355}},
-  {
-    {  7282,  4559,  7282,  4559},
-    {  4559,  2893,  4559,  2893},
-    {  7282,  4559,  7282,  4559},
-    {  4559,  2893,  4559,  2893}}
-};
-
-// SP decoding parameter (EQ. 8-425)
-static const int A[4][4] = {
-  { 16, 20, 16, 20},
-  { 20, 25, 20, 25},
-  { 16, 20, 16, 20},
-  { 20, 25, 20, 25}
-};
 
 // exported functions
 // quantization initialization
@@ -3472,14 +2969,14 @@ typedef struct {
 typedef struct {
   unsigned char  green_metadata_type;
   unsigned char  period_type;
-  unsigned short num_seconds;
-  unsigned short num_pictures;
+  uint16_t num_seconds;
+  uint16_t num_pictures;
   unsigned char percent_non_zero_macroblocks;
   unsigned char percent_intra_coded_macroblocks;
   unsigned char percent_six_tap_filtering;
   unsigned char percent_alpha_point_deblocking_instance;
   unsigned char xsd_metric_type;
-  unsigned short xsd_metric_value;
+  uint16_t xsd_metric_value;
 } Green_metadata_information_struct;
 
 
@@ -3524,52 +3021,6 @@ extern void itrans8x8   (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
 extern void icopy8x8    (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
 
 
-//! gives CBP value from codeword number, both for intra and inter
-static const uint8_t NCBP[2][48][2]= {
-  {  // 0      1        2       3       4       5       6       7       8       9      10      11
-    {15, 0},{ 0, 1},{ 7, 2},{11, 4},{13, 8},{14, 3},{ 3, 5},{ 5,10},{10,12},{12,15},{ 1, 7},{ 2,11},
-    { 4,13},{ 8,14},{ 6, 6},{ 9, 9},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},
-    { 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},
-    { 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0},{ 0, 0}
-  },
-  {
-    {47, 0},{31,16},{15, 1},{ 0, 2},{23, 4},{27, 8},{29,32},{30, 3},{ 7, 5},{11,10},{13,12},{14,15},
-    {39,47},{43, 7},{45,11},{46,13},{16,14},{ 3, 6},{ 5, 9},{10,31},{12,35},{19,37},{21,42},{26,44},
-    {28,33},{35,34},{37,36},{42,40},{44,39},{ 1,43},{ 2,45},{ 4,46},{ 8,17},{17,18},{18,20},{20,24},
-    {24,19},{ 6,21},{ 9,26},{22,28},{25,23},{32,27},{33,29},{34,30},{36,22},{40,25},{38,38},{41,41}
-  }
-};
-
-//! for the linfo_levrun_inter routine
-static const uint8_t NTAB1[4][8][2] = {
-  {{1,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
-  {{1,1},{1,2},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
-  {{2,0},{1,3},{1,4},{1,5},{0,0},{0,0},{0,0},{0,0}},
-  {{3,0},{2,1},{2,2},{1,6},{1,7},{1,8},{1,9},{4,0}},
-};
-
-static const uint8_t LEVRUN1[16]= {
-  4,2,2,1,1,1,1,1,1,1,0,0,0,0,0,0,
-};
-
-
-static const uint8_t NTAB2[4][8][2] = {
-  {{1,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
-  {{1,1},{2,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}},
-  {{1,2},{3,0},{4,0},{5,0},{0,0},{0,0},{0,0},{0,0}},
-  {{1,3},{1,4},{2,1},{3,1},{6,0},{7,0},{8,0},{9,0}},
-};
-
-//! for the linfo_levrun__c2x2 routine
-static const uint8_t LEVRUN3[4] = {
-  2,1,0,0
-};
-
-static const uint8_t NTAB3[2][2][2] = {
-  {{1,0},{0,0}},
-  {{2,0},{1,1}},
-};
-
 extern int read_se_v (char *tracestring, Bitstream *bitstream, int *used_bits);
 extern int read_ue_v (char *tracestring, Bitstream *bitstream, int *used_bits);
 extern bool read_u_1 (char *tracestring, Bitstream *bitstream, int *used_bits);
@@ -3613,3 +3064,4 @@ extern int more_rbsp_data (uint8_t buffer[],int totbitoffset,int bytecount);
 
 void init_time(void);
 int WriteOneFrame(DecodedPicList *pDecPic, int hFileOutput0, int hFileOutput1, int bOutputAllFrames);
+
