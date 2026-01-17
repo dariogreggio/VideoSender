@@ -720,8 +720,8 @@ typedef struct coding_par {
   imgpel ***imgUV_ref;
   Macroblock *mb_data;               //!< array containing all MBs of a whole frame
   Macroblock *mb_data_JV[MAX_PLANE]; //!< mb_data to be used for 4:4:4 independent mode
-  char  *intra_block;
-  char  *intra_block_JV[MAX_PLANE];
+  int8_t *intra_block;
+  int8_t *intra_block_JV[MAX_PLANE];
   BlockPos *PicPos;  
   uint8_t **ipredmode;                  //!< prediction type [90][74]
   uint8_t **ipredmode_JV[MAX_PLANE];
@@ -1019,7 +1019,7 @@ typedef struct slice {
   struct storable_picture *dec_picture;
   int **siblock;
   uint8_t **ipredmode;
-  char  *intra_block;
+  int8_t *intra_block;
   char  chroma_vector_adjustment[6][32];
   void (*read_CBP_and_coeffs_from_NAL) (Macroblock *currMB);
   int  (*decode_one_component     )    (Macroblock *currMB, ColorPlane curr_plane, imgpel **currImg, struct storable_picture *dec_picture);
@@ -1173,8 +1173,8 @@ typedef struct video_par {
   int iNumOfSlicesAllocated;
   int iNumOfSlicesDecoded;
   Slice **ppSliceList;
-  char  *intra_block;
-  char  *intra_block_JV[MAX_PLANE];
+  int8_t *intra_block;
+  int8_t *intra_block_JV[MAX_PLANE];
   //int qp;                                     //!< quant for the current frame
 
   //int sp_switch;                              //!< 1 for switching sp, 0 for normal sp  
