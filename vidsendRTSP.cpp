@@ -500,6 +500,7 @@ int CRTSPClientSocket::ReadHeader(char *buf,DWORD len,WORD http_tunnel_port,WORD
       return 0;
       }
     }
+	return -1;
 	}
 
 int CRTSPClientSocket::ReadData(char *buf,DWORD len,WORD timeout) {
@@ -2035,7 +2036,7 @@ BYTE *CRTSPClientSocket::GetMediaData(CString media_type, BYTE *buf, size_t *siz
 	// if(it->second->MediaType == "audio") return GetAudioData(it->second, buf, size, max_size);
 	}
 
-BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *size, size_t max_size) {
+BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *size, size_t max_size, uint32_t *timestamp) {
 //	bool IgnoreCase = true;
 //	MyRegex Regex;
 	map<CString, MediaSession *>::iterator it;
@@ -2061,6 +2062,8 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 	do {
 		if(!it->second->GetMediaPacket(mybuf,&size2))
 			break;
+		if(p-buf+size2 > max_size /*-12*/)
+			break;
 		pack=(struct RTPHeader*)&mybuf;
 		NAL=mybuf[12] & 0xe0 /*fua->F fua->NRI*/ | fua->h_type;
 		switch(fua->i_type) {		// https://stackoverflow.com/questions/11543839/h-264-conversion-with-ffmpeg-from-a-rtp-stream
@@ -2073,13 +2076,14 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 			case H264TypeInterfaceFU_A::_FU_B_ID /*29*/: //video fragment
 				buf[3]=0x01;
 				break;
-			case 1: //video fragment (a seguire?) o corto (1 datagram
+			case H264TypeInterfaceFU_A::_SLICE: //(video fragment (a seguire?) o corto (1 datagram
 				buf[3]=0x01;
 				break;
 			default: //?
 				buf[3]=0x01;
 				break;
 			}
+		*timestamp=htonl(*(uint32_t*)&mybuf[4]);
 		switch(fua->i_type) {
 			case H264TypeInterfaceFU_A::_FU_A_ID:	//  video 
 				if(fua->S) {			// se il primo del gruppo...
@@ -2092,7 +2096,7 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 					p+=size2-14;
 					}
 				break;
-			case 1:	//  video 
+			case H264TypeInterfaceFU_A::_SLICE:	//  video 
 				*p=0x61 /*NAL ma verrebbe 0x60 e non va bene... */;		//0x61 mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
 				memcpy(p+1,mybuf  +13,size2-13);		// salto header
 				p+=size2-12;
@@ -5475,7 +5479,7 @@ int RTPTCPTransmitter::Poll() {
 	for(size_t i=0; i < errSockets.size(); i++)
 		OnReceiveError(errSockets[i]);
 
-//	return status; è in memorymanager??
+	return status; //è in memorymanager??
 	}
 
 int RTPTCPTransmitter::SendRTPData(const void *data,size_t len)	{
@@ -8540,7 +8544,7 @@ int RTPUDPv4Transmitter::GetLocalHostName(BYTE *buffer,size_t *bufferlength) {
 		if(!hostnames.IsEmpty()) {	// try to select the most appropriate hostname
 		
 //			hostnames.Sort();
-#pragma warning {FARE SORT!
+#pragma message ("FARE SORT!")
 //https://groups.google.com/g/microsoft.public.vc.mfc/c/gE7B8tgitwc
 //http://msgroups.net/vc.mfc/sorting-a-clist/570968
 
@@ -9717,7 +9721,7 @@ uint8_t *NALUTypeBase::PrefixXPS(uint8_t *buf, size_t *size, CStringEx xps) {
 	return buf;
 	}
 
-const string NALUTypeBase_H264::ENCODE_TYPE = "H264";
+const CString NALUTypeBase_H264::ENCODE_TYPE = "H264";
 
 H264TypeInterface H264TypeInterface_H264Obj;
 H264TypeInterfaceSTAP_A 	H264TypeInterfaceSTAP_AObj;
@@ -9739,7 +9743,6 @@ H264TypeInterface *H264TypeInterface::NalUnitType_H264[PACKETIZATION_MODE_NUM_H2
 		NULL,                      NULL,                             NULL,                             NULL, 
 		NULL,                      NULL,                             NULL,                             NULL
 	},
-
 	/* Packetization Mode: Non-interleaved */ 
 	{
 		NULL,                      &H264TypeInterface_H264Obj,            &H264TypeInterface_H264Obj,            &H264TypeInterface_H264Obj, 
@@ -9751,7 +9754,6 @@ H264TypeInterface *H264TypeInterface::NalUnitType_H264[PACKETIZATION_MODE_NUM_H2
 		&H264TypeInterfaceSTAP_AObj,                NULL,                             NULL,                             NULL, 
 		&H264TypeInterfaceFU_AObj,                  NULL,                             NULL,                             NULL
 	},
-
 	/* Packetization Mode: Interleaved */ 
 	{
 		NULL,                      NULL,                             NULL,                             NULL, 
@@ -9767,11 +9769,11 @@ H264TypeInterface *H264TypeInterface::NalUnitType_H264[PACKETIZATION_MODE_NUM_H2
 
 NALUTypeBase_H264::NALUTypeBase_H264():NALUTypeBase() {
 
-    prefixParameterOnce = true;
-    Packetization = PACKET_MODE_SINGAL_NAL;
-    NALUType = NULL;
-    SPS.assign("");
-    PPS.assign("");
+  prefixParameterOnce = true;
+  Packetization = PACKET_MODE_SINGAL_NAL;
+  NALUType = NULL;
+  SPS.Empty();
+  PPS.Empty();
 	}
 
 
@@ -9882,7 +9884,8 @@ bool NALUTypeBase_H264::NeedPrefixParameterOnce()  {
 	}
 
 int NALUTypeBase_H264::ParseParaFromSDP(SDPMediaInfo &sdpMediaInfo) {
-  map<int, map<SDP_ATTR_ENUM, string> >::iterator it ; //= sdpMediaInfo.fmtMap.begin();
+  map<int, map<SDP_ATTR_ENUM, CString> >::iterator it = sdpMediaInfo.fmtMap.begin();
+		//sdpMediaInfo.fmtMap.begin();
 
   if(it->second.find(ATTR_SPS) != it->second.end()) {
     SetSPS(it->second[ATTR_SPS]);

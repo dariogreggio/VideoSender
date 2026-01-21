@@ -1,6 +1,10 @@
 // GD/C adapted 2023-2026 da Ansersion https://www.cnblogs.com/ansersion/p/6959690.html
 
 
+#ifndef _VIDSEND_RTSP_DEFINED_H
+#define _VIDSEND_RTSP_DEFINED_H
+
+
 #include <map>
 using namespace std;
 
@@ -5119,7 +5123,7 @@ public:
 public:
 	BYTE *GetMediaData(MediaSession *media_session, BYTE *buf, size_t * size, size_t max_size);
 	BYTE *GetMediaData(CString media_type, BYTE *buf, size_t *size, size_t max_size);
-	BYTE *GetMediaFrame(CString media_type, BYTE *buf, size_t *size, size_t max_size);
+	BYTE *GetMediaFrame(CString media_type, BYTE *buf, size_t *size, size_t max_size,uint32_t *timestamp);
 
 	BYTE *GetMediaPacket(MediaSession *media_session, BYTE *buf, size_t *size);
 	BYTE *GetMediaPacket(CString media_type, BYTE *buf, size_t *size);
@@ -5262,7 +5266,7 @@ public:
 	virtual bool IsPacketThisType(const uint8_t *rtp_payload) = 0;
 	virtual size_t CopyData(uint8_t *buf, uint8_t *data, size_t size) = 0;
 	// virtual NALUTypeBase * GetNaluRtpType(int packetization, int nalu_type_id) = 0;
-	virtual std::string GetName() const { return Name; }
+	virtual CString GetName() const { return Name; }
 	virtual bool GetEndFlag() { return EndFlag; }
 	virtual bool GetStartFlag() { return StartFlag; }
   virtual uint8_t *PrefixXPS(uint8_t *buf, size_t *size, CStringEx xps);
@@ -5270,7 +5274,7 @@ public:
   virtual bool NeedPrefixParameterOnce();
   virtual int ParseParaFromSDP(SDPMediaInfo & sdpMediaInfo);
 protected:
-	std::string Name;
+	CString Name;
 	bool EndFlag;
 	bool StartFlag;
 	};
@@ -5301,7 +5305,8 @@ protected:
 /* H264TypeInterface */
 class H264TypeInterface {
 public:
-	enum {
+	enum {			// v. anche H264.h
+		_SLICE = 0x1, // decimal: 1
 		_SEI = 0x6, // decimal: 6
 		_SPS = 0x7, // decimal: 7
 		_PPS = 0x8, // decimal: 8
@@ -5409,9 +5414,9 @@ public:
 
 class NALUTypeBase_H264 : public NALUTypeBase {
 public: 
-    static const string ENCODE_TYPE;
+    static const CString ENCODE_TYPE;
 public:
-      NALUTypeBase_H264();
+  NALUTypeBase_H264();
 	virtual ~NALUTypeBase_H264() {};
 public:
 	virtual uint16_t ParseNALUHeader_F(const uint8_t *RTPPayload);
@@ -5422,7 +5427,7 @@ public:
 	virtual bool IsPacketReserved(const uint8_t *rtp_payload) {return false;}
 	virtual bool IsPacketThisType(const uint8_t *rtp_payload);
 	virtual H264TypeInterface *GetNaluRtpType(int packetization, int nalu_type_id);
-	virtual std::string GetName() const { return Name; }
+	virtual CString GetName() const { return Name; }
 	virtual bool GetEndFlag() { return EndFlag; }
 	virtual bool GetStartFlag() { return StartFlag; }
 
@@ -5438,17 +5443,17 @@ public:
 	virtual int ParsePacket(const uint8_t *RTPPayload, size_t size, bool *EndFlag);
 	virtual size_t CopyData(uint8_t *buf, uint8_t *data, size_t size);
 
-  virtual void SetSPS(const string &s) { SPS.assign(s);}
-  virtual void SetPPS(const string &s) { PPS.assign(s);}
-  virtual const string GetSPS() { return SPS;}
-  virtual const string GetPPS() { return PPS;}
+  virtual void SetSPS(const CString &s) { SPS=s;}
+  virtual void SetPPS(const CString &s) { PPS=s;}
+  virtual const CString GetSPS() { return SPS;}
+  virtual const CString GetPPS() { return PPS;}
 
   void InsertXPS() { prefixParameterOnce = true; }
   void NotInsertXPSAgain() { prefixParameterOnce = false; }
 private:
   bool prefixParameterOnce;
-  string SPS;
-  string PPS;
+  CString SPS;
+  CString PPS;
   int Packetization;
 public:
   H264TypeInterface * NALUType;
@@ -5475,44 +5480,44 @@ public:
 	static H265TypeInterface * NalUnitType_H265[PACKETIZATION_MODE_NUM_H265][NAL_UNIT_TYPE_NUM_H265];
   virtual ~H265TypeInterface() {};
   virtual uint16_t ParseNALUHeader_F(const uint8_t *rtp_payload) {
-      if(!rtp_payload) return 0;
-      const uint16_t NALUHeader_F_Mask = 0x8000; // binary: 1000_0000_0000_0000
-      uint16_t HeaderTmp = 0;
-      HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
-      HeaderTmp = HeaderTmp & NALUHeader_F_Mask;
-      return HeaderTmp;
-  }
+    if(!rtp_payload) return 0;
+    const uint16_t NALUHeader_F_Mask = 0x8000; // binary: 1000_0000_0000_0000
+    uint16_t HeaderTmp = 0;
+    HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
+    HeaderTmp = HeaderTmp & NALUHeader_F_Mask;
+    return HeaderTmp;
+	  }
   virtual uint16_t ParseNALUHeader_NRI(const uint8_t *rtp_payload) {
-      if(!rtp_payload) return 0;
-      uint16_t NALUHeader_NRI_Mask = 0x0060; // binary: 0110_0000
-      return (rtp_payload[0] & NALUHeader_NRI_Mask);
+    if(!rtp_payload) return 0;
+    uint16_t NALUHeader_NRI_Mask = 0x0060; // binary: 0110_0000
+    return (rtp_payload[0] & NALUHeader_NRI_Mask);
     }
 
   virtual uint16_t ParseNALUHeader_Type(const uint8_t *rtp_payload) {
-      if(!rtp_payload) return 0;
-      const uint16_t NALUHeader_Type_Mask = 0x7E00; // binary: 0111_1110_0000_0000
-      uint16_t HeaderTmp = 0;
-      HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
-      HeaderTmp = HeaderTmp & NALUHeader_Type_Mask;
-      return HeaderTmp;
+    if(!rtp_payload) return 0;
+    const uint16_t NALUHeader_Type_Mask = 0x7E00; // binary: 0111_1110_0000_0000
+    uint16_t HeaderTmp = 0;
+    HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
+    HeaderTmp = HeaderTmp & NALUHeader_Type_Mask;
+    return HeaderTmp;
     }
 
   virtual uint16_t ParseNALUHeader_Layer_ID(const uint8_t *rtp_payload) {
-      if(!rtp_payload) return 0;
-      const uint16_t NALUHeader_Layer_ID_Mask = 0x01F8; // binary: 0000_0001_1111_1000
-      uint16_t HeaderTmp = 0;
-      HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
-      HeaderTmp = HeaderTmp & NALUHeader_Layer_ID_Mask;
-      return HeaderTmp;
+    if(!rtp_payload) return 0;
+    const uint16_t NALUHeader_Layer_ID_Mask = 0x01F8; // binary: 0000_0001_1111_1000
+    uint16_t HeaderTmp = 0;
+    HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
+    HeaderTmp = HeaderTmp & NALUHeader_Layer_ID_Mask;
+    return HeaderTmp;
     }
 
   virtual uint16_t ParseNALUHeader_Temp_ID_Plus_1(const uint8_t *rtp_payload) {
-      if(!rtp_payload) return 0;
-      const uint16_t NALUHeader_Temp_ID_Mask = 0x0007; // binary: 0000_0000_0000_0111
-      uint16_t HeaderTmp = 0;
-      HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
-      HeaderTmp = HeaderTmp & NALUHeader_Temp_ID_Mask;
-      return HeaderTmp;
+    if(!rtp_payload) return 0;
+    const uint16_t NALUHeader_Temp_ID_Mask = 0x0007; // binary: 0000_0000_0000_0111
+    uint16_t HeaderTmp = 0;
+    HeaderTmp = ((rtp_payload[0] << 8) | rtp_payload[1]);
+    HeaderTmp = HeaderTmp & NALUHeader_Temp_ID_Mask;
+    return HeaderTmp;
     }
 
   virtual bool IsPacketStart(const uint8_t *rtp_payload) {return true;}
@@ -5538,7 +5543,7 @@ public:
 	virtual bool IsPacketEnd(const uint8_t *rtp_payload) { return true; }
 	virtual bool IsPacketThisType(const uint8_t *rtp_payload);
 	H265TypeInterface * GetNaluRtpType(int packetization, int nalu_type_id);
-	virtual std::string GetName() const { return Name; }
+	virtual CString GetName() const { return Name; }
 	virtual bool GetEndFlag() { return EndFlag; }
 	virtual bool GetStartFlag() { return StartFlag; }
 public:
@@ -5606,3 +5611,4 @@ public:
 	bool IsPacketEnd(const uint8_t *rtp_payload);
 	};
 
+#endif
