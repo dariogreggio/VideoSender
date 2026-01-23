@@ -13,11 +13,14 @@
 #include <assert.h>
 #include <time.h>
 #include <sys/timeb.h>
+#include <setjmp.h>
 
 #include "vidsendRTSP.h"
 
 //#define INT64T int64_t
 typedef int64_t INT64T;		// provato a 32bit ma non va...
+typedef uint16_t PIXEL_COORD;
+typedef int16_t BLOCK_COORD;
 
 #define JTRACE 0
 #define TIMING_DISABLE
@@ -31,7 +34,7 @@ typedef int64_t INT64T;		// provato a 32bit ma non va...
 #define PAIR_FIELDS_IN_OUTPUT     0    //!< Pair field pictures for output purposes
 #define IMGTYPE                   0    //!< Define imgpel size type. 0 implies uint8_t (cannot handle >8 bit depths) and 1 implies uint16_t
 #define ENABLE_FIELD_CTX          1    //!< Enables Field mode related context types for CABAC
-#define ENABLE_HIGH444_CTX        1    //!< Enables High 444 profile context types for CABAC. 
+#define ENABLE_HIGH444_CTX        0    //!< Enables High 444 profile context types for CABAC. 
 #define ZEROSNR                   0    //!< PSNR computation method
 #define ENABLE_OUTPUT_TONEMAPPING 1    //!< enable tone map the output if tone mapping SEI present
 #define JCOST_CALC_SCALEUP        1    //!< 1: J = (D<<LAMBDA_ACCURACY_BITS)+Lambda*R; 0: J = D + ((Lambda*R+Rounding)>>LAMBDA_ACCURACY_BITS)
@@ -40,7 +43,7 @@ typedef int64_t INT64T;		// provato a 32bit ma non va...
 #define SIMULCAST_ENABLE          0    //!< to test the decoder
 
 #define MVC_EXTENSION_ENABLE      0    //!< enable support for the Multiview High Profile
-#define ENABLE_DEC_STATS          1    //!< enable decoder statistics collection
+#define ENABLE_DEC_STATS          0    //!< enable decoder statistics collection
 
 #define MVC_INIT_VIEW_ID          -1
 #define MAX_VIEW_NUM              1024   
@@ -71,7 +74,7 @@ typedef int64_t INT64T;		// provato a 32bit ma non va...
 #if IMGTYPE == 0
 typedef uint8_t   imgpel;           //!< pixel type
 typedef uint16_t distpel;          //!< distortion type (for pixels)
-typedef int32_t  distblk;          //!< distortion type (for Macroblock)
+typedef int16_t  distblk;          //!< distortion type (for Macroblock)
 typedef int32_t  transpel;         //!< transformed coefficient type
 #else
 typedef uint16_t imgpel;
@@ -137,7 +140,7 @@ typedef enum {
   BGR        =  3,     //!< BGR
 	RGB					= 4,			// RGB
   V210       =  5      //!< Video Clarity 422 format (10 bits)
-} PixelFormat;
+	} PixelFormat;
 
 #define MAXIMUMVALUEOFcpb_cnt   32
 typedef struct {
@@ -146,18 +149,18 @@ typedef struct {
   unsigned int cpb_size_scale;                                   // u(4)
   unsigned int bit_rate_value_minus1 [MAXIMUMVALUEOFcpb_cnt];    // ue(v)
   unsigned int cpb_size_value_minus1 [MAXIMUMVALUEOFcpb_cnt];    // ue(v)
-  unsigned int cbr_flag              [MAXIMUMVALUEOFcpb_cnt];    // u(1)
+  bool  cbr_flag              [MAXIMUMVALUEOFcpb_cnt];    // u(1)
   unsigned int initial_cpb_removal_delay_length_minus1;          // u(5)
   unsigned int cpb_removal_delay_length_minus1;                  // u(5)
   unsigned int dpb_output_delay_length_minus1;                   // u(5)
   unsigned int time_offset_length;                               // u(5)
-} hrd_parameters_t;
+	} hrd_parameters_t;
 
 typedef struct {
   bool      aspect_ratio_info_present_flag;                   // u(1)
   uint8_t aspect_ratio_idc;                                 // u(8)
-  uint16_t sar_width;                                      // u(16)
-  uint16_t sar_height;                                     // u(16)
+  PIXEL_COORD sar_width;                                      // u(16)
+  PIXEL_COORD sar_height;                                     // u(16)
   bool      overscan_info_present_flag;                       // u(1)
   bool      overscan_appropriate_flag;                        // u(1)
   bool      video_signal_type_present_flag;                   // u(1)
@@ -200,10 +203,10 @@ typedef struct {
   bool   entropy_coding_mode_flag;                            // u(1)
   bool   transform_8x8_mode_flag;                             // u(1)
 
-  bool   pic_scaling_matrix_present_flag;                     // u(1)
-  uint8_t   pic_scaling_list_present_flag[12];                   // u(1)
-  int       ScalingList4x4[6][16];                               // se(v)
-  int       ScalingList8x8[6][64];                               // se(v)
+  bool  pic_scaling_matrix_present_flag;                     // u(1)
+  bool  pic_scaling_list_present_flag[12];                   // u(1)
+  int16_t   ScalingList4x4[6][16];                               // se(v)
+  int16_t   ScalingList8x8[6][64];                               // se(v)
   bool   UseDefaultScalingMatrix4x4Flag[6];
   bool   UseDefaultScalingMatrix8x8Flag[6];
 
@@ -227,8 +230,8 @@ typedef struct {
   int num_ref_idx_l1_default_active_minus1;                     // ue(v)
   bool    weighted_pred_flag;                               // u(1)
   uint8_t weighted_bipred_idc;                              // u(2)
-  int       pic_init_qp_minus26;                              // se(v)
-  int       pic_init_qs_minus26;                              // se(v)
+  int8_t    pic_init_qp_minus26;                              // se(v)
+  int8_t    pic_init_qs_minus26;                              // se(v)
   int       chroma_qp_index_offset;                           // se(v)
 
   int       cb_qp_index_offset;                               // se(v)
@@ -239,7 +242,7 @@ typedef struct {
   bool   constrained_intra_pred_flag;                      // u(1)
   bool   redundant_pic_cnt_present_flag;                   // u(1)
   bool   vui_pic_parameters_flag;                          // u(1)
-} pic_parameter_set_rbsp_t;
+	} pic_parameter_set_rbsp_t;
 
 
 #define MAXnum_ref_frames_in_pic_order_cnt_cycle  256
@@ -259,10 +262,10 @@ typedef struct {
   unsigned  int seq_parameter_set_id;                             // ue(v)
   ColorFormat chroma_format_idc;                                // ue(v)
 
-  bool   seq_scaling_matrix_present_flag;                   // u(1)
-  uint8_t seq_scaling_list_present_flag[12];                 // u(1)
-  int       ScalingList4x4[6][16];                             // se(v)
-  int       ScalingList8x8[6][64];                             // se(v)
+  bool seq_scaling_matrix_present_flag;                   // u(1)
+  bool seq_scaling_list_present_flag[12];                 // u(1)
+  int16_t ScalingList4x4[6][16];                             // se(v)
+  int16_t ScalingList8x8[6][64];                             // se(v)
   bool   UseDefaultScalingMatrix4x4Flag[6];
   bool   UseDefaultScalingMatrix8x8Flag[6];
 
@@ -281,27 +284,27 @@ typedef struct {
   int   offset_for_ref_frame[MAXnum_ref_frames_in_pic_order_cnt_cycle];   // se(v)
   unsigned int num_ref_frames;                                   // ue(v)
   bool   gaps_in_frame_num_value_allowed_flag;             // u(1)
-  uint16_t pic_width_in_mbs_minus1;                          // ue(v)
-  uint16_t pic_height_in_map_units_minus1;                   // ue(v)
+  PIXEL_COORD pic_width_in_mbs_minus1;                          // ue(v)
+  PIXEL_COORD pic_height_in_map_units_minus1;                   // ue(v)
   bool   frame_mbs_only_flag;                              // u(1)
   // if( !frame_mbs_only_flag )
   bool   mb_adaptive_frame_field_flag;                   // u(1)
   bool   direct_8x8_inference_flag;                        // u(1)
   bool   frame_cropping_flag;                              // u(1)
-  uint16_t frame_crop_left_offset;                // ue(v)
-  uint16_t frame_crop_right_offset;               // ue(v)
-  uint16_t frame_crop_top_offset;                 // ue(v)
-  uint16_t frame_crop_bottom_offset;              // ue(v)
+  PIXEL_COORD frame_crop_left_offset;                // ue(v)
+  PIXEL_COORD frame_crop_right_offset;               // ue(v)
+  PIXEL_COORD frame_crop_top_offset;                 // ue(v)
+  PIXEL_COORD frame_crop_bottom_offset;              // ue(v)
   bool   vui_parameters_present_flag;                      // u(1)
   vui_seq_parameters_t vui_seq_parameters;                  // vui_seq_parameters_t
   bool separate_colour_plane_flag;                       // u(1)
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int max_dec_frame_buffering;
 #endif
   bool lossless_qpprime_flag;
-} seq_parameter_set_rbsp_t;
+	} seq_parameter_set_rbsp_t;
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 typedef struct mvcvui_tag {
   int num_ops_minus1;
   uint8_t *temporal_id;
@@ -386,16 +389,16 @@ typedef struct annex_b_struct {
 #define MAX_PLANE       3
 
 typedef struct {
-  int16_t x;
-  int16_t y;
-} BlockPos;
+  BLOCK_COORD x;
+  BLOCK_COORD y;
+	} BlockPos;
 
 //! cbp structure
 typedef struct cbp_s {
   INT64T         blk     ;
   INT64T         bits    ;
   INT64T         bits_8x8;
-} CBPStructure;
+	} CBPStructure;
 
 
 /***********************************************************************
@@ -551,7 +554,7 @@ typedef enum {
 
 
 typedef enum {
-  SSE              = 0,
+  _SSE              = 0,
   SSE_RGB          = 1,  
   PSNR             = 2,
   PSNR_RGB         = 3,
@@ -579,11 +582,11 @@ typedef enum {
 typedef struct pix_pos {
   int   available;
   int   mb_addr;
-  int16_t x;
-  int16_t y;
-  int16_t pos_x;
-  int16_t pos_y;
-} PixelPos;
+  BLOCK_COORD x;
+  BLOCK_COORD y;
+  BLOCK_COORD pos_x;
+  BLOCK_COORD pos_y;
+	} PixelPos;
 
 //! struct to characterize the state of the arithmetic coding engine
 typedef struct {
@@ -598,8 +601,8 @@ typedef DecodingEnvironment *DecodingEnvironmentPtr;
 
 // Motion Vector structure
 typedef struct {
-  int16_t mv_x;
-  int16_t mv_y;
+  BLOCK_COORD mv_x;
+  BLOCK_COORD mv_y;
 	} MotionVector;
 
 static const MotionVector zero_mv = {0, 0};
@@ -634,6 +637,47 @@ typedef enum {
   MAXMODE      = 15
 	} MBModeTypes;
 
+// CAVLC block types
+typedef enum {
+  LUMA              =  0,
+  LUMA_INTRA16x16DC =  1,
+  LUMA_INTRA16x16AC =  2,
+  CB                =  3,
+  CB_INTRA16x16DC   =  4,
+  CB_INTRA16x16AC   =  5,
+  CR_DC     =   6,			//GD
+  CR_AC     =   7,			//GD
+  CR                =  8,
+  CR_INTRA16x16DC   =  9,
+  CR_INTRA16x16AC   = 10
+} CAVLCBlockTypes;
+
+// CABAC block types
+typedef enum {
+  LUMA_16DC     =   0,
+  LUMA_16AC     =   1,
+  LUMA_8x8      =   2,
+  LUMA_8x4      =   3,
+  LUMA_4x8      =   4,
+  LUMA_4x4      =   5,
+  CHROMA_DC     =   6,
+  CHROMA_AC     =   7,
+  CHROMA_DC_2x4 =   8,
+  CHROMA_DC_4x4 =   9,
+  CB_16DC       =  10,
+  CB_16AC       =  11,
+  CB_8x8        =  12,
+  CB_8x4        =  13,
+  CB_4x8        =  14,
+  CB_4x4        =  15,
+  CR_16DC       =  16,
+  CR_16AC       =  17,
+  CR_8x8        =  18,
+  CR_8x4        =  19,
+  CR_4x8        =  20,
+  CR_4x4        =  21
+} CABACBlockTypes;
+
 //! Macroblock
 typedef struct macroblock_dec {
   struct slice       *p_Slice;                    //!< pointer to the current slice
@@ -646,17 +690,17 @@ typedef struct macroblock_dec {
   int block_x;
   int block_y;
   int block_y_aff;
-  int pix_x;
-  int pix_y;
-  int pix_c_x;
-  int pix_c_y;
+  BLOCK_COORD pix_x;
+  BLOCK_COORD pix_y;
+  BLOCK_COORD pix_c_x;
+  BLOCK_COORD pix_c_y;
 
-  int subblock_x;
-  int subblock_y;
+  BLOCK_COORD subblock_x;
+  BLOCK_COORD subblock_y;
 
-  int        qp;                    //!< QP luma
-  int        qpc[2];                //!< QP chroma
-  int        qp_scaled[MAX_PLANE];  //!< QP scaled for all comps.
+  int8_t     qp;                    //!< QP luma
+  int8_t     qpc[2];                //!< QP chroma
+  int8_t     qp_scaled[MAX_PLANE];  //!< QP scaled for all comps.
   bool       is_lossless;
   bool       is_intra_block;
   bool       is_v_block;
@@ -687,7 +731,7 @@ typedef struct macroblock_dec {
   int8_t        ipmode_DPCM;
   int8_t        c_ipred_mode;       //!< chroma intra prediction mode
   bool          skip_flag;
-  int16_t       DFDisableIdc;
+  int8_t        DFDisableIdc;
   int16_t       DFAlphaC0Offset;
   int16_t       DFBetaOffset;
 
@@ -703,36 +747,42 @@ typedef struct macroblock_dec {
   bool luma_transform_size_8x8_flag;
   bool NoMbPartLessThan8x8Flag;
 
-  void (*itrans_4x4)(struct macroblock_dec *currMB, ColorPlane pl, int ioff, int joff);
-  void (*itrans_8x8)(struct macroblock_dec *currMB, ColorPlane pl, int ioff, int joff);
+  void (*itrans_4x4)(struct macroblock_dec *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+  void (*itrans_8x8)(struct macroblock_dec *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 
   void (*GetMVPredictor) (struct macroblock_dec *currMB, PixelPos *block, 
-    MotionVector *pmv, int16_t ref_frame, struct pic_motion_params **mv_info, int list, int mb_x, int mb_y, int blockshape_x, int blockshape_y);
+    MotionVector *pmv, int16_t ref_frame, struct pic_motion_params **mv_info, int list, BLOCK_COORD mb_x, BLOCK_COORD mb_y, 
+		BLOCK_COORD blockshape_x, BLOCK_COORD blockshape_y);
 
-  int  (*read_and_store_CBP_block_bit)  (struct macroblock_dec *currMB, DecodingEnvironmentPtr  dep_dp, int8_t type);
-  int8_t (*readRefPictureIdx)           (struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, struct datapartition_dec *dP, int8_t b8mode, int list);
+  int (*read_and_store_CBP_block_bit)(struct macroblock_dec *currMB, 
+		DecodingEnvironmentPtr dep_dp, CABACBlockTypes type);
+  int8_t (*readRefPictureIdx)(struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, 
+		struct datapartition_dec *dP, int8_t b8mode, int list);
 
-  void (*read_comp_coeff_4x4_CABAC) (struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, ColorPlane pl, int (*InvLevelScale4x4)[4], int qp_per, int cbp);
-  void (*read_comp_coeff_8x8_CABAC) (struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, ColorPlane pl);
+  void (*read_comp_coeff_4x4_CABAC)(struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, ColorPlane pl, 
+		int16_t(*InvLevelScale4x4)[4], int8_t qp_per, int cbp);
+  void (*read_comp_coeff_8x8_CABAC)(struct macroblock_dec *currMB, struct syntaxelement_dec *currSE, ColorPlane pl);
 
-  void (*read_comp_coeff_4x4_CAVLC) (struct macroblock_dec *currMB, ColorPlane pl, int (*InvLevelScale4x4)[4], int qp_per, int cbp, uint8_t **nzcoeff);
-  void (*read_comp_coeff_8x8_CAVLC) (struct macroblock_dec *currMB, ColorPlane pl, int (*InvLevelScale8x8)[8], int qp_per, int cbp, uint8_t **nzcoeff);
+  void (*read_comp_coeff_4x4_CAVLC)(struct macroblock_dec *currMB, ColorPlane pl, 
+		int16_t(*InvLevelScale4x4)[4], int8_t qp_per, int cbp, uint8_t **nzcoeff);
+  void (*read_comp_coeff_8x8_CAVLC)(struct macroblock_dec *currMB, ColorPlane pl, 
+		int16_t(*InvLevelScale8x8)[8], int8_t qp_per, int cbp, uint8_t **nzcoeff);
 	} Macroblock;
 
 typedef struct coding_par {
   uint8_t layer_id;
   uint8_t profile_idc;
-  uint16_t width;
-  uint16_t height;
-  uint16_t width_cr;                               //!< width chroma  
-  uint16_t height_cr;                              //!< height chroma
+  PIXEL_COORD width;
+  PIXEL_COORD height;
+  PIXEL_COORD width_cr;                               //!< width chroma  
+  PIXEL_COORD height_cr;                              //!< height chroma
 
   uint8_t pic_unit_bitsize_on_disk;
   int8_t bitdepth_luma;
   int8_t bitdepth_chroma;
-  int bitdepth_scale[2];
-  int bitdepth_luma_qp_scale;
-  int bitdepth_chroma_qp_scale;
+  int8_t bitdepth_scale[2];
+  int8_t bitdepth_luma_qp_scale;
+  int8_t bitdepth_chroma_qp_scale;
   unsigned int dc_pred_value_comp[MAX_PLANE]; //!< component value for DC prediction (depends on component pel bit depth)
   int max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
 
@@ -746,22 +796,22 @@ typedef struct coding_par {
   int mb_cr_size_x_blk;
   int mb_cr_size_y_blk;
   int mb_cr_size;
-  uint16_t mb_size[3][2];                         //!< component macroblock dimensions
-  uint16_t mb_size_blk[3][2];                     //!< component macroblock dimensions 
-  uint16_t mb_size_shift[3][2];
+  uint32_t mb_size[3][2];                         //!< component macroblock dimensions
+  uint32_t mb_size_blk[3][2];                     //!< component macroblock dimensions 
+  uint32_t mb_size_shift[3][2];
   
   int max_vmv_r;                             //!< maximum vertical motion vector range in luma quarter frame pixel units for the current level_idc
   bool separate_colour_plane_flag;
   ColorFormat ChromaArrayType;
   int max_frame_num;
-  uint16_t PicWidthInMbs;
-  uint16_t PicHeightInMapUnits;
-  uint16_t FrameHeightInMbs;
-  uint16_t FrameSizeInMbs;
-  uint16_t iLumaPadX;
-  uint16_t iLumaPadY;
-  uint16_t iChromaPadX;
-  uint16_t iChromaPadY;
+  PIXEL_COORD PicWidthInMbs;
+  PIXEL_COORD PicHeightInMapUnits;
+  PIXEL_COORD FrameHeightInMbs;
+  PIXEL_COORD FrameSizeInMbs;
+  PIXEL_COORD iLumaPadX;
+  PIXEL_COORD iLumaPadY;
+  PIXEL_COORD iChromaPadX;
+  PIXEL_COORD iChromaPadY;
 
   int subpel_x;
   int subpel_y;
@@ -771,8 +821,8 @@ typedef struct coding_par {
   unsigned int oldFrameSizeInMbs;
 
   //padding info;
-  void (*img2buf)(imgpel** imgX, uint8_t* buf, uint16_t size_x, uint16_t size_y, uint8_t symbol_size_in_bytes, 
-		uint16_t crop_left, uint16_t crop_right, uint16_t crop_top, uint16_t crop_bottom, uint16_t iOutStride);
+  void (*img2buf)(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, uint8_t symbol_size_in_bytes, 
+		PIXEL_COORD crop_left, PIXEL_COORD crop_right, PIXEL_COORD crop_top, PIXEL_COORD crop_bottom, PIXEL_COORD iOutStride);
   bool rgb_output;
 
   imgpel **imgY_ref;                              //!< reference frame find snr
@@ -787,8 +837,8 @@ typedef struct coding_par {
   uint8_t ****nz_coeff;
   int **siblock;
   int **siblock_JV[MAX_PLANE];
-  int *qp_per_matrix;
-  int *qp_rem_matrix;
+  int8_t *qp_per_matrix;
+  int8_t *qp_rem_matrix;
 	} CodingParameters;
 
 typedef struct layer_par {
@@ -869,7 +919,7 @@ typedef struct {
   BiContextType  abs_contexts [NUM_BLOCK_TYPES][NUM_ABS_CTX];
 } TextureInfoContexts;
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 typedef struct nalunitheadermvcext_tag {
    bool non_idr_flag;
    unsigned int priority_id;
@@ -886,6 +936,13 @@ typedef struct wp_params {
   int16_t weight[3];
   int16_t offset[3];
 	} WPParams;
+
+typedef enum {
+  EOS = 1,    //!< End Of Sequence
+  SOP = 2,    //!< Start Of Picture
+  SOS = 3,     //!< Start Of Slice
+  SOS_CONT = 4
+	} HEADER_TYPE;
 
 //! Slice
 typedef struct slice {
@@ -953,12 +1010,12 @@ typedef struct slice {
   //int                 num_ref_idx_l1_active;             //!< number of available list 1 references
 
   bool                ei_flag;       //!< 0 if the partArr[0] contains valid information
-  int                 qp;
+  int8_t              qp;
   int                 slice_qp_delta;
-  int                 qs;
+  int8_t              qs;
   int                 slice_qs_delta;
   SliceType           slice_type;    //!< slice type
-  int                 model_number;  //!< cabac model number
+  int8_t              model_number;  //!< cabac model number
   unsigned int        frame_num;   //frame_num for this frame
   bool								field_pic_flag;
   bool								bottom_field_flag;
@@ -966,15 +1023,15 @@ typedef struct slice {
   int                 start_mb_nr;   //!< MUST be set by NAL even in case of ei_flag == 1
   int                 end_mb_nr_plus1;
   int                 max_part_nr;
-  int                 dp_mode;       //!< data partitioning mode
-  uint8_t             current_header;
+  int8_t              dp_mode;       //!< data partitioning mode
+  HEADER_TYPE         current_header;
   int                 next_header;
   int                 last_dquant;
 
   //slice header information;
   uint8_t colour_plane_id;               //!< colour_plane_id of the current coded slice
   int redundant_pic_cnt;
-  int sp_switch;                              //!< 1 for switching sp, 0 for normal sp  
+  int8_t sp_switch;                              //!< 1 for switching sp, 0 for normal sp  
   int slice_group_change_cycle;
   int redundant_slice_ref_idx;     //!< reference index of redundant slice
   bool no_output_of_prior_pics_flag;
@@ -992,12 +1049,12 @@ typedef struct slice {
 
   int mvscale[6][MAX_REFERENCE_PICTURES];
 
-  int                 ref_pic_list_reordering_flag[2];
+  bool                ref_pic_list_reordering_flag[2];
   int                 *modification_of_pic_nums_idc[2];
   int                 *abs_diff_pic_num_minus1[2];
   int                 *long_term_pic_idx[2];
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int                 *abs_diff_view_idx_minus1[2];
 
   int                 view_id;
@@ -1006,10 +1063,10 @@ typedef struct slice {
 
   NALUnitHeaderMVCExt_t NaluHeaderMVCExt;
 #endif
-  uint8_t               layer_id;
-  int16_t               DFDisableIdc;     //!< Disable deblocking filter on slice
-  int16_t               DFAlphaC0Offset;  //!< Alpha and C0 offset for filtering slice
-  int16_t               DFBetaOffset;     //!< Beta offset for filtering slice
+  uint8_t             layer_id;
+  int8_t              DFDisableIdc;     //!< Disable deblocking filter on slice
+  int16_t             DFAlphaC0Offset;  //!< Alpha and C0 offset for filtering slice
+  int16_t             DFBetaOffset;     //!< Beta offset for filtering slice
 
   int                 pic_parameter_set_id;   //!<the ID of the picture parameter set the slice is reffering to
 
@@ -1033,12 +1090,12 @@ typedef struct slice {
   imgpel **tmp_block_l3;  
 
   // Scaling matrix info
-  int  InvLevelScale4x4_Intra[3][6][4][4];
-  int  InvLevelScale4x4_Inter[3][6][4][4];
-  int  InvLevelScale8x8_Intra[3][6][8][8];
-  int  InvLevelScale8x8_Inter[3][6][8][8];
+  int16_t InvLevelScale4x4_Intra[3][6][4][4];
+  int16_t InvLevelScale4x4_Inter[3][6][4][4];
+  int16_t InvLevelScale8x8_Intra[3][6][8][8];
+  int16_t InvLevelScale8x8_Inter[3][6][8][8];
 
-  const int  *qmatrix[12];
+  const int16_t *qmatrix[12];
 
   // Cabac
   int  coeff[64]; // one more for EOB
@@ -1047,8 +1104,8 @@ typedef struct slice {
 
 
   //weighted prediction
-  uint16_t weighted_pred_flag;
-  uint16_t weighted_bipred_idc;
+  bool weighted_pred_flag;
+  uint8_t weighted_bipred_idc;
 
   uint16_t luma_log2_weight_denom;
   uint16_t chroma_log2_weight_denom;
@@ -1061,7 +1118,7 @@ typedef struct slice {
   int16_t wp_round_luma;
   int16_t wp_round_chroma;
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int listinterviewidx0;
   int listinterviewidx1;
   struct frame_store **fs_listinterview0;
@@ -1070,7 +1127,7 @@ typedef struct slice {
 
   // for signalling to the neighbour logic that this is a deblocker call
   //uint8_t mixedModeEdgeFlag;
-  int max_mb_vmv_r;                          //!< maximum vertical motion vector range in luma quarter pixel units for the current level_idc
+  int max_mb_vmv_r;                   //!< maximum vertical motion vector range in luma quarter pixel units for the current level_idc
   int8_t ref_flag[17];                //!< 0: i-th previous frame is incorrect
 
   int erc_mvperMB;
@@ -1083,21 +1140,22 @@ typedef struct slice {
   void (*read_CBP_and_coeffs_from_NAL) (Macroblock *currMB);
   int  (*decode_one_component     )    (Macroblock *currMB, ColorPlane curr_plane, imgpel **currImg, struct storable_picture *dec_picture);
   int  (*readSlice                )    (struct video_par *, struct inp_par *);  
-  int  (*nal_startcode_follows    )    (struct slice*, int );
+  int  (*nal_startcode_follows    )    (struct slice*, bool);
   void (*read_motion_info_from_NAL)    (Macroblock *currMB);
   void (*read_one_macroblock      )    (Macroblock *currMB);
   void (*interpret_mb_mode        )    (Macroblock *currMB);
   void (*init_lists               )    (struct slice *currSlice);
 
   void (*intra_pred_chroma        )    (Macroblock *currMB);
-  int  (*intra_pred_4x4)               (Macroblock *currMB, ColorPlane pl, int ioff, int joff,int i4,int j4);
-  int  (*intra_pred_8x8)               (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
+  int  (*intra_pred_4x4)               (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff,PIXEL_COORD i4,PIXEL_COORD j4);
+  int  (*intra_pred_8x8)               (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
   int  (*intra_pred_16x16)             (Macroblock *currMB, ColorPlane pl, int predmode);
 
   void (*linfo_cbp_intra          )    (int len, int info, int *cbp, int *dummy);
   void (*linfo_cbp_inter          )    (int len, int info, int *cbp, int *dummy);    
   void (*update_direct_mv_info    )    (Macroblock *currMB);
-  void (*read_coeff_4x4_CAVLC     )    (Macroblock *currMB, int block_type, int i, int j, int levarr[16], int runarr[16], int *number_coefficients);
+  void (*read_coeff_4x4_CAVLC     )    (Macroblock *currMB, CAVLCBlockTypes block_type, int i, int j, 
+		int8_t levarr[16], int8_t runarr[16], int8_t *number_coefficients);
 	} Slice;
 
 #define  TIMEB    timeb
@@ -1112,16 +1170,16 @@ typedef struct frame_format {
   ColorModel  color_model;                   //!< 4:4:4 format (0: YUV, 1: RGB, 2: XYZ)
   PixelFormat pixel_format;                  //!< pixel format support for certain interleaved yuv sources
   double      frame_rate;                    //!< frame rate
-  uint16_t    width[3];                      //!< component frame width
-  uint16_t    height[3];                     //!< component frame height    
+  PIXEL_COORD    width[3];                      //!< component frame width
+  PIXEL_COORD    height[3];                     //!< component frame height    
   int         auto_crop_right;               //!< luma component auto crop right
   int         auto_crop_bottom;              //!< luma component auto crop bottom
   int         auto_crop_right_cr;            //!< chroma component auto crop right
   int         auto_crop_bottom_cr;           //!< chroma component auto crop bottom
-  uint16_t    width_crop;                    //!< width after cropping consideration
-  uint16_t    height_crop;                   //!< height after cropping consideration
-  uint16_t    mb_width;                      //!< luma component frame width
-  uint16_t    mb_height;                     //!< luma component frame height    
+  PIXEL_COORD    width_crop;                    //!< width after cropping consideration
+  PIXEL_COORD    height_crop;                   //!< height after cropping consideration
+  PIXEL_COORD    mb_width;                      //!< luma component frame width
+  PIXEL_COORD    mb_height;                     //!< luma component frame height    
   int         size_cmp[3];                   //!< component sizes (width * height)
   int         size;                          //!< total image size (sum of size_cmp)
   int8_t      bit_depth[3];                  //!< component bit depth  
@@ -1141,10 +1199,10 @@ typedef struct decodedpic_t {
   uint8_t *pY;                   //if iPictureFormat is 1, [0]: top; [1] bottom;
   uint8_t *pU;
   uint8_t *pV;
-  int16_t iWidth;                 //frame width;              
-  int16_t iHeight;                //frame height;
-  int iYBufStride;            //stride of pY[0/1] buffer in bytes;
-  int iUVBufStride;           //stride of pU[0/1] and pV[0/1] buffer in bytes;
+  PIXEL_COORD iWidth;                 //frame width;              
+  PIXEL_COORD iHeight;                //frame height;
+  PIXEL_COORD iYBufStride;            //stride of pY[0/1] buffer in bytes;
+  PIXEL_COORD iUVBufStride;           //stride of pU[0/1] and pV[0/1] buffer in bytes;
   int iSkipPicNum;
   uint32_t iBufSize;
   struct decodedpic_t *pNext;
@@ -1168,9 +1226,9 @@ typedef struct image_data {
   uint16_t **top_uint16[MAX_PLANE];   //!< optional pointers to top field data
   uint16_t **bot_uint16[MAX_PLANE];   //!< optional pointers to bottom field data
 
-  int frm_stride[MAX_PLANE];
-  int top_stride[MAX_PLANE];
-  int bot_stride[MAX_PLANE];
+  PIXEL_COORD frm_stride[MAX_PLANE];
+  PIXEL_COORD top_stride[MAX_PLANE];
+  PIXEL_COORD bot_stride[MAX_PLANE];
 	} ImageData;
 
 	// video parameters
@@ -1184,12 +1242,12 @@ typedef struct video_par {
   CodingParameters *p_EncodePar[MAX_NUM_DPB_LAYERS];
   LayerParameters *p_LayerPar[MAX_NUM_DPB_LAYERS];
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   subset_seq_parameter_set_rbsp_t *active_subset_sps;
   //int svc_extension_flag;
   subset_seq_parameter_set_rbsp_t SubsetSeqParSet[MAXSPS];
-  uint16_t last_pic_width_in_mbs_minus1;
-  uint16_t last_pic_height_in_map_units_minus1;
+  PIXEL_COORD last_pic_width_in_mbs_minus1;
+  PIXEL_COORD last_pic_height_in_map_units_minus1;
   int last_max_dec_frame_buffering;
   uint8_t last_profile_idc;
 #endif
@@ -1253,12 +1311,12 @@ typedef struct video_par {
   int PreviousFrameNumOffset;
   // /////////////////////////
 
-  uint16_t PicHeightInMbs;
-  uint16_t PicSizeInMbs;
+  PIXEL_COORD PicHeightInMbs;
+  PIXEL_COORD PicSizeInMbs;
 
   bool no_output_of_prior_pics_flag;
 
-  int last_has_mmco_5;
+  bool last_has_mmco_5;
   int last_pic_bottom_field;
 
   int idr_psnr_number;
@@ -1311,7 +1369,7 @@ typedef struct video_par {
 
   // files
   int p_out;                       //!< file descriptor to output YUV file
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int p_out_mvc[MAX_VIEW_NUM];     //!< file descriptor to output YUV file for MVC
 #endif
   int p_ref;                       //!< pointer to input original reference YUV file file
@@ -1331,8 +1389,8 @@ typedef struct video_par {
   imgpel **imgY_ref;                              //!< reference frame find snr
   imgpel ***imgUV_ref;
 
-  int *qp_per_matrix;
-  int *qp_rem_matrix;
+  int8_t *qp_per_matrix;
+  int8_t *qp_rem_matrix;
 
   struct frame_store *last_out_fs;
   int pocs_in_dpb[100];
@@ -1366,30 +1424,30 @@ typedef struct video_par {
   int *MapUnitToSliceGroupMap;
   int  NumberOfSliceGroups;    // the number of slice groups -1 (0 == scan order, 7 == maximum)
 
-#if (ENABLE_OUTPUT_TONEMAPPING)
+#if ENABLE_OUTPUT_TONEMAPPING
   struct tone_mapping_struct_s *seiToneMapping;
 #endif
 
   void (*buf2img)          (imgpel** imgX, uint8_t* buf, int size_x, int size_y, int o_size_x, int o_size_y, int symbol_size_in_bytes, int bitshift);
-  void (*getNeighbour)     (Macroblock *currMB, int xN, int yN, int mb_size[2], PixelPos *pix);
-  void (*get_mb_block_pos) (BlockPos *PicPos, int mb_addr, int16_t *x, int16_t *y);
+  void (*getNeighbour)     (Macroblock *currMB, BLOCK_COORD xN, BLOCK_COORD yN, uint32_t mb_size[2], PixelPos *pix);
+  void (*get_mb_block_pos) (BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y);
   void (*GetStrengthVer)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
   void (*GetStrengthHor)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
   void (*EdgeLoopLumaVer)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge);
   void (*EdgeLoopLumaHor)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, struct storable_picture *p);
   void (*EdgeLoopChromaVer)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, int uv, struct storable_picture *p);
   void (*EdgeLoopChromaHor)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, int uv, struct storable_picture *p);
-  void (*img2buf)          (imgpel** imgX, uint8_t* buf, uint16_t size_x, uint16_t size_y, uint8_t symbol_size_in_bytes, 
-		uint16_t crop_left, uint16_t crop_right, uint16_t crop_top, uint16_t crop_bottom, uint16_t iOutStride);
+  void (*img2buf)          (imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, uint8_t symbol_size_in_bytes, 
+														PIXEL_COORD crop_left, PIXEL_COORD crop_right, PIXEL_COORD crop_top, PIXEL_COORD crop_bottom, PIXEL_COORD iOutStride);
 
   ImageData tempData3;
   DecodedPicList *pDecOuputPic;
   int8_t iDeblockMode;  //0: deblock in picture, 1: deblock in slice;
   struct nalu_t *nalu;
-  int16_t iLumaPadX;
-  int16_t iLumaPadY;
-  int16_t iChromaPadX;
-  int16_t iChromaPadY;
+  BLOCK_COORD iLumaPadX;
+  BLOCK_COORD iLumaPadY;
+  BLOCK_COORD iChromaPadX;
+  BLOCK_COORD iChromaPadY;
   //control;
   uint8_t bDeblockEnable;
   bool  iPostProcess;
@@ -1404,17 +1462,17 @@ typedef struct video_par {
   uint8_t dpb_layer_id;
 
 /******************* deprecative variables; ***************************************/
-  uint16_t width;
-  uint16_t height;
-  uint16_t width_cr;                               //!< width chroma  
-  uint16_t height_cr;                              //!< height chroma
+  PIXEL_COORD width;
+  PIXEL_COORD height;
+  PIXEL_COORD width_cr;                               //!< width chroma  
+  PIXEL_COORD height_cr;                              //!< height chroma
   // Fidelity Range Extensions Stuff
   uint8_t pic_unit_bitsize_on_disk;
   int8_t bitdepth_luma;
   int8_t bitdepth_chroma;
-  int bitdepth_scale[2];
-  int bitdepth_luma_qp_scale;
-  int bitdepth_chroma_qp_scale;
+  int8_t bitdepth_scale[2];
+  int8_t bitdepth_luma_qp_scale;
+  int8_t bitdepth_chroma_qp_scale;
   unsigned int dc_pred_value_comp[MAX_PLANE]; //!< component value for DC prediction (depends on component pel bit depth)
   int max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
 
@@ -1427,14 +1485,14 @@ typedef struct video_par {
   int num_blk8x8_uv;
   int num_uv_blocks;
   int num_cdc_coeff;
-  int mb_cr_size_x;
-  int mb_cr_size_y;
-  int mb_cr_size_x_blk;
-  int mb_cr_size_y_blk;
+  BLOCK_COORD mb_cr_size_x;
+  BLOCK_COORD mb_cr_size_y;
+  BLOCK_COORD mb_cr_size_x_blk;
+  BLOCK_COORD mb_cr_size_y_blk;
   int mb_cr_size;
-  int mb_size[3][2];                         //!< component macroblock dimensions
-  int mb_size_blk[3][2];                     //!< component macroblock dimensions 
-  int mb_size_shift[3][2];
+  uint32_t mb_size[3][2];                         //!< component macroblock dimensions
+  uint32_t mb_size_blk[3][2];                     //!< component macroblock dimensions 
+  uint32_t mb_size_shift[3][2];
   int subpel_x;
   int subpel_y;
   int shiftpel_x;
@@ -1442,9 +1500,9 @@ typedef struct video_par {
   int total_scale;
   int max_frame_num;
 
-  uint16_t PicWidthInMbs;
+  PIXEL_COORD PicWidthInMbs;
   unsigned int PicHeightInMapUnits;
-  uint16_t FrameHeightInMbs;
+  PIXEL_COORD FrameHeightInMbs;
   unsigned int FrameSizeInMbs;
   unsigned int oldFrameSizeInMbs;
   int max_vmv_r;                             //!< maximum vertical motion vector range in luma quarter frame pixel units for the current level_idc
@@ -1471,13 +1529,13 @@ typedef enum {
 	NALU_TYPE_EOSEQ    = 10,
 	NALU_TYPE_EOSTREAM = 11,
 	NALU_TYPE_FILL     = 12,
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 	NALU_TYPE_PREFIX   = 14,
 	NALU_TYPE_SUB_SPS  = 15,
 	NALU_TYPE_SLC_EXT  = 20,
 	NALU_TYPE_VDRD     = 24  // View and Dependency Representation Delimiter NAL Unit
 #endif
-} NaluType;
+	} NaluType;
 
 //! values for nal_ref_idc
 typedef enum {
@@ -1485,7 +1543,7 @@ typedef enum {
 	NALU_PRIORITY_HIGH        = 2,
 	NALU_PRIORITY_LOW         = 1,
 	NALU_PRIORITY_DISPOSABLE  = 0
-} NalRefIdc;
+	} NalRefIdc;
 
 //! NAL unit structure
 typedef struct nalu_t {
@@ -1497,16 +1555,16 @@ typedef struct nalu_t {
   NalRefIdc nal_reference_idc;     //!< NALU_PRIORITY_xxxx  
   uint8_t   *buf;                   //!< contains the first uint8_t followed by the EBSP
   uint16_t  lost_packets;          //!< true, if packet loss is detected
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int8_t    svc_extension_flag;    //!< should be always 0, for MVC
   bool      non_idr_flag;          //!< 0 = current is IDR
   int       priority_id;           //!< a lower value of priority_id specifies a higher priority
   int       view_id;               //!< view identifier for the NAL unit
-  uint32_t  temporal_id;           //!< temporal identifier for the NAL unit
   bool      anchor_pic_flag;       //!< anchor access unit
   bool      inter_view_flag;       //!< inter-view prediction enable
   int8_t    reserved_one_bit;      //!< shall be equal to 1
 #endif
+  uint32_t  temporal_id;           //!< temporal identifier for the NAL unit  MI SERVE anche in profile base!
 } NALU_t;
 
 //! allocate one NAL Unit
@@ -1515,7 +1573,7 @@ extern NALU_t *AllocNALU(int);
 //! free one NAL Unit
 extern void FreeNALU(NALU_t *n);
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern void nal_unit_header_svc_extension();
 extern void prefix_nal_unit_svc();
 #endif
@@ -1537,7 +1595,7 @@ extern void reset_annex_b    (ANNEXB_t *annex_b);
 extern void arideco_start_decoding(DecodingEnvironmentPtr eep, uint8_t *code_buffer, int firstbyte, int *code_len);
 extern int  arideco_bits_read(DecodingEnvironmentPtr dep);
 extern void arideco_done_decoding(DecodingEnvironmentPtr dep);
-extern void biari_init_context (int qp, BiContextTypePtr ctx, const int8_t* ini);
+extern void biari_init_context(int8_t qp, BiContextTypePtr ctx, const int8_t* ini);
 extern unsigned int biari_decode_symbol(DecodingEnvironment *dep, BiContextType *bi_ct );
 extern unsigned int biari_decode_symbol_eq_prob(DecodingEnvironmentPtr dep);
 extern unsigned int biari_decode_final(DecodingEnvironmentPtr dep);
@@ -1553,22 +1611,23 @@ extern void iMBtrans8x8(Macroblock *currMB, ColorPlane pl);
 
 extern void itrans_sp_cr(Macroblock *currMB, int uv);
 
-extern void Inv_Residual_trans_4x4(Macroblock *currMB, ColorPlane pl, int ioff, int joff);
-extern void Inv_Residual_trans_8x8(Macroblock *currMB, ColorPlane pl, int ioff,int joff);
+extern void Inv_Residual_trans_4x4(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+extern void Inv_Residual_trans_8x8(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff,PIXEL_COORD joff);
 extern void Inv_Residual_trans_16x16 (Macroblock *currMB, ColorPlane pl);
 extern void Inv_Residual_trans_Chroma(Macroblock *currMB, int uv);
 
-extern void itrans4x4   (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
-extern void itrans4x4_ls(Macroblock *currMB, ColorPlane pl, int ioff, int joff);
-extern void itrans_sp   (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
+extern void itrans4x4   (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+extern void itrans4x4_ls(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+extern void itrans_sp   (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 extern void itrans_2    (Macroblock *currMB, ColorPlane pl);
 extern void iTransform  (Macroblock *currMB, ColorPlane pl, int smb);
 
-extern void copy_image_data       (imgpel  **imgBuf1, imgpel  **imgBuf2, int off1, int off2, int width, int height);
-extern void copy_image_data_16x16 (imgpel  **imgBuf1, imgpel  **imgBuf2, int off1, int off2);
-extern void copy_image_data_8x8   (imgpel  **imgBuf1, imgpel  **imgBuf2, int off1, int off2);
-extern void copy_image_data_4x4   (imgpel  **imgBuf1, imgpel  **imgBuf2, int off1, int off2);
-extern int CheckVertMV(Macroblock *currMB, int vec1_y, int block_size_y);
+extern void copy_image_data       (imgpel  **imgBuf1, imgpel  **imgBuf2, PIXEL_COORD off1, PIXEL_COORD off2, 
+																	 PIXEL_COORD width, PIXEL_COORD height);
+extern void copy_image_data_16x16 (imgpel  **imgBuf1, imgpel  **imgBuf2, PIXEL_COORD off1, PIXEL_COORD  off2);
+extern void copy_image_data_8x8   (imgpel  **imgBuf1, imgpel  **imgBuf2, PIXEL_COORD off1, PIXEL_COORD off2);
+extern void copy_image_data_4x4   (imgpel  **imgBuf1, imgpel  **imgBuf2, PIXEL_COORD off1, PIXEL_COORD off2);
+extern int CheckVertMV(Macroblock *currMB, int vec1_y, BLOCK_COORD block_size_y);
 
 
 
@@ -1621,7 +1680,7 @@ extern void readMB_transform_size_flag_CABAC(Macroblock *currMB, SyntaxElement *
 
 extern void readIPCM_CABAC(Slice *currSlice, struct datapartition_dec *dP);
 
-extern int  cabac_startcode_follows(Slice *currSlice, int eos_bit);
+extern int  cabac_startcode_follows(Slice *currSlice, bool eos_bit);
 
 extern int  readSyntaxElement_CABAC         (Macroblock *currMB, SyntaxElement *se, DataPartition *this_dataPart);
 
@@ -1644,8 +1703,8 @@ extern void set_read_and_store_CBP(Macroblock **currMB, ColorFormat chroma_forma
 
 typedef struct video_size {
   char* name;
-  uint16_t x_size;
-  uint16_t y_size;
+  PIXEL_COORD x_size;
+  PIXEL_COORD y_size;
 	} VIDEO_SIZE;
 
 typedef enum {
@@ -1672,17 +1731,17 @@ typedef struct video_data_file {
   int           start_frame;           //!< start frame
   int           end_frame;             //!< end frame
   int           nframes;               //!< number of frames
-  uint16_t      crop_x_size;           //!< crop information (x component)
-  uint16_t      crop_y_size;           //!< crop information (y component)
-  uint16_t      crop_x_offset;         //!< crop offset (x component);
-  uint16_t      crop_y_offset;         //!< crop offset (y component);
+  PIXEL_COORD      crop_x_size;           //!< crop information (x component)
+  PIXEL_COORD      crop_y_size;           //!< crop information (y component)
+  PIXEL_COORD      crop_x_offset;         //!< crop offset (x component);
+  PIXEL_COORD      crop_y_offset;         //!< crop offset (y component);
 
   // AVI related information to be added here
   int* avi;
   //avi_t* avi;
   //int    header;
   //char   compressor[8];    
-} VideoDataFile;
+	} VideoDataFile;
 
 // input parameters from configuration file
 typedef struct inp_par {
@@ -1709,7 +1768,7 @@ typedef struct inp_par {
   VideoDataFile input_file1;          //!< Input video file1
   VideoDataFile input_file2;          //!< Input video file2
   VideoDataFile input_file3;          //!< Input video file3
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   bool  DecodeAllLayers;
 #endif
 
@@ -1825,44 +1884,6 @@ typedef enum {
   DIR_SPATIAL  = 1 //!< Spatial Direct Mode
 } DirectModes;
 
-// CAVLC block types
-typedef enum {
-  LUMA              =  0,
-  LUMA_INTRA16x16DC =  1,
-  LUMA_INTRA16x16AC =  2,
-  CB                =  3,
-  CB_INTRA16x16DC   =  4,
-  CB_INTRA16x16AC   =  5,
-  CR                =  8,
-  CR_INTRA16x16DC   =  9,
-  CR_INTRA16x16AC   = 10
-} CAVLCBlockTypes;
-
-// CABAC block types
-typedef enum {
-  LUMA_16DC     =   0,
-  LUMA_16AC     =   1,
-  LUMA_8x8      =   2,
-  LUMA_8x4      =   3,
-  LUMA_4x8      =   4,
-  LUMA_4x4      =   5,
-  CHROMA_DC     =   6,
-  CHROMA_AC     =   7,
-  CHROMA_DC_2x4 =   8,
-  CHROMA_DC_4x4 =   9,
-  CB_16DC       =  10,
-  CB_16AC       =  11,
-  CB_8x8        =  12,
-  CB_8x4        =  13,
-  CB_4x8        =  14,
-  CB_4x4        =  15,
-  CR_16DC       =  16,
-  CR_16AC       =  17,
-  CR_8x8        =  18,
-  CR_8x4        =  19,
-  CR_4x8        =  20,
-  CR_4x4        =  21
-} CABACBlockTypes;
 
 // Macro defines
 #define Q_BITS          15
@@ -1892,7 +1913,7 @@ typedef enum {
   HOR_DOWN_PRED        = 6,
   VERT_LEFT_PRED       = 7,
   HOR_UP_PRED          = 8
-} I4x4PredModes;
+	} I4x4PredModes;
 
 // 16x16 intra prediction modes
 typedef enum {
@@ -1900,7 +1921,7 @@ typedef enum {
   HOR_PRED_16    = 1,
   DC_PRED_16     = 2,
   PLANE_16       = 3
-} I16x16PredModes;
+	} I16x16PredModes;
 
 // 8x8 chroma intra prediction modes
 typedef enum {
@@ -1908,15 +1929,8 @@ typedef enum {
   HOR_PRED_8    =  1,
   VERT_PRED_8   =  2,
   PLANE_8       =  3
-} I8x8PredModes;
+	} I8x8PredModes;
 
-
-enum {
-  EOS = 1,    //!< End Of Sequence
-  SOP = 2,    //!< Start Of Picture
-  SOS = 3,     //!< Start Of Slice
-  SOS_CONT = 4
-};
 
 // MV Prediction types
 typedef enum {
@@ -1924,13 +1938,13 @@ typedef enum {
   MVPRED_L        = 1,
   MVPRED_U        = 2,
   MVPRED_UR       = 3
-} MVPredTypes;
+	} MVPredTypes;
 
 enum {
   DECODING_OK     = 0,
   SEARCH_SYNC     = 1,
   PICTURE_DECODED = 2
-};
+	};
 
 #define LAMBDA_ACCURACY_BITS         16
 #define INVALIDINDEX  (-135792468)
@@ -2060,7 +2074,7 @@ typedef struct ercSegment_s {
   int16_t    startMBPos;
   int16_t    endMBPos;
   int8_t     fCorrupted;
-} ercSegment_t;
+	} ercSegment_t;
 
 /* Error detector & concealment instance data structure */
 typedef struct ercVariables_s {
@@ -2116,20 +2130,20 @@ typedef struct frame_s {
   imgpel *vptr;
 	} frame;
 
-int ercConcealIntraFrame(VideoParameters *p_Vid, frame *recfr, uint16_t picSizeX, uint16_t picSizeY, 
+int ercConcealIntraFrame(VideoParameters *p_Vid, frame *recfr, PIXEL_COORD picSizeX, PIXEL_COORD picSizeY, 
 												 ercVariables_t *errorVar );
 
 //! region structure stores information about a region that is needed for concealment
 typedef struct object_buffer {
   uint8_t regionMode;  //!< region mode as above
-  int16_t xMin;         //!< X coordinate of the pixel position of the top-left corner of the region
-  int16_t yMin;         //!< Y coordinate of the pixel position of the top-left corner of the region
+  BLOCK_COORD xMin;         //!< X coordinate of the pixel position of the top-left corner of the region
+  BLOCK_COORD yMin;         //!< Y coordinate of the pixel position of the top-left corner of the region
   int mv[3];        //!< motion vectors in 1/4 pixel units: mvx = mv[0], mvy = mv[1],
                     //!< and ref_frame = mv[2]
-} objectBuffer_t;
+	} objectBuffer_t;
 
 int ercConcealInterFrame( frame *recfr, objectBuffer_t *object_list,
-                          uint16_t picSizeX, uint16_t picSizeY, ercVariables_t *errorVar, ColorFormat chroma_format_idc);
+                          PIXEL_COORD picSizeX, PIXEL_COORD picSizeY, ercVariables_t *errorVar, ColorFormat chroma_format_idc);
 
 
 /* Thomson APIs for concealing entire frame loss */
@@ -2165,14 +2179,14 @@ typedef struct storable_picture {
 
   int16_t     max_slice_id;
 
-  uint16_t    size_x, size_y, size_x_cr, size_y_cr;
-  uint16_t    size_x_m1, size_y_m1, size_x_cr_m1, size_y_cr_m1;
+  PIXEL_COORD    size_x, size_y, size_x_cr, size_y_cr;
+  PIXEL_COORD    size_x_m1, size_y_m1, size_x_cr_m1, size_y_cr_m1;
   int         coded_frame;
   bool        mb_aff_frame_flag;
-  uint16_t    PicWidthInMbs;
-  uint16_t    PicSizeInMbs;
-  uint16_t    iLumaPadY, iLumaPadX;
-  uint16_t    iChromaPadY, iChromaPadX;
+  PIXEL_COORD    PicWidthInMbs;
+  PIXEL_COORD    PicSizeInMbs;
+  PIXEL_COORD    iLumaPadY, iLumaPadX;
+  PIXEL_COORD    iChromaPadY, iChromaPadX;
 
 
   imgpel **     imgY;         //!< Y picture component
@@ -2197,34 +2211,34 @@ typedef struct storable_picture {
   ColorFormat chroma_format_idc;
   bool        frame_mbs_only_flag;
   bool        frame_cropping_flag;
-  int16_t     frame_crop_left_offset;
-  int16_t     frame_crop_right_offset;
-  int16_t     frame_crop_top_offset;
+  BLOCK_COORD     frame_crop_left_offset;
+  BLOCK_COORD     frame_crop_right_offset;
+  BLOCK_COORD     frame_crop_top_offset;
   int16_t     frame_crop_bottom_offset;
-  int         qp;
+  int8_t      qp;
   int         chroma_qp_offset[2];
   int         slice_qp_delta;
   DecRefPicMarking_t *dec_ref_pic_marking_buffer;                    //!< stores the memory management control operations
 
   // picture error concealment
-  int         concealed_pic; //indicates if this is a concealed picture
+  bool        concealed_pic; //indicates if this is a concealed picture
   
   // variables for tone mapping
   int         seiHasTone_mapping;
   int         tone_mapping_model_id;
-  int         tonemapped_bit_depth;  
+  int8_t      tonemapped_bit_depth;  
   imgpel*     tone_mapping_lut;                //!< tone mapping look up table
 
   int         proc_flag;
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int         view_id;
   bool        inter_view_flag;
   bool        anchor_pic_flag;
 #endif
-  int         iLumaStride;
-  int         iChromaStride;
-  int         iLumaExpandedHeight;
-  int         iChromaExpandedHeight;
+  PIXEL_COORD iLumaStride;
+  PIXEL_COORD iChromaStride;
+  PIXEL_COORD iLumaExpandedHeight;
+  PIXEL_COORD iChromaExpandedHeight;
   imgpel **cur_imgY; // for more efficient get_block_luma
   int no_ref;
   int iCodingType;
@@ -2271,7 +2285,7 @@ typedef struct frame_store {
   StorablePicture *top_field;
   StorablePicture *bottom_field;
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int       view_id;
   bool      inter_view_flag[2];
   bool      anchor_pic_flag[2];
@@ -2292,7 +2306,7 @@ typedef struct decoded_picture_buffer {
   unsigned      ref_frames_in_buffer;
   unsigned      ltref_frames_in_buffer;
   int           last_output_poc;
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int           last_output_view_id;
 #endif
   int           max_long_term_pic_idx;  
@@ -2467,7 +2481,7 @@ typedef struct old_slice_par {
   bool  idr_flag;
   int      idr_pic_id;
   int      pps_id;
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   int      view_id;
   bool     inter_view_flag;
   bool     anchor_pic_flag;
@@ -2482,6 +2496,7 @@ typedef struct decoder_params {
   int                UsedBits;      // for internal statistics, is adjusted by read_se_v, read_ue_v, read_u_1
   FILE              *p_trace;        //!< Trace file
   int                bitcounter;
+	jmp_buf						mark;  
 	} DecoderParams;
 
 extern DecoderParams  *p_Dec;
@@ -2510,7 +2525,7 @@ extern unsigned CeilLog2_sf( unsigned uiVal);
 extern void change_plane_JV      ( VideoParameters *p_Vid, int nplane, Slice *pSlice);
 extern void make_frame_picture_JV( VideoParameters *p_Vid );
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern void nal_unit_header_mvc_extension(NALUnitHeaderMVCExt_t *NaluHeaderMVCExt, struct bit_stream_dec *bitstream);
 #endif
 
@@ -2540,7 +2555,7 @@ static inline int is_EL_profile(unsigned int profile_idc) {
 
 static inline int is_MVC_profile(unsigned int profile_idc){
   return ( (0)
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   || (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH)
 #endif
   );
@@ -2559,7 +2574,7 @@ typedef enum{
   DEC_INVALID_PARAM = 3,
   DEC_ERRMASK = 0x8000
 //  DEC_ERRMASK = 0x80000000
-} DecErrCode;
+	} DecErrCode;
 
 typedef struct dec_set_t {
   int iPostprocLevel; // valid interval are [0..100]
@@ -2567,7 +2582,7 @@ typedef struct dec_set_t {
   int bAllLayers;
   int time_incr;
   int bDecCompAdapt;
-} DecSet_t;
+	} DecSet_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -2614,7 +2629,7 @@ extern void copy_dec_picture_JV (VideoParameters *p_Vid, StorablePicture *dst, S
 extern void frame_postprocessing(VideoParameters *p_Vid);
 extern void field_postprocessing(VideoParameters *p_Vid);
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern int GetViewIdx(VideoParameters *p_Vid, int iVOIdx);
 extern int GetVOIdx(VideoParameters *p_Vid, int iViewId);
 extern int get_maxViewIdx(VideoParameters *p_Vid, int view_id, bool anchor_pic_flag, int listidx);
@@ -2626,11 +2641,13 @@ extern void decode_slice(Slice *currSlice, uint8_t current_header);
 
 
 
-extern int intra_pred_4x4_mbaff (Macroblock *currMB, ColorPlane pl, int ioff, int joff, int img_block_x, int img_block_y);
-extern int intra_pred_4x4_normal(Macroblock *currMB, ColorPlane pl, int ioff, int joff, int img_block_x, int img_block_y);
+extern int intra_pred_4x4_mbaff (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff, 
+																 PIXEL_COORD img_block_x, PIXEL_COORD img_block_y);
+extern int intra_pred_4x4_normal(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff, 
+																 PIXEL_COORD img_block_x, PIXEL_COORD img_block_y);
 
-extern int intra_pred_8x8_normal(Macroblock *currMB, ColorPlane pl, int ioff, int joff);
-extern int intra_pred_8x8_mbaff(Macroblock *currMB, ColorPlane pl, int ioff, int joff);
+extern int intra_pred_8x8_normal(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+extern int intra_pred_8x8_mbaff(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 
 extern int intra_pred_16x16_mbaff (Macroblock *currMB, ColorPlane pl, int predmode);
 extern int intra_pred_16x16_normal(Macroblock *currMB, ColorPlane pl, int predmode);
@@ -2703,13 +2720,13 @@ extern void              re_init_dpb(VideoParameters *p_Vid, DecodedPictureBuffe
 extern void              free_dpb(DecodedPictureBuffer *p_Dpb);
 extern FrameStore*       alloc_frame_store(void);
 extern void              free_frame_store (FrameStore* f);
-extern StorablePicture*  alloc_storable_picture(VideoParameters *p_Vid, PictureStructure type, uint16_t size_x, uint16_t size_y, 
-																								uint16_t size_x_cr, uint16_t size_y_cr, bool is_output);
+extern StorablePicture*  alloc_storable_picture(VideoParameters *p_Vid, PictureStructure type, PIXEL_COORD size_x, PIXEL_COORD size_y, 
+																								PIXEL_COORD size_x_cr, PIXEL_COORD size_y_cr, bool is_output);
 extern void              free_storable_picture (StorablePicture* p);
 extern void              store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
 extern StorablePicture*  get_int16_t_term_pic (Slice *currSlice, DecodedPictureBuffer *p_Dpb, int picNum);
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern void             idr_memory_management(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
 extern void             flush_dpbs(DecodedPictureBuffer **p_Dpb, int nLayers);
 extern int              GetMaxDecFrameBuffering(VideoParameters *p_Vid);
@@ -2747,14 +2764,14 @@ extern void compute_colocated (Slice *currSlice, StorablePicture **listX[6]);
 extern int init_img_data(VideoParameters *p_Vid, ImageData *p_ImgData, seq_parameter_set_rbsp_t *sps);
 extern void free_img_data(VideoParameters *p_Vid, ImageData *p_ImgData);
 extern void pad_dec_picture(VideoParameters *p_Vid, StorablePicture *dec_picture);
-extern void pad_buf(imgpel *pImgBuf, int iWidth, int iHeight, int iStride, int iPadX, int iPadY);
+extern void pad_buf(imgpel *pImgBuf, BLOCK_COORD iWidth, BLOCK_COORD iHeight, BLOCK_COORD iStride, BLOCK_COORD iPadX, BLOCK_COORD iPadY);
 extern void process_picture_in_dpb_s(VideoParameters *p_Vid, StorablePicture *p_pic);
 extern StorablePicture * clone_storable_picture( VideoParameters *p_Vid, StorablePicture *p_pic );
 extern void store_proc_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
 
 
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern void reorder_lists_mvc     (Slice * currSlice, int currPOC);
 extern void init_lists_p_slice_mvc(Slice *currSlice);
 extern void init_lists_b_slice_mvc(Slice *currSlice);
@@ -2763,8 +2780,10 @@ extern void init_lists_i_slice_mvc(Slice *currSlice);
 extern void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, int **non_anchor_ref,
                                                  int view_id, bool anchor_pic_flag, int currPOC, int listidx);
 
-extern void reorder_short_term(Slice *currSlice, int cur_list, int num_ref_idx_lX_active_minus1, int picNumLX, int *refIdxLX, int currViewID);
-extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, int num_ref_idx_lX_active_minus1, int LongTermPicNum, int *refIdxLX, int currViewID);
+extern void reorder_short_term(Slice *currSlice, int cur_list, int num_ref_idx_lX_active_minus1, int picNumLX, 
+															 int *refIdxLX, int currViewID);
+extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, int num_ref_idx_lX_active_minus1, int LongTermPicNum, 
+															int *refIdxLX, int currViewID);
 #endif
 
 
@@ -2772,12 +2791,13 @@ extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, i
 extern int  allocate_pred_mem(Slice *currSlice);
 extern void free_pred_mem    (Slice *currSlice);
 
-extern void get_block_luma(StorablePicture *curr_ref, int x_pos, int y_pos, int block_size_x, int block_size_y, imgpel **block,
-                           int shift_x,int maxold_x,int maxold_y,int **tmp_res,int max_imgpel_value,imgpel no_ref_value,Macroblock *currMB);
+extern void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_pos, BLOCK_COORD block_size_x, BLOCK_COORD block_size_y, imgpel **block,
+                           BLOCK_COORD shift_x,BLOCK_COORD maxold_x,BLOCK_COORD maxold_y,int **tmp_res,int max_imgpel_value,imgpel no_ref_value,Macroblock *currMB);
 
-extern void intra_cr_decoding    (Macroblock *currMB, int yuv);
+extern void intra_cr_decoding    (Macroblock *currMB, int8_t yuv);
 extern void prepare_direct_params(Macroblock *currMB, StorablePicture *dec_picture, MotionVector *pmvl0, MotionVector *pmvl1,int8_t *l0_rFrame, int8_t *l1_rFrame);
-extern void perform_mc           (Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, int i, int j, int block_size_x, int block_size_y);
+extern void perform_mc           (Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, int i, int j, 
+																	BLOCK_COORD block_size_x, BLOCK_COORD block_size_y);
 
 
 
@@ -2796,11 +2816,12 @@ extern void uninit_out_buffer (VideoParameters *p_Vid);
 extern void flush_pending_output(VideoParameters *p_Vid, int p_out);
 #endif
 extern void init_output(CodingParameters *p_CodingParams, int symbol_size_in_bytes);
+extern void reinit_decoder(DecoderParams *pDecoder);
 
 
 
 
-extern void Scaling_List(int *scalingList, int sizeOfScalingList, bool *UseDefaultScalingMatrix, Bitstream *s);
+extern void Scaling_List(int16_t *scalingList, int16_t sizeOfScalingList, bool *UseDefaultScalingMatrix, Bitstream *s);
 
 extern void InitVUI(seq_parameter_set_rbsp_t *sps);
 extern int  ReadVUI(DataPartition *p, seq_parameter_set_rbsp_t *sps);
@@ -2822,7 +2843,7 @@ extern void activate_pps (VideoParameters *p_Vid, pic_parameter_set_rbsp_t *pps)
 
 extern void UseParameterSet (Slice *currSlice);
 
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
 extern void SubsetSPSConsistencyCheck (subset_seq_parameter_set_rbsp_t *subset_sps);
 extern void ProcessSubsetSPS (VideoParameters *p_Vid, NALU_t *nalu);
 
@@ -2870,7 +2891,7 @@ typedef struct {
   unsigned int paylen;     //!< length of payload in bytes
   uint8_t *       packet;     //!< complete packet including header and payload
   unsigned int packlen;    //!< length of packet, typically paylen+12
-} RTPpacket_t;
+	} RTPpacket_t;
 
 void DumpRTPHeader (RTPpacket_t *p);
 int  GetRTPNALU  (VideoParameters *p_Vid, NALU_t *nalu, int BitStreamFile);
@@ -2989,7 +3010,7 @@ typedef struct {
   uint8_t percent_alpha_point_deblocking_instance;
   uint8_t xsd_metric_type;
   uint16_t xsd_metric_value;
-} Green_metadata_information_struct;
+	} Green_metadata_information_struct;
 
 
 void InterpretSEIMessage                                ( uint8_t* payload, int size, VideoParameters *p_Vid, Slice *pSlice );
@@ -3021,23 +3042,23 @@ void interpret_tone_mapping                             ( uint8_t* payload, int 
 void interpret_frame_packing_arrangement_info           ( uint8_t* payload, int size, VideoParameters *p_Vid );
 void interpret_green_metadata_info                       (uint8_t* payload, int size, VideoParameters *p_Vid );
 
-#if (ENABLE_OUTPUT_TONEMAPPING)
-void tone_map               (imgpel** imgX, imgpel* lut, int size_x, int size_y);
+#if ENABLE_OUTPUT_TONEMAPPING
+void tone_map               (imgpel** imgX, imgpel* lut, PIXEL_COORD size_x, PIXEL_COORD size_y);
 void init_tone_mapping_sei  (ToneMappingSEI *seiToneMapping);
 void update_tone_mapping_sei(ToneMappingSEI *seiToneMapping);
 #endif
 
 
 
-extern void itrans8x8   (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
-extern void icopy8x8    (Macroblock *currMB, ColorPlane pl, int ioff, int joff);
+extern void itrans8x8(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
+extern void icopy8x8 (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 
 
-extern int read_se_v (char *tracestring, Bitstream *bitstream, int *used_bits);
-extern int read_ue_v (char *tracestring, Bitstream *bitstream, int *used_bits);
-extern bool read_u_1 (char *tracestring, Bitstream *bitstream, int *used_bits);
-extern int read_u_v (int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
-extern int read_i_v (int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_se_v(char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_ue_v(char *tracestring, Bitstream *bitstream, int *used_bits);
+extern bool read_u_1(char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_u_v(int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_i_v(int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
 
 // CAVLC mapping
 extern void linfo_ue(int len, int info, int *value1, int *dummy);
@@ -3051,14 +3072,14 @@ extern void linfo_cbp_inter_other(int len,int info,int *cbp, int *dummy);
 extern void linfo_levrun_inter(int len,int info,int *level,int *irun);
 extern void linfo_levrun_c2x2(int len,int info,int *level,int *irun);
 
-extern int  uvlc_startcode_follows(Slice *currSlice, int dummy);
+extern int uvlc_startcode_follows(Slice *currSlice, bool dummy);
 
-extern int  readSyntaxElement_VLC (SyntaxElement *sym, Bitstream *currStream);
-extern int  readSyntaxElement_UVLC(Macroblock *currMB, SyntaxElement *sym, struct datapartition_dec *dp);
-extern int  readSyntaxElement_Intra4x4PredictionMode(SyntaxElement *sym, Bitstream   *currStream);
+extern int readSyntaxElement_VLC (SyntaxElement *sym, Bitstream *currStream);
+extern int readSyntaxElement_UVLC(Macroblock *currMB, SyntaxElement *sym, struct datapartition_dec *dp);
+extern int readSyntaxElement_Intra4x4PredictionMode(SyntaxElement *sym, Bitstream *currStream);
 
-extern int  GetVLCSymbol (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
-extern int  GetVLCSymbol_IntraMode (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
+extern int GetVLCSymbol (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
+extern int GetVLCSymbol_IntraMode (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
 
 extern int readSyntaxElement_FLC                         (SyntaxElement *sym, Bitstream *currStream);
 extern int readSyntaxElement_NumCoeffTrailingOnes        (SyntaxElement *sym,  Bitstream *currStream, char *type);
@@ -3068,10 +3089,10 @@ extern int readSyntaxElement_Level_VLCN                  (SyntaxElement *sym, in
 extern int readSyntaxElement_TotalZeros                  (SyntaxElement *sym, Bitstream *currStream);
 extern int readSyntaxElement_TotalZerosChromaDC          (VideoParameters *p_Vid, SyntaxElement *sym, Bitstream *currStream);
 extern int readSyntaxElement_Run                         (SyntaxElement *sym, Bitstream *currStream);
-extern int GetBits  (uint8_t buffer[],int totbitoffset,int *info, int bitcount, int numbits);
-extern int ShowBits (uint8_t buffer[],int totbitoffset,int bitcount, int numbits);
+extern int GetBits (uint8_t buffer[],int totbitoffset,int *info, int bitcount, int numbits);		// serve int numbits!
+extern int ShowBits(uint8_t buffer[],int totbitoffset,int bitcount, int numbits);
 
-extern int more_rbsp_data (uint8_t buffer[],int totbitoffset,int bytecount);
+extern int more_rbsp_data(uint8_t buffer[],int totbitoffset,int bytecount);
 
 
 void init_time(void);

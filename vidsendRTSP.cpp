@@ -677,7 +677,7 @@ ErrorType CRTSPClientSocket::DoDESCRIBE(CString uri, bool http_tunnel_no_respons
 	  RecvSDP(this,myBuf,ret);
   SDPStr=myBuf;
     // cout << "DEBUG: " << SDPStr << endl;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  SDP: %s",SDPStr);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  SDP: %s",SDPStr);
 
 //	Disconnect();
 	return RTSP_NO_ERROR;
@@ -1995,7 +1995,6 @@ CString CRTSPClientSocket::MakeMd5DigestResp(CString realm, CString cmd, CString
 	tmp=habuf;
 
 	return tmp;
-
 	}
 
 

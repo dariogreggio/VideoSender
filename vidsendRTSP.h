@@ -4082,16 +4082,14 @@ public:
 	void DeletePacket(RTPPacket *p);
 	/** See BeginDataAccess. */
 	int EndDataAccess();
-	/** Sets the current source to be the first source in the table which has RTPPacket instances 
-	 *  that we haven't extracted yet. 
+	/** 
 	 *  Sets the current source to be the first source in the table which has RTPPacket instances 
 	 *  that we haven't extracted yet. If no such member was found, the function returns false,
 	 *  otherwise it returns true.
 	 */
 	bool GotoFirstSourceWithData();
 	int ProcessPolledData();
-	/** Extracts the next packet from the received packets queue of the current participant,
-	 *  or NULL if no more packets are available.
+	/** 
 	 *  Extracts the next packet from the received packets queue of the current participant,
 	 *  or NULL if no more packets are available. When the packet is no longer needed, its
 	 *  memory should be freed using the DeletePacket member function.
