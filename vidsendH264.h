@@ -57,16 +57,16 @@ typedef int16_t BLOCK_COORD;
 #define SMB_BLOCK_SIZE         8
 #define BLOCK_PIXELS          16
 #define MB_BLOCK_SIZE         16
-#define MB_PIXELS            256 // MB_BLOCK_SIZE * MB_BLOCK_SIZE
+#define MB_PIXELS            (MB_BLOCK_SIZE * MB_BLOCK_SIZE)
 #define MB_PIXELS_SHIFT        8 // log2(MB_BLOCK_SIZE * MB_BLOCK_SIZE)
 #define MB_BLOCK_SHIFT         4
 #define BLOCK_MULTIPLE         4 // (MB_BLOCK_SIZE/BLOCK_SIZE)
-#define MB_BLOCK_PARTITIONS   16 // (BLOCK_MULTIPLE * BLOCK_MULTIPLE)
-#define BLOCK_CONTEXT         64 // (4 * MB_BLOCK_PARTITIONS)
+#define MB_BLOCK_PARTITIONS   (BLOCK_MULTIPLE * BLOCK_MULTIPLE)
+#define BLOCK_CONTEXT         (4 * MB_BLOCK_PARTITIONS)
 
 // These variables relate to the subpel accuracy supported by the software (1/4)
-#define BLOCK_SIZE_SP      16  // BLOCK_SIZE << 2
-#define BLOCK_SIZE_8x8_SP  32  // BLOCK_SIZE8x8 << 2
+#define BLOCK_SIZE_SP      (BLOCK_SIZE << 2)
+#define BLOCK_SIZE_8x8_SP  (BLOCK_SIZE_8x8 << 2)
 
 //#include "typedefs.h"
 
@@ -102,11 +102,11 @@ typedef int32_t  transpel;
 #define MAXPPS  256
 
 //#define MAX_NUM_SLICES 150
-#define MAX_NUM_SLICES     50		// era 50
+#define MAX_NUM_SLICES     100		// era 50
 #define MAX_REFERENCE_PICTURES 32               //!< H.264 allows 32 fields
-#define MAX_CODED_FRAME_SIZE 256000    /*8000000*/         //!< bytes for one frame (occhio hi-res, 952x576 ecc specie quando la compressione è bassa! di giorno
+#define MAX_CODED_FRAME_SIZE 512000    /*8000000*/         //!< bytes for one frame (occhio hi-res, 952x576 ecc specie quando la compressione è bassa! di giorno
 #define MAX_NUM_DECSLICES  16
-#define MAX_DEC_THREADS    16                  //16 core deocoding;
+#define MAX_DEC_THREADS    16                  //16 core decoding;
 #define MCBUF_LUMA_PAD_X        32
 #define MCBUF_LUMA_PAD_Y        12
 #define MCBUF_CHROMA_PAD_X      16
@@ -121,7 +121,7 @@ typedef enum {
   CM_YUV     =  0,
   CM_RGB     =  1,
   CM_XYZ     =  2
-} ColorModel;
+	} ColorModel;
 
 typedef enum {
   CF_UNKNOWN = -1,     //!< Unknown color format
@@ -129,7 +129,7 @@ typedef enum {
   YUV420     =  1,     //!< 4:2:0
   YUV422     =  2,     //!< 4:2:2
   YUV444     =  3      //!< 4:4:4
-} ColorFormat;
+	} ColorFormat;
 
 typedef enum {
   PF_UNKNOWN = -1,     //!< Unknown color ordering
@@ -192,14 +192,29 @@ typedef struct {
   unsigned int log2_max_mv_length_horizontal;                    // ue(v)
   unsigned int num_reorder_frames;                               // ue(v)
   unsigned int max_dec_frame_buffering;                          // ue(v)
-} vui_seq_parameters_t;
+	} vui_seq_parameters_t;
 
+
+//AVC Profile IDC definitions
+typedef enum {
+  NO_PROFILE     =  0,       //!< disable profile checking for experimental coding (enables FRExt, but disables MV)
+  FREXT_CAVLC444 = 44,       //!< YUV 4:4:4/14 "CAVLC 4:4:4"
+  BASELINE       = 66,       //!< YUV 4:2:0/8  "Baseline"
+  MAIN           = 77,       //!< YUV 4:2:0/8  "Main"
+  EXTENDED       = 88,       //!< YUV 4:2:0/8  "Extended"
+  FREXT_HP       = 100,      //!< YUV 4:2:0/8  "High"
+  FREXT_Hi10P    = 110,      //!< YUV 4:2:0/10 "High 10"
+  FREXT_Hi422    = 122,      //!< YUV 4:2:2/10 "High 4:2:2"
+  FREXT_Hi444    = 244,      //!< YUV 4:4:4/14 "High 4:4:4"
+  MVC_HIGH       = 118,      //!< YUV 4:2:0/8  "Multiview High"
+  STEREO_HIGH    = 128       //!< YUV 4:2:0/8  "Stereo High"
+	} ProfileIDC;
 
 #define MAXnum_slice_groups_minus1  8
 typedef struct {
   bool   Valid;                  // indicates the parameter set is valid
-  unsigned int pic_parameter_set_id;                             // ue(v)
-  unsigned int seq_parameter_set_id;                             // ue(v)
+  uint16_t pic_parameter_set_id;                             // ue(v)
+  uint16_t seq_parameter_set_id;                             // ue(v)
   bool   entropy_coding_mode_flag;                            // u(1)
   bool   transform_8x8_mode_flag;                             // u(1)
 
@@ -249,12 +264,12 @@ typedef struct {
 typedef struct {
   bool   Valid;                  // indicates the parameter set is valid
 
-  uint8_t profile_idc;                                       // u(8)
+  ProfileIDC profile_idc;                                       // u(8)
   bool   constrained_set0_flag;                                // u(1)
   bool   constrained_set1_flag;                                // u(1)
   bool   constrained_set2_flag;                                // u(1)
   bool   constrained_set3_flag;                                // u(1)
-#if (MVC_EXTENSION_ENABLE)
+#if MVC_EXTENSION_ENABLE
   bool   constrained_set4_flag;                                // u(1)
   bool   constrained_set5_flag;                                // u(2)
 #endif
@@ -330,12 +345,12 @@ typedef struct mvcvui_tag {
   int8_t cpb_removal_delay_length_minus1;
   int8_t dpb_output_delay_length_minus1;
   int8_t time_offset_length;
-} MVCVUI_t;
+	} MVCVUI_t;
 
 typedef struct {
   seq_parameter_set_rbsp_t sps;
 
-  unsigned int bit_equal_to_one;
+  uint8_t bit_equal_to_one;
   int num_views_minus1;
   int *view_id;
   int *num_anchor_refs_l0;
@@ -349,7 +364,7 @@ typedef struct {
   int **non_anchor_ref_l1;
    
   int num_level_values_signalled_minus1;
-  int *level_idc;
+  uint8_t *level_idc;
   int *num_applicable_ops_minus1;
   uint8_t **applicable_op_temporal_id;
   int **applicable_op_num_target_views_minus1;
@@ -359,7 +374,7 @@ typedef struct {
   bool  mvc_vui_parameters_present_flag;
   bool  Valid;                  // indicates the parameter set is valid
   MVCVUI_t  MVCVUIParams;
-} subset_seq_parameter_set_rbsp_t;
+	} subset_seq_parameter_set_rbsp_t;
 
 #endif
 
@@ -384,7 +399,7 @@ typedef struct annex_b_struct {
   int IsFirstByteStreamNALU;
   int nextstartcodebytes;
   uint8_t *Buf;  
-} ANNEXB_t;
+	} ANNEXB_t;
 
 #define MAX_PLANE       3
 
@@ -423,32 +438,32 @@ enum {
   BI_PRED = 2,
   BI_PRED_L0 = 3,
   BI_PRED_L1 = 4
-};
+	};
 
 enum {
   ERROR_SAD = 0,
   ERROR_SSE = 1,
   ERROR_SATD = 2,
   ERROR_PSATD = 3
-};
+	};
 
 enum {
   ME_Y_ONLY = 0,
   ME_YUV_FP = 1,
   ME_YUV_FP_SP = 2
-};
+	};
 
 
 enum {
   DISTORTION_MSE = 0
-};
+	};
 
 
 //! Data Partitioning Modes
 typedef enum {
   PAR_DP_1,   //!< no data partitioning is supported
   PAR_DP_3    //!< data partitioning with 3 partitions
-} PAR_DP_TYPE;
+	} PAR_DP_TYPE;
 
 
 //! Output File Types
@@ -456,7 +471,7 @@ typedef enum {
   PAR_OF_ANNEXB,    //!< Annex B uint8_t stream format
   PAR_OF_RTP,       //!< RTP packets in outfile  SARA' INFILE?? ;)
   PAR_OF_GDRTP       //!< i miei RTP packets!
-} PAR_OF_TYPE;
+	} PAR_OF_TYPE;
 
 //! Field Coding Types
 typedef enum {
@@ -488,7 +503,7 @@ typedef enum {
   SE_BFRAME,
   SE_EOS,
   SE_MAX_ELEMENTS = 20 //!< number of maximum syntax elements
-} SE_type;             // substituting the definitions in elements.h
+	} SE_type;             // substituting the definitions in elements.h
 
 
 typedef enum {
@@ -496,13 +511,13 @@ typedef enum {
   FIXED_MB,
   FIXED_RATE,
   CALL_BACK
-} SliceMode;
+	} SliceMode;
 
 
 typedef enum {
   CAVLC,
   CABAC
-} SymbolMode;
+	} SymbolMode;
 
 typedef enum {
   FULL_SEARCH      = -1,
@@ -580,7 +595,7 @@ typedef enum {
  */
 
 typedef struct pix_pos {
-  int   available;
+  bool  available;
   int   mb_addr;
   BLOCK_COORD x;
   BLOCK_COORD y;
@@ -650,7 +665,7 @@ typedef enum {
   CR                =  8,
   CR_INTRA16x16DC   =  9,
   CR_INTRA16x16AC   = 10
-} CAVLCBlockTypes;
+	} CAVLCBlockTypes;
 
 // CABAC block types
 typedef enum {
@@ -676,7 +691,44 @@ typedef enum {
   CR_8x4        =  19,
   CR_4x8        =  20,
   CR_4x4        =  21
-} CABACBlockTypes;
+	} CABACBlockTypes;
+
+// 4x4 intra prediction modes 
+typedef enum {
+  VERT_PRED            = 0,
+  HOR_PRED             = 1,
+  DC_PRED              = 2,
+  DIAG_DOWN_LEFT_PRED  = 3,
+  DIAG_DOWN_RIGHT_PRED = 4,
+  VERT_RIGHT_PRED      = 5,
+  HOR_DOWN_PRED        = 6,
+  VERT_LEFT_PRED       = 7,
+  HOR_UP_PRED          = 8
+	} I4x4PredModes;
+
+// 16x16 intra prediction modes
+typedef enum {
+  VERT_PRED_16   = 0,
+  HOR_PRED_16    = 1,
+  DC_PRED_16     = 2,
+  PLANE_16       = 3
+	} I16x16PredModes;
+
+// 8x8 chroma intra prediction modes
+typedef enum {
+  DC_PRED_8     =  0,
+  HOR_PRED_8    =  1,
+  VERT_PRED_8   =  2,
+  PLANE_8       =  3
+	} I8x8PredModes;
+
+// MV Prediction types
+typedef enum {
+  MVPRED_MEDIAN   = 0,
+  MVPRED_L        = 1,
+  MVPRED_U        = 2,
+  MVPRED_UR       = 3
+	} MVPredTypes;
 
 //! Macroblock
 typedef struct macroblock_dec {
@@ -687,9 +739,9 @@ typedef struct macroblock_dec {
   int mbAddrA, mbAddrB, mbAddrC, mbAddrD;
   bool mbAvailA, mbAvailB, mbAvailC, mbAvailD;
   BlockPos mb;
-  int block_x;
-  int block_y;
-  int block_y_aff;
+  BLOCK_COORD block_x;
+  BLOCK_COORD block_y;
+  BLOCK_COORD block_y_aff;
   BLOCK_COORD pix_x;
   BLOCK_COORD pix_y;
   BLOCK_COORD pix_c_x;
@@ -725,11 +777,11 @@ typedef struct macroblock_dec {
   int           cbp;
   CBPStructure  s_cbp[3];
 
-  uint8_t       i16mode;
+  I16x16PredModes i16mode;
   int8_t        b8mode[4];
   int8_t        b8pdir[4];
   int8_t        ipmode_DPCM;
-  int8_t        c_ipred_mode;       //!< chroma intra prediction mode
+  I8x8PredModes c_ipred_mode;       //!< chroma intra prediction mode
   bool          skip_flag;
   int8_t        DFDisableIdc;
   int16_t       DFAlphaC0Offset;
@@ -771,7 +823,7 @@ typedef struct macroblock_dec {
 
 typedef struct coding_par {
   uint8_t layer_id;
-  uint8_t profile_idc;
+  ProfileIDC profile_idc;
   PIXEL_COORD width;
   PIXEL_COORD height;
   PIXEL_COORD width_cr;                               //!< width chroma  
@@ -791,10 +843,10 @@ typedef struct coding_par {
   int num_blk8x8_uv;
   int num_uv_blocks;
   int num_cdc_coeff;
-  int mb_cr_size_x;
-  int mb_cr_size_y;
-  int mb_cr_size_x_blk;
-  int mb_cr_size_y_blk;
+  BLOCK_COORD mb_cr_size_x;
+  BLOCK_COORD mb_cr_size_y;
+  BLOCK_COORD mb_cr_size_x_blk;
+  BLOCK_COORD mb_cr_size_y_blk;
   int mb_cr_size;
   uint32_t mb_size[3][2];                         //!< component macroblock dimensions
   uint32_t mb_size_blk[3][2];                     //!< component macroblock dimensions 
@@ -813,10 +865,10 @@ typedef struct coding_par {
   PIXEL_COORD iChromaPadX;
   PIXEL_COORD iChromaPadY;
 
-  int subpel_x;
-  int subpel_y;
-  int shiftpel_x;
-  int shiftpel_y;
+  BLOCK_COORD subpel_x;
+  BLOCK_COORD subpel_y;
+  BLOCK_COORD shiftpel_x;
+  BLOCK_COORD shiftpel_y;
   int total_scale;
   unsigned int oldFrameSizeInMbs;
 
@@ -829,8 +881,8 @@ typedef struct coding_par {
   imgpel ***imgUV_ref;
   Macroblock *mb_data;               //!< array containing all MBs of a whole frame
   Macroblock *mb_data_JV[MAX_PLANE]; //!< mb_data to be used for 4:4:4 independent mode
-  int8_t *intra_block;
-  int8_t *intra_block_JV[MAX_PLANE];
+  bool *intra_block;
+  bool *intra_block_JV[MAX_PLANE];
   BlockPos *PicPos;  
   uint8_t **ipredmode;                  //!< prediction type [90][74]
   uint8_t **ipredmode_JV[MAX_PLANE];
@@ -890,7 +942,7 @@ typedef struct {
   BiContextType ref_no_contexts  [2][NUM_REF_NO_CTX];
   BiContextType delta_qp_contexts[NUM_DELTA_QP_CTX];
   BiContextType mb_aff_contexts  [NUM_MB_AFF_CTX];
-} MotionInfoContexts;
+	} MotionInfoContexts;
 
 #define NUM_IPR_CTX    2
 #define NUM_CIPR_CTX   4
@@ -908,16 +960,16 @@ typedef struct {
 #endif
 
 typedef struct {
-  BiContextType  transform_size_contexts [NUM_TRANSFORM_SIZE_CTX];
-  BiContextType  ipr_contexts [NUM_IPR_CTX];
-  BiContextType  cipr_contexts[NUM_CIPR_CTX];
-  BiContextType  cbp_contexts [3][NUM_CBP_CTX];
-  BiContextType  bcbp_contexts[NUM_BLOCK_TYPES][NUM_BCBP_CTX];
-  BiContextType  map_contexts [2][NUM_BLOCK_TYPES][NUM_MAP_CTX];
-  BiContextType  last_contexts[2][NUM_BLOCK_TYPES][NUM_LAST_CTX];
-  BiContextType  one_contexts [NUM_BLOCK_TYPES][NUM_ONE_CTX];
-  BiContextType  abs_contexts [NUM_BLOCK_TYPES][NUM_ABS_CTX];
-} TextureInfoContexts;
+  BiContextType transform_size_contexts [NUM_TRANSFORM_SIZE_CTX];
+  BiContextType ipr_contexts [NUM_IPR_CTX];
+  BiContextType cipr_contexts[NUM_CIPR_CTX];
+  BiContextType cbp_contexts [3][NUM_CBP_CTX];
+  BiContextType bcbp_contexts[NUM_BLOCK_TYPES][NUM_BCBP_CTX];
+  BiContextType map_contexts [2][NUM_BLOCK_TYPES][NUM_MAP_CTX];
+  BiContextType last_contexts[2][NUM_BLOCK_TYPES][NUM_LAST_CTX];
+  BiContextType one_contexts [NUM_BLOCK_TYPES][NUM_ONE_CTX];
+  BiContextType abs_contexts [NUM_BLOCK_TYPES][NUM_ABS_CTX];
+	} TextureInfoContexts;
 
 #if MVC_EXTENSION_ENABLE
 typedef struct nalunitheadermvcext_tag {
@@ -943,6 +995,7 @@ typedef enum {
   SOS = 3,     //!< Start Of Slice
   SOS_CONT = 4
 	} HEADER_TYPE;
+
 
 //! Slice
 typedef struct slice {
@@ -1135,7 +1188,7 @@ typedef struct slice {
   struct storable_picture *dec_picture;
   int **siblock;
   uint8_t **ipredmode;
-  int8_t *intra_block;
+  bool *intra_block;
   int8_t  chroma_vector_adjustment[6][32];
   void (*read_CBP_and_coeffs_from_NAL) (Macroblock *currMB);
   int  (*decode_one_component     )    (Macroblock *currMB, ColorPlane curr_plane, imgpel **currImg, struct storable_picture *dec_picture);
@@ -1149,7 +1202,7 @@ typedef struct slice {
   void (*intra_pred_chroma        )    (Macroblock *currMB);
   int  (*intra_pred_4x4)               (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff,PIXEL_COORD i4,PIXEL_COORD j4);
   int  (*intra_pred_8x8)               (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
-  int  (*intra_pred_16x16)             (Macroblock *currMB, ColorPlane pl, int predmode);
+  int  (*intra_pred_16x16)             (Macroblock *currMB, ColorPlane pl, I16x16PredModes predmode);
 
   void (*linfo_cbp_intra          )    (int len, int info, int *cbp, int *dummy);
   void (*linfo_cbp_inter          )    (int len, int info, int *cbp, int *dummy);    
@@ -1249,7 +1302,7 @@ typedef struct video_par {
   PIXEL_COORD last_pic_width_in_mbs_minus1;
   PIXEL_COORD last_pic_height_in_map_units_minus1;
   int last_max_dec_frame_buffering;
-  uint8_t last_profile_idc;
+  ProfileIDC last_profile_idc;
 #endif
 
   struct sei_params  *p_SEI;
@@ -1264,8 +1317,8 @@ typedef struct video_par {
   int iNumOfSlicesAllocated;
   int iNumOfSlicesDecoded;
   Slice **ppSliceList;
-  int8_t *intra_block;
-  int8_t *intra_block_JV[MAX_PLANE];
+  bool *intra_block;
+  bool *intra_block_JV[MAX_PLANE];
   //int qp;                                     //!< quant for the current frame
 
   //int sp_switch;                              //!< 1 for switching sp, 0 for normal sp  
@@ -1428,15 +1481,16 @@ typedef struct video_par {
   struct tone_mapping_struct_s *seiToneMapping;
 #endif
 
-  void (*buf2img)          (imgpel** imgX, uint8_t* buf, int size_x, int size_y, int o_size_x, int o_size_y, int symbol_size_in_bytes, int bitshift);
+  void (*buf2img)          (imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, PIXEL_COORD o_size_x, PIXEL_COORD o_size_y, 
+		int symbol_size_in_bytes, int bitshift);
   void (*getNeighbour)     (Macroblock *currMB, BLOCK_COORD xN, BLOCK_COORD yN, uint32_t mb_size[2], PixelPos *pix);
   void (*get_mb_block_pos) (BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y);
-  void (*GetStrengthVer)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
-  void (*GetStrengthHor)   (Macroblock *MbQ, int edge, int mvlimit, struct storable_picture *p);
-  void (*EdgeLoopLumaVer)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge);
-  void (*EdgeLoopLumaHor)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, struct storable_picture *p);
-  void (*EdgeLoopChromaVer)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, int uv, struct storable_picture *p);
-  void (*EdgeLoopChromaHor)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, int edge, int uv, struct storable_picture *p);
+  void (*GetStrengthVer)   (Macroblock *MbQ, uint8_t edge, uint8_t mvlimit, struct storable_picture *p);
+  void (*GetStrengthHor)   (Macroblock *MbQ, uint8_t edge, uint8_t mvlimit, struct storable_picture *p);
+  void (*EdgeLoopLumaVer)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, uint8_t edge);
+  void (*EdgeLoopLumaHor)  (ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, uint8_t edge, struct storable_picture *p);
+  void (*EdgeLoopChromaVer)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, uint8_t edge, int uv, struct storable_picture *p);
+  void (*EdgeLoopChromaHor)(imgpel** Img, uint8_t *Strength, Macroblock *MbQ, uint8_t edge, int uv, struct storable_picture *p);
   void (*img2buf)          (imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, uint8_t symbol_size_in_bytes, 
 														PIXEL_COORD crop_left, PIXEL_COORD crop_right, PIXEL_COORD crop_top, PIXEL_COORD crop_bottom, PIXEL_COORD iOutStride);
 
@@ -1479,7 +1533,7 @@ typedef struct video_par {
   bool separate_colour_plane_flag;
   int pic_unit_size_on_disk;
 
-  uint8_t profile_idc;
+  ProfileIDC profile_idc;
   ColorFormat yuv_format;
   bool lossless_qpprime_flag;
   int num_blk8x8_uv;
@@ -1493,10 +1547,10 @@ typedef struct video_par {
   uint32_t mb_size[3][2];                         //!< component macroblock dimensions
   uint32_t mb_size_blk[3][2];                     //!< component macroblock dimensions 
   uint32_t mb_size_shift[3][2];
-  int subpel_x;
-  int subpel_y;
-  int shiftpel_x;
-  int shiftpel_y;
+  BLOCK_COORD subpel_x;
+  BLOCK_COORD subpel_y;
+  BLOCK_COORD shiftpel_x;
+  BLOCK_COORD shiftpel_y;
   int total_scale;
   int max_frame_num;
 
@@ -1595,8 +1649,8 @@ extern void reset_annex_b    (ANNEXB_t *annex_b);
 extern void arideco_start_decoding(DecodingEnvironmentPtr eep, uint8_t *code_buffer, int firstbyte, int *code_len);
 extern int  arideco_bits_read(DecodingEnvironmentPtr dep);
 extern void arideco_done_decoding(DecodingEnvironmentPtr dep);
-extern void biari_init_context(int8_t qp, BiContextTypePtr ctx, const int8_t* ini);
-extern unsigned int biari_decode_symbol(DecodingEnvironment *dep, BiContextType *bi_ct );
+extern void biari_init_context(int8_t qp, BiContextTypePtr ctx, const int8_t *ini);
+extern unsigned int biari_decode_symbol(DecodingEnvironment *dep, BiContextType *bi_ct);
 extern unsigned int biari_decode_symbol_eq_prob(DecodingEnvironmentPtr dep);
 extern unsigned int biari_decode_final(DecodingEnvironmentPtr dep);
 
@@ -1640,14 +1694,15 @@ extern void cabac_new_slice(Slice *currSlice);
 
 //! Syntaxelement
 typedef struct syntaxelement_dec {
-  int           type;                  //!< type of syntax element for data part.
+  int8_t        type;                  //!< type of syntax element for data part.
   int           value1;                //!< numerical value of syntax element
+	// DOVREBBERO andare anche a 16 o addirittura a 8bit, ma si pianta con memoria corrotta... verificare TUTTE le funzioni implicate lv ecc
   int           value2;                //!< for blocked symbols, e.g. run/level
   int           len;                   //!< length of code
   int           inf;                   //!< info part of CAVLC code
   unsigned int  bitpattern;            //!< CAVLC bitpattern
-  int           context;               //!< CABAC context
-  int           k;                     //!< CABAC context for coeff_count,uv
+  int8_t        context;               //!< CABAC context
+  int8_t        k;                     //!< CABAC context for coeff_count,uv
 
 #if JTRACE
   #define       TRACESTRING_SIZE 100           //!< size of trace string
@@ -1789,30 +1844,30 @@ typedef struct inp_par {
 
   // Needed to allow compilation for decoder. May be used later for distortion computation operations
   bool stdRange;                         //!< 1 - standard range, 0 - full range
-  int videoCode;                        //!< 1 - 709, 3 - 601:  See VideoCode in io_tiff.
+  int8_t videoCode;                        //!< 1 - 709, 3 - 601:  See VideoCode in io_tiff.
   bool export_views;
   
   int iDecFrmNum;
 
-  int bDisplayDecParams;
-  int dpb_plus[2];
+  bool bDisplayDecParams;
+  int8_t dpb_plus[2];
 	} InputParameters;
 
 
 typedef struct {
   char *TokenName;    //!< name
   void *Place;        //!< address
-  int Type;           //!< type:  0-int, 1-char[], 2-double
+  int8_t Type;           //!< type:  0-int, 1-char[], 2-double
   double Default;     //!< default value
-  int param_limits;   //!< 0: no limits, 1: both min and max, 2: only min (i.e. no negatives), 3: special case for QPs since min needs bitdepth_qp_scale
+  int8_t param_limits;   //!< 0: no limits, 1: both min and max, 2: only min (i.e. no negatives), 3: special case for QPs since min needs bitdepth_qp_scale
   double min_limit;
   double max_limit;
-  int    char_size;   //!< Dimension of type char[]
+  int8_t  char_size;   //!< Dimension of type char[]
 	} Mapping;
 
 //! Maps parameter name to its address, type etc.
-extern char *GetConfigFileContent (char *Filename);
-extern int  InitParams            (Mapping *Map);
+extern char *GetConfigFileContent(char *Filename);
+extern int  InitParams           (Mapping *Map);
 extern int TestParams(Mapping *Map, int bitdepth_qp_scale[3]);
 extern int DisplayParams(Mapping *Map, char *message);
 extern void ParseContent          (InputParameters *p_Inp, Mapping *Map, char *buf, int bufsize);
@@ -1855,21 +1910,6 @@ extern void delete_dec_stats(DecStatParameters *stats);
 
 
 
-//AVC Profile IDC definitions
-typedef enum {
-  NO_PROFILE     =  0,       //!< disable profile checking for experimental coding (enables FRExt, but disables MV)
-  FREXT_CAVLC444 = 44,       //!< YUV 4:4:4/14 "CAVLC 4:4:4"
-  BASELINE       = 66,       //!< YUV 4:2:0/8  "Baseline"
-  MAIN           = 77,       //!< YUV 4:2:0/8  "Main"
-  EXTENDED       = 88,       //!< YUV 4:2:0/8  "Extended"
-  FREXT_HP       = 100,      //!< YUV 4:2:0/8  "High"
-  FREXT_Hi10P    = 110,      //!< YUV 4:2:0/10 "High 10"
-  FREXT_Hi422    = 122,      //!< YUV 4:2:2/10 "High 4:2:2"
-  FREXT_Hi444    = 244,      //!< YUV 4:4:4/14 "High 4:4:4"
-  MVC_HIGH       = 118,      //!< YUV 4:2:0/8  "Multiview High"
-  STEREO_HIGH    = 128       //!< YUV 4:2:0/8  "Stereo High"
-} ProfileIDC;
-
 #define FILE_NAME_SIZE  255
 #define INPUT_TEXT_SIZE 1024
 
@@ -1882,7 +1922,7 @@ typedef enum {
 typedef enum {
   DIR_TEMPORAL = 0, //!< Temporal Direct Mode
   DIR_SPATIAL  = 1 //!< Spatial Direct Mode
-} DirectModes;
+	} DirectModes;
 
 
 // Macro defines
@@ -1902,43 +1942,6 @@ typedef enum {
 // Quantization parameter range
 #define MIN_QP          0
 #define MAX_QP          51
-// 4x4 intra prediction modes 
-typedef enum {
-  VERT_PRED            = 0,
-  HOR_PRED             = 1,
-  DC_PRED              = 2,
-  DIAG_DOWN_LEFT_PRED  = 3,
-  DIAG_DOWN_RIGHT_PRED = 4,
-  VERT_RIGHT_PRED      = 5,
-  HOR_DOWN_PRED        = 6,
-  VERT_LEFT_PRED       = 7,
-  HOR_UP_PRED          = 8
-	} I4x4PredModes;
-
-// 16x16 intra prediction modes
-typedef enum {
-  VERT_PRED_16   = 0,
-  HOR_PRED_16    = 1,
-  DC_PRED_16     = 2,
-  PLANE_16       = 3
-	} I16x16PredModes;
-
-// 8x8 chroma intra prediction modes
-typedef enum {
-  DC_PRED_8     =  0,
-  HOR_PRED_8    =  1,
-  VERT_PRED_8   =  2,
-  PLANE_8       =  3
-	} I8x8PredModes;
-
-
-// MV Prediction types
-typedef enum {
-  MVPRED_MEDIAN   = 0,
-  MVPRED_L        = 1,
-  MVPRED_U        = 2,
-  MVPRED_UR       = 3
-	} MVPredTypes;
 
 enum {
   DECODING_OK     = 0,
@@ -2110,17 +2113,17 @@ typedef struct ercVariables_s {
 * External function interface
 */
 
-void ercInit (VideoParameters *p_Vid, int pic_sizex, int pic_sizey, int flag);
-ercVariables_t *ercOpen( void );
-void ercReset( ercVariables_t *errorVar, int nOfMBs, int numOfSegments, int picSizeX );
-void ercClose( VideoParameters *p_Vid, ercVariables_t *errorVar );
-void ercSetErrorConcealment( ercVariables_t *errorVar, int value );
+void ercInit (VideoParameters *p_Vid, int pic_sizex, int pic_sizey, bool flag);
+ercVariables_t *ercOpen( void);
+void ercReset(ercVariables_t *errorVar, int nOfMBs, int numOfSegments, PIXEL_COORD picSizeX);
+void ercClose(VideoParameters *p_Vid, ercVariables_t *errorVar);
+void ercSetErrorConcealment( ercVariables_t *errorVar, int value);
 
-void ercStartSegment( int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar );
-void ercStopSegment( int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar );
-void ercMarkCurrSegmentLost(int picSizeX, ercVariables_t *errorVar );
-void ercMarkCurrSegmentOK(int picSizeX, ercVariables_t *errorVar );
-void ercMarkCurrMBConcealed( int currMBNum, int comp, int picSizeX, ercVariables_t *errorVar );
+void ercStartSegment( int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar);
+void ercStopSegment( int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar);
+void ercMarkCurrSegmentLost(int picSizeX, ercVariables_t *errorVar);
+void ercMarkCurrSegmentOK(int picSizeX, ercVariables_t *errorVar);
+void ercMarkCurrMBConcealed( int currMBNum, int comp, int picSizeX, ercVariables_t *errorVar);
 
 //! YUV pixel domain image arrays for a video frame
 typedef struct frame_s {
@@ -2131,7 +2134,7 @@ typedef struct frame_s {
 	} frame;
 
 int ercConcealIntraFrame(VideoParameters *p_Vid, frame *recfr, PIXEL_COORD picSizeX, PIXEL_COORD picSizeY, 
-												 ercVariables_t *errorVar );
+												 ercVariables_t *errorVar);
 
 //! region structure stores information about a region that is needed for concealment
 typedef struct object_buffer {
@@ -2181,7 +2184,7 @@ typedef struct storable_picture {
 
   PIXEL_COORD    size_x, size_y, size_x_cr, size_y_cr;
   PIXEL_COORD    size_x_m1, size_y_m1, size_x_cr_m1, size_y_cr_m1;
-  int         coded_frame;
+  bool        coded_frame;
   bool        mb_aff_frame_flag;
   PIXEL_COORD    PicWidthInMbs;
   PIXEL_COORD    PicSizeInMbs;
@@ -2224,8 +2227,8 @@ typedef struct storable_picture {
   bool        concealed_pic; //indicates if this is a concealed picture
   
   // variables for tone mapping
-  int         seiHasTone_mapping;
-  int         tone_mapping_model_id;
+  bool        seiHasTone_mapping;
+  int8_t      tone_mapping_model_id;
   int8_t      tonemapped_bit_depth;  
   imgpel*     tone_mapping_lut;                //!< tone mapping look up table
 
@@ -2240,8 +2243,8 @@ typedef struct storable_picture {
   PIXEL_COORD iLumaExpandedHeight;
   PIXEL_COORD iChromaExpandedHeight;
   imgpel **cur_imgY; // for more efficient get_block_luma
-  int no_ref;
-  int iCodingType;
+  bool no_ref;
+  CodingType iCodingType;
   //
   int8_t listXsize[MAX_NUM_SLICES][2];
   struct storable_picture **listX[MAX_NUM_SLICES][2];
@@ -2256,9 +2259,9 @@ struct concealment_node {
   struct concealment_node *next;
 	};
 
-extern struct concealment_node * init_node(StorablePicture* , int );
-extern void print_node( struct concealment_node * );
-extern void print_list( struct concealment_node * );
+extern struct concealment_node * init_node(StorablePicture* , int);
+extern void print_node( struct concealment_node *);
+extern void print_list( struct concealment_node *);
 
 
 //! Frame Stores for Decoded Picture Buffer
@@ -2338,8 +2341,8 @@ extern int comp(const void *, const void *);
 
 void ercPixConcealIMB    (VideoParameters *p_Vid, imgpel *currFrame, int row, int column, int predBlocks[], int frameWidth, int mbWidthInBlocks);
 int ercCollect8PredBlocks( int predBlocks[], int currRow, int currColumn, int8_t *condition,
-                          int maxRow, int maxColumn, int step, uint8_t fNoCornerNeigh );
-int ercCollectColumnBlocks( int predBlocks[], int currRow, int currColumn, int8_t *condition, int maxRow, int maxColumn, int step );
+                          int maxRow, int maxColumn, int step, uint8_t fNoCornerNeigh);
+int ercCollectColumnBlocks( int predBlocks[], int currRow, int currColumn, int8_t *condition, int maxRow, int maxColumn, int step);
 
 #define isSplitted(object_list,currMBNum) \
     ((object_list+((currMBNum)<<2))->regionMode >= REGMODE_SPLITTED)
@@ -2384,7 +2387,7 @@ extern void reset_ec_flags       (VideoParameters *p_Vid);
 extern void dectracebitcnt(int count);
 extern void tracebits     ( const char *trace_str, int len, int info, int value1);
 extern void tracebits2    ( const char *trace_str, int len, int info);
-extern void trace_info    ( SyntaxElement *currSE, const char *description_str, int value1 );
+extern void trace_info    ( SyntaxElement *currSE, const char *description_str, int value1);
 #endif
 
 
@@ -2467,7 +2470,7 @@ typedef struct snr_par {
   float snra[3];                               //!< Average component SNR (dB) remaining frames
   float sse[3];                                //!< component SSE 
   float msse[3];                                //!< Average component SSE 
-} SNRParameters;
+	} SNRParameters;
 
 
 typedef struct old_slice_par {
@@ -2523,7 +2526,7 @@ extern unsigned CeilLog2_sf( unsigned uiVal);
 
 // For 4:4:4 independent mode
 extern void change_plane_JV      ( VideoParameters *p_Vid, int nplane, Slice *pSlice);
-extern void make_frame_picture_JV( VideoParameters *p_Vid );
+extern void make_frame_picture_JV( VideoParameters *p_Vid);
 
 #if MVC_EXTENSION_ENABLE
 extern void nal_unit_header_mvc_extension(NALUnitHeaderMVCExt_t *NaluHeaderMVCExt, struct bit_stream_dec *bitstream);
@@ -2531,34 +2534,35 @@ extern void nal_unit_header_mvc_extension(NALUnitHeaderMVCExt_t *NaluHeaderMVCEx
 
 extern void FreeDecPicList (DecodedPicList *pDecPicList);
 extern void ClearDecPicList(VideoParameters *p_Vid);
-extern DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, int view_id);
-extern Slice *malloc_slice( InputParameters *p_Inp, VideoParameters *p_Vid );
-extern void copy_slice_info ( Slice *currSlice, OldSliceParams *p_old_slice );
+extern DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, uint8_t view_id);
+extern Slice *malloc_slice( InputParameters *p_Inp, VideoParameters *p_Vid);
+extern void copy_slice_info ( Slice *currSlice, OldSliceParams *p_old_slice);
 extern void OpenOutputFiles(VideoParameters *p_Vid, int view0_id, int view1_id);
 extern void set_global_coding_par(VideoParameters *p_Vid, CodingParameters *cps);
 
-static inline int is_FREXT_profile(uint8_t profile_idc) {
+static inline int is_FREXT_profile(ProfileIDC profile_idc) {
   // we allow all FRExt tools, when no profile is active
-  return ( profile_idc==NO_PROFILE || profile_idc==FREXT_HP || profile_idc==FREXT_Hi10P || profile_idc==FREXT_Hi422 || profile_idc==FREXT_Hi444 || profile_idc == FREXT_CAVLC444 );
+  return ( profile_idc==NO_PROFILE || profile_idc==FREXT_HP || profile_idc==FREXT_Hi10P || profile_idc==FREXT_Hi422 || profile_idc==FREXT_Hi444 || profile_idc == FREXT_CAVLC444);
 	}
 
-static inline int is_HI_intra_only_profile(unsigned int profile_idc, bool constrained_set3_flag) {
-  return ( ( ( (profile_idc == FREXT_Hi10P)||(profile_idc == FREXT_Hi422)|| (profile_idc == FREXT_Hi444)) && constrained_set3_flag) || (profile_idc == FREXT_CAVLC444) );
+static inline int is_HI_intra_only_profile(ProfileIDC profile_idc, bool constrained_set3_flag) {
+  return ((((profile_idc == FREXT_Hi10P) || (profile_idc == FREXT_Hi422) || (profile_idc == FREXT_Hi444)) && constrained_set3_flag) || 
+		(profile_idc == FREXT_CAVLC444));
 	}
-static inline int is_BL_profile(unsigned int profile_idc) {
+static inline int is_BL_profile(ProfileIDC profile_idc) {
   return ( profile_idc == FREXT_CAVLC444 || profile_idc == BASELINE || profile_idc == MAIN || profile_idc == EXTENDED ||
            profile_idc == FREXT_HP || profile_idc == FREXT_Hi10P || profile_idc == FREXT_Hi422 || profile_idc == FREXT_Hi444);
 	}
-static inline int is_EL_profile(unsigned int profile_idc) {
-  return ( (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH) );
+static inline int is_EL_profile(ProfileIDC profile_idc) {
+  return ( (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH));
 	}
 
-static inline int is_MVC_profile(unsigned int profile_idc){
+static inline int is_MVC_profile(ProfileIDC profile_idc){
   return ( (0)
 #if MVC_EXTENSION_ENABLE
-  || (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH)
+		|| (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH)
 #endif
-  );
+		);
 	}
 
 
@@ -2614,7 +2618,7 @@ extern int  dumppoc   (VideoParameters *p_Vid);
 
 extern void calculate_frame_no(VideoParameters *p_Vid, StorablePicture *p);
 extern void find_snr          (VideoParameters *p_Vid, StorablePicture *p, int *p_ref);
-extern int  picture_order     ( Slice *pSlice );
+extern int  picture_order     ( Slice *pSlice);
 
 extern void decode_one_slice  (Slice *currSlice);
 extern int  read_new_slice    (Slice *currSlice);
@@ -2624,7 +2628,7 @@ extern int  decode_one_frame  (DecoderParams *pDecoder);
 extern int  is_new_picture(StorablePicture *dec_picture, Slice *currSlice, OldSliceParams *p_old_slice);
 extern void init_old_slice(OldSliceParams *p_old_slice);
 // For 4:4:4 independent mode
-extern void copy_dec_picture_JV (VideoParameters *p_Vid, StorablePicture *dst, StorablePicture *src );
+extern void copy_dec_picture_JV (VideoParameters *p_Vid, StorablePicture *dst, StorablePicture *src);
 
 extern void frame_postprocessing(VideoParameters *p_Vid);
 extern void field_postprocessing(VideoParameters *p_Vid);
@@ -2649,8 +2653,8 @@ extern int intra_pred_4x4_normal(Macroblock *currMB, ColorPlane pl, PIXEL_COORD 
 extern int intra_pred_8x8_normal(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 extern int intra_pred_8x8_mbaff(Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL_COORD joff);
 
-extern int intra_pred_16x16_mbaff (Macroblock *currMB, ColorPlane pl, int predmode);
-extern int intra_pred_16x16_normal(Macroblock *currMB, ColorPlane pl, int predmode);
+extern int intra_pred_16x16_mbaff (Macroblock *currMB, ColorPlane pl, I16x16PredModes predmode);
+extern int intra_pred_16x16_normal(Macroblock *currMB, ColorPlane pl, I16x16PredModes predmode);
 
 
 #ifdef _LEAKYBUCKET_
@@ -2672,7 +2676,7 @@ void calc_buffer(InputParameters *p_Inp);
 
 extern void setup_slice_methods_mbaff(Slice *currSlice);
 extern void setup_slice_methods      (Slice *currSlice);
-extern void get_neighbors(Macroblock *currMB, PixelPos *block, int mb_x, int mb_y, int blockshape_x);
+extern void get_neighbors(Macroblock *currMB, PixelPos *block, BLOCK_COORD mb_x, BLOCK_COORD mb_y, PIXEL_COORD blockshape_x);
 
 extern void start_macroblock     (Slice *currSlice, Macroblock **currMB);
 extern int  decode_one_macroblock(Macroblock *currMB, StorablePicture *dec_picture);
@@ -2709,8 +2713,8 @@ typedef struct pic_motion_params {
   MotionVector             mv[2];       //!< motion vector  
   int8_t                   ref_idx[2];  //!< reference picture   [list][subblock_y][subblock_x]
   //uint8_t                   mb_field;    //!< field macroblock indicator
-  uint8_t                     slice_no;
-} PicMotionParams;
+  uint8_t                  slice_no;
+	} PicMotionParams;
 
 
 
@@ -2728,7 +2732,7 @@ extern StorablePicture*  get_int16_t_term_pic (Slice *currSlice, DecodedPictureB
 
 #if MVC_EXTENSION_ENABLE
 extern void             idr_memory_management(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
-extern void             flush_dpbs(DecodedPictureBuffer **p_Dpb, int nLayers);
+extern void             flush_dpbs(DecodedPictureBuffer **p_Dpb, uint8_t nLayers);
 extern int              GetMaxDecFrameBuffering(VideoParameters *p_Vid);
 extern void             append_interview_list(DecodedPictureBuffer *p_Dpb, 
                                               PictureStructure currPicStructure, int list_idx, 
@@ -2766,7 +2770,7 @@ extern void free_img_data(VideoParameters *p_Vid, ImageData *p_ImgData);
 extern void pad_dec_picture(VideoParameters *p_Vid, StorablePicture *dec_picture);
 extern void pad_buf(imgpel *pImgBuf, BLOCK_COORD iWidth, BLOCK_COORD iHeight, BLOCK_COORD iStride, BLOCK_COORD iPadX, BLOCK_COORD iPadY);
 extern void process_picture_in_dpb_s(VideoParameters *p_Vid, StorablePicture *p_pic);
-extern StorablePicture * clone_storable_picture( VideoParameters *p_Vid, StorablePicture *p_pic );
+extern StorablePicture * clone_storable_picture( VideoParameters *p_Vid, StorablePicture *p_pic);
 extern void store_proc_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p);
 
 
@@ -2780,12 +2784,11 @@ extern void init_lists_i_slice_mvc(Slice *currSlice);
 extern void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, int **non_anchor_ref,
                                                  int view_id, bool anchor_pic_flag, int currPOC, int listidx);
 
-extern void reorder_short_term(Slice *currSlice, int cur_list, int num_ref_idx_lX_active_minus1, int picNumLX, 
+extern void reorder_short_term(Slice *currSlice, int cur_list, int16_t num_ref_idx_lX_active_minus1, int picNumLX, 
 															 int *refIdxLX, int currViewID);
-extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, int num_ref_idx_lX_active_minus1, int LongTermPicNum, 
+extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, int16_t num_ref_idx_lX_active_minus1, int LongTermPicNum, 
 															int *refIdxLX, int currViewID);
 #endif
-
 
 
 extern int  allocate_pred_mem(Slice *currSlice);
@@ -2800,7 +2803,6 @@ extern void perform_mc           (Macroblock *currMB, ColorPlane pl, StorablePic
 																	BLOCK_COORD block_size_x, BLOCK_COORD block_size_y);
 
 
-
 extern void CheckZeroByteNonVCL(VideoParameters *p_Vid, NALU_t *nalu);
 extern void CheckZeroByteVCL   (VideoParameters *p_Vid, NALU_t *nalu);
 
@@ -2812,10 +2814,10 @@ extern void write_stored_frame(VideoParameters *p_Vid, FrameStore *fs, int p_out
 extern void direct_output     (VideoParameters *p_Vid, StorablePicture *p, int p_out);
 extern void init_out_buffer   (VideoParameters *p_Vid);
 extern void uninit_out_buffer (VideoParameters *p_Vid);
-#if (PAIR_FIELDS_IN_OUTPUT)
+#if PAIR_FIELDS_IN_OUTPUT
 extern void flush_pending_output(VideoParameters *p_Vid, int p_out);
 #endif
-extern void init_output(CodingParameters *p_CodingParams, int symbol_size_in_bytes);
+extern void init_output(CodingParameters *p_CodingParams, uint8_t symbol_size_in_bytes);
 extern void reinit_decoder(DecoderParams *pDecoder);
 
 
@@ -2827,25 +2829,25 @@ extern void InitVUI(seq_parameter_set_rbsp_t *sps);
 extern int  ReadVUI(DataPartition *p, seq_parameter_set_rbsp_t *sps);
 extern int  ReadHRDParameters(DataPartition *p, hrd_parameters_t *hrd);
 
-extern void PPSConsistencyCheck (pic_parameter_set_rbsp_t *pps);
-extern void SPSConsistencyCheck (seq_parameter_set_rbsp_t *sps);
+extern void PPSConsistencyCheck(pic_parameter_set_rbsp_t *pps);
+extern void SPSConsistencyCheck(seq_parameter_set_rbsp_t *sps);
 
-extern void MakePPSavailable (VideoParameters *p_Vid, int id, pic_parameter_set_rbsp_t *pps);
-extern void MakeSPSavailable (VideoParameters *p_Vid, int id, seq_parameter_set_rbsp_t *sps);
+extern void MakePPSavailable(VideoParameters *p_Vid, int id, pic_parameter_set_rbsp_t *pps);
+extern void MakeSPSavailable(VideoParameters *p_Vid, int id, seq_parameter_set_rbsp_t *sps);
 
-extern void ProcessSPS (VideoParameters *p_Vid, NALU_t *nalu);
-extern void ProcessPPS (VideoParameters *p_Vid, NALU_t *nalu);
+extern void ProcessSPS(VideoParameters *p_Vid, NALU_t *nalu);
+extern void ProcessPPS(VideoParameters *p_Vid, NALU_t *nalu);
 
 extern void CleanUpPPS(VideoParameters *p_Vid);
 
-extern void activate_sps (VideoParameters *p_Vid, seq_parameter_set_rbsp_t *sps);
-extern void activate_pps (VideoParameters *p_Vid, pic_parameter_set_rbsp_t *pps);
+extern void activate_sps(VideoParameters *p_Vid, seq_parameter_set_rbsp_t *sps);
+extern void activate_pps(VideoParameters *p_Vid, pic_parameter_set_rbsp_t *pps);
 
-extern void UseParameterSet (Slice *currSlice);
+extern void UseParameterSet(Slice *currSlice);
 
 #if MVC_EXTENSION_ENABLE
-extern void SubsetSPSConsistencyCheck (subset_seq_parameter_set_rbsp_t *subset_sps);
-extern void ProcessSubsetSPS (VideoParameters *p_Vid, NALU_t *nalu);
+extern void SubsetSPSConsistencyCheck(subset_seq_parameter_set_rbsp_t *subset_sps);
+extern void ProcessSubsetSPS(VideoParameters *p_Vid, NALU_t *nalu);
 
 extern void mvc_vui_parameters_extension(MVCVUI_t *pMVCVUI, Bitstream *s);
 extern void seq_parameter_set_mvc_extension(subset_seq_parameter_set_rbsp_t *subset_sps, Bitstream *s);
@@ -2962,13 +2964,13 @@ typedef enum {
 #if (ENABLE_OUTPUT_TONEMAPPING)
 typedef struct tone_mapping_struct_s {
   bool seiHasTone_mapping;
-  unsigned int  tone_map_repetition_period;
+  unsigned int tone_map_repetition_period;
   uint8_t coded_data_bit_depth;
   uint8_t sei_bit_depth;
-  unsigned int model_id;
+  int8_t model_id;
   unsigned int count;
   
-  imgpel lut[1<<MAX_CODED_BIT_DEPTH];                 //<! look up table for mapping the coded data value to output data value
+  imgpel lut[1<<MAX_CODED_BIT_DEPTH];     //<! look up table for mapping the coded data value to output data value
 
   Bitstream *data;
   int payloadSize;
@@ -2995,7 +2997,7 @@ typedef struct {
   uint8_t frame_packing_arrangement_reserved_byte;
   unsigned int  frame_packing_arrangement_repetition_period;
   bool       frame_packing_arrangement_extension_flag;
-} frame_packing_arrangement_information_struct;
+	} frame_packing_arrangement_information_struct;
 
 
 //! Green metada Information
@@ -3013,34 +3015,34 @@ typedef struct {
 	} Green_metadata_information_struct;
 
 
-void InterpretSEIMessage                                ( uint8_t* payload, int size, VideoParameters *p_Vid, Slice *pSlice );
-void interpret_spare_pic                                ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_subsequence_info                         ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_subsequence_layer_characteristics_info   ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_subsequence_characteristics_info         ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_scene_information                        ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_user_data_registered_itu_t_t35_info      ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_user_data_unregistered_info              ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_pan_scan_rect_info                       ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_recovery_point_info                      ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_filler_payload_info                      ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_dec_ref_pic_marking_repetition_info      ( uint8_t* payload, int size, VideoParameters *p_Vid, Slice *pSlice );
-void interpret_full_frame_freeze_info                   ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_full_frame_freeze_release_info           ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_full_frame_snapshot_info                 ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_progressive_refinement_start_info        ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_progressive_refinement_end_info          ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_motion_constrained_slice_group_set_info  ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_reserved_info                            ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_buffering_period_info                    ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_picture_timing_info                      ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_film_grain_characteristics_info          ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_deblocking_filter_display_preference_info( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_stereo_video_info_info                   ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_post_filter_hints_info                   ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_tone_mapping                             ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_frame_packing_arrangement_info           ( uint8_t* payload, int size, VideoParameters *p_Vid );
-void interpret_green_metadata_info                       (uint8_t* payload, int size, VideoParameters *p_Vid );
+void InterpretSEIMessage                                ( uint8_t* payload, int16_t size, VideoParameters *p_Vid, Slice *pSlice);
+void interpret_spare_pic                                ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_subsequence_info                         ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_subsequence_layer_characteristics_info   ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_subsequence_characteristics_info         ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_scene_information                        ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_user_data_registered_itu_t_t35_info      ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_user_data_unregistered_info              ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_pan_scan_rect_info                       ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_recovery_point_info                      ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_filler_payload_info                      ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_dec_ref_pic_marking_repetition_info      ( uint8_t* payload, int16_t size, VideoParameters *p_Vid, Slice *pSlice);
+void interpret_full_frame_freeze_info                   ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_full_frame_freeze_release_info           ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_full_frame_snapshot_info                 ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_progressive_refinement_start_info        ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_progressive_refinement_end_info          ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_motion_constrained_slice_group_set_info  ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_reserved_info                            ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_buffering_period_info                    ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_picture_timing_info                      ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_film_grain_characteristics_info          ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_deblocking_filter_display_preference_info( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_stereo_video_info_info                   ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_post_filter_hints_info                   ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_tone_mapping                             ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_frame_packing_arrangement_info           ( uint8_t* payload, int16_t size, VideoParameters *p_Vid);
+void interpret_green_metadata_info                       (uint8_t* payload, int16_t size, VideoParameters *p_Vid);
 
 #if ENABLE_OUTPUT_TONEMAPPING
 void tone_map               (imgpel** imgX, imgpel* lut, PIXEL_COORD size_x, PIXEL_COORD size_y);
@@ -3057,8 +3059,8 @@ extern void icopy8x8 (Macroblock *currMB, ColorPlane pl, PIXEL_COORD ioff, PIXEL
 extern int read_se_v(char *tracestring, Bitstream *bitstream, int *used_bits);
 extern int read_ue_v(char *tracestring, Bitstream *bitstream, int *used_bits);
 extern bool read_u_1(char *tracestring, Bitstream *bitstream, int *used_bits);
-extern int read_u_v(int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
-extern int read_i_v(int LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_u_v(uint8_t LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
+extern int read_i_v(uint8_t LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits);
 
 // CAVLC mapping
 extern void linfo_ue(int len, int info, int *value1, int *dummy);
@@ -3081,7 +3083,7 @@ extern int readSyntaxElement_Intra4x4PredictionMode(SyntaxElement *sym, Bitstrea
 extern int GetVLCSymbol (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
 extern int GetVLCSymbol_IntraMode (uint8_t buffer[],int totbitoffset,int *info, int bytecount);
 
-extern int readSyntaxElement_FLC                         (SyntaxElement *sym, Bitstream *currStream);
+extern int8_t readSyntaxElement_FLC                      (SyntaxElement *sym, Bitstream *currStream);
 extern int readSyntaxElement_NumCoeffTrailingOnes        (SyntaxElement *sym,  Bitstream *currStream, char *type);
 extern int readSyntaxElement_NumCoeffTrailingOnesChromaDC(VideoParameters *p_Vid, SyntaxElement *sym, Bitstream *currStream);
 extern int readSyntaxElement_Level_VLC0                  (SyntaxElement *sym, Bitstream *currStream);
@@ -3098,6 +3100,11 @@ extern int more_rbsp_data(uint8_t buffer[],int totbitoffset,int bytecount);
 void init_time(void);
 int WriteOneFrame(DecodedPicList *pDecPic, int hFileOutput0, int hFileOutput1, bool bOutputAllFrames);
 //int GetOneFrame(DecodedPicList *pDecPic,uint8_t *outbuf);
+
+int InterpretSPS(VideoParameters *p_Vid, DataPartition *p, seq_parameter_set_rbsp_t *sps);
+int InterpretPPS(VideoParameters *p_Vid, DataPartition *p, pic_parameter_set_rbsp_t *pps);
+int GetSPS(CRTSPClientSocket *sock,seq_parameter_set_rbsp_t *sps);
+int GetPPS(CRTSPClientSocket *sock,pic_parameter_set_rbsp_t *pps);
 
 #endif
 
