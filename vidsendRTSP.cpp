@@ -1,23 +1,25 @@
 // GD/C adapted 2023-2026 da Ansersion https://www.cnblogs.com/ansersion/p/6959690.html
 
 #include "stdafx.h"
-#include "vidsend.h"
+#include "vidsendocx.h"
 #include "vidsendLog.h"
 
 #include "re.h"
+#include "vidsend_http.h"
 #include "vidsendRTSP.h"
+
 
 extern NALUTypeBase_H264 NaluBaseType_H264Obj;
 
-MyRTPSession::MyRTP_Teardown(MediaSession *,struct timeval *) {
+void MyRTPSession::MyRTP_Teardown(MediaSession *,struct timeval *) {
 	}
 
-BYTE *MyRTPSession::GetMyRTPData(BYTE *, size_t *, unsigned long) {
+BYTE *MyRTPSession::GetMyRTPData(BYTE *, size_t *, uint16_t) {
 
 	return 0;
 	}
 
-BYTE *MyRTPSession::GetMyRTPPacket(BYTE *, size_t *, unsigned long) {
+BYTE *MyRTPSession::GetMyRTPPacket(BYTE *, size_t *, uint16_t) {
 
 	return 0;
 	}
@@ -204,7 +206,7 @@ int MediaSession::RTP_SetUp(CSocket *tunnelling_sock) {
 		return MEDIA_SESSION_OK;
 		}
 
-			theApp.FileSpool->print(CLogFile::flagInfo,"MyRTP_SetUp TCP: %d\n", tunnelling_sock);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"MyRTP_SetUp TCP: %d\n", tunnelling_sock);
   if(tunnelling_sock) {
 		RTPInterface = new MyRTPTCPSession;
 	  if(!RTPInterface->MyRTP_SetUp(this, tunnelling_sock)) 
@@ -219,14 +221,14 @@ int MediaSession::RTP_SetUp(CSocket *tunnelling_sock) {
 	return MEDIA_SESSION_OK;
 	}
 
-BYTE *MediaSession::GetMediaData(BYTE *buf, size_t *size, unsigned long timeout) {
+BYTE *MediaSession::GetMediaData(BYTE *buf, size_t *size, uint16_t timeout) {
 
 	if(!RTPInterface) 
 		return NULL;
 	return RTPInterface->GetMyRTPData(buf,size,timeout);		// virtual, prende quella giusta se TCP o UDP
 	}
 
-BYTE *MediaSession::GetMediaPacket(BYTE *buf, size_t *size, unsigned long timeout) {
+BYTE *MediaSession::GetMediaPacket(BYTE *buf, size_t *size, uint16_t timeout) {
 
 	if(!RTPInterface) 
 		return NULL;
@@ -648,7 +650,7 @@ ErrorType CRTSPClientSocket::DoDESCRIBE(CString uri, bool http_tunnel_no_respons
     return RTSP_RECV_ERROR;
     }
 	RtspResponse=myBuf;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  DODESCRIBE header: %s, content=%u",RtspResponse,ret);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  DODESCRIBE header: %s, content=%u",RtspResponse,ret);
   // if(RtspOverHttpDataPort != 0) {
   //     cout << "DEBUG: RecvRTSP http tunnel" << endl;
   //     if(RTSP_NO_ERROR != RecvRTSP(RtspOverHttpDataSockfd, &RtspResponse)) {
@@ -694,6 +696,9 @@ int CRTSPClientSocket::ParseSDP(CString SDP) {
 	else 
 		return Result;
 
+	if(Response.IsEmpty())		// tipo se non c'è uno stream attivo
+		return 0;
+
 	// cout << "debug: start parse sdp" << endl;
 	sdpData->parse(Response);
 	map<CString, SDPMediaInfo> mediaInfoMap = sdpData->getMediaInfoMap();
@@ -736,6 +741,12 @@ int CRTSPClientSocket::ParseSDP(CString SDP) {
 				NewMediaSession->Packetization=atoi(it2->second[PACK_MODE]);
 				// cout << "debug: Packetization=" << NewMediaSession.Packetization << endl;;
 				}
+			if(it2->second.find(ATTR_SPS) != it2->second.end()) {
+				strncpy(NewMediaSession->SPS,it2->second[ATTR_SPS],128);
+				}
+			if(it2->second.find(ATTR_PPS) != it2->second.end()) {
+				strncpy(NewMediaSession->PPS,it2->second[ATTR_PPS],64);
+				}
 			/* 'Value' could be  
 			 * 1: "rtsp://127.0.0.1/ansersion/track=1"
 			 * 2: "track=1"
@@ -754,9 +765,8 @@ int CRTSPClientSocket::ParseSDP(CString SDP) {
 			delete NewMediaSession;
 			NewMediaSession = NULL;
 			} 
-		else {
+		else
 			(*MediaSessionMap)[it1->second.mediaType] = NewMediaSession;
-			}
 		it1++;
 		}
 
@@ -766,6 +776,15 @@ int CRTSPClientSocket::ParseSDP(CString SDP) {
 	return Result;
 	}
 
+void CRTSPClientSocket::Flush() {
+	map<CString, MediaSession *>::iterator it;
+
+	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
+		if(it->second->RTPInterface) 
+			it->second->RTPInterface->FlushPackets();
+		}
+
+	}
 
 //----------------------------------------------------------------------------------------------------------------
 
@@ -929,6 +948,9 @@ static const char *SDP_CONTROL_PATTERN="control:(.+)";
           } 
 				else if(currentMediaInfo && "video" == currentMediaInfo->mediaType && value.Regex(SDP_FMTP_H265_PATTERN)) {
 //          cout << "debug: Parse h265" << endl;
+
+					// finire, nel caso
+
           int payloadId;
 					i=0;
           payloadId=atoi(value.Tokenize(_T(" "),i));
@@ -950,8 +972,9 @@ static const char *SDP_CONTROL_PATTERN="control:(.+)";
           payloadId=atoi(value.Tokenize(_T(" "),i));
           map<int, map<SDP_ATTR_ENUM, CString> >::iterator it = currentMediaInfo->fmtMap.find(payloadId);
           if(it != currentMediaInfo->fmtMap.end()) {
+            it->second[PACK_MODE] = value.Tokenize(_T(" "),i); //skip, dummy
             it->second[PACK_MODE] = value.Tokenize(_T(" "),i);
-            it->second[ATTR_SPS] = value.Tokenize(_T(" "),i);
+            it->second[ATTR_SPS] = value.Tokenize(_T(","),i);
             it->second[ATTR_PPS] = value.Tokenize(_T(" "),i);
 						}
 					}
@@ -1071,7 +1094,7 @@ ErrorType CRTSPClientSocket::DoOPTIONS(CString uri, bool http_tunnel_no_response
     return RTSP_RECV_ERROR;
     }
 	RtspResponse=myBuf;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  DOOPTIONS header: %s",RtspResponse);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  DOOPTIONS header: %s",RtspResponse);
 // check username and password, if any
 	if(CheckAuth(Cmd, RtspUri) != CHECK_OK) {
 //		cout << "CheckAuth: error" << endl;
@@ -1218,7 +1241,7 @@ ErrorType CRTSPClientSocket::DoGET_PARAMETER(MediaSession *media_session, bool h
 		return RTSP_RECV_ERROR;
     }
 	RtspResponse=myBuf;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  DOGETPARAMETER header: %s, content=%u",RtspResponse,ret);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  DOGETPARAMETER header: %s, content=%u",RtspResponse,ret);
 	// check username and password, if any
 	if(CheckAuth(Cmd, RtspURI) != CHECK_OK) {
 //		cout << "CheckAuth: error" << endl;
@@ -1260,7 +1283,7 @@ ErrorType CRTSPClientSocket::DoSETUP() {
 		Err = DoSETUP(it->second, false);
 		if(RTSP_NO_ERROR == ErrAll) 
 			ErrAll = Err; // Remember the first error
-			theApp.FileSpool->print(CLogFile::flagInfo,("Setup Session %s: %s\n", it->first, ParseError(Err)));
+//			theApp.FileSpool->print(CLogFile::flagInfo,("Setup Session %s: %s\n", it->first, ParseError(Err)));
 		}
 
 	return ErrAll;
@@ -1348,7 +1371,7 @@ ErrorType CRTSPClientSocket::DoSETUP(MediaSession *media_session, bool rtp_over_
 		return RTSP_RECV_ERROR;
     }
 	RtspResponse=myBuf;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  DOSETUP header: %s, content=%u",RtspResponse,ret);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  DOSETUP header: %s, content=%u",RtspResponse,ret);
 	// check username and password, if any
 	if(CheckAuth(Cmd, RtspURI) != CHECK_OK) {
 //		cout << "CheckAuth: error" << endl;
@@ -1414,7 +1437,7 @@ ErrorType CRTSPClientSocket::DoPLAY() {
 		Err = DoPLAY(it->second, NULL, NULL, NULL, false);
 		if(RTSP_NO_ERROR == ErrAll) 
 			ErrAll = Err; // Remember the first error
-		theApp.FileSpool->print(CLogFile::flagInfo,"  PLAY Session %s: %s\n", it->first, ParseError(Err));
+//		theApp.FileSpool->print(CLogFile::flagInfo,"  PLAY Session %s: %s\n", it->first, ParseError(Err));
 		}
 
 	return ErrAll;
@@ -1619,6 +1642,7 @@ ErrorType CRTSPClientSocket::DoTEARDOWN(MediaSession *media_session, bool http_t
 				break;
 			}
 		if(it != MediaSessionMap->end()) {
+//			it->second->BYEDestroy();
 			delete it->second;
 			MediaSessionMap->erase(it);
 			}
@@ -1679,7 +1703,7 @@ ErrorType CRTSPClientSocket::DoRtspOverHttpGet() {
 		return RTSP_RECV_ERROR;
 		}
 	RtspResponse=myBuf;
-			theApp.FileSpool->print(CLogFile::flagInfo,"  DORTSPGET header: %s",RtspResponse);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  DORTSPGET header: %s",RtspResponse);
 
 	return RTSP_NO_ERROR;
 	}
@@ -1734,12 +1758,10 @@ int CRTSPClientSocket::SetAvailableRTPPort(MediaSession *media_session, WORD RTP
 	struct sockaddr_in servaddr;
 	WORD Search_RTP_Port_From;
 
-	if(0 != RTP_port && (RTP_port % 2 == 0)) {
+	if(0 != RTP_port && (RTP_port % 2 == 0))
 		Search_RTP_Port_From = RTP_port;
-		}
-	else {
+	else
 		Search_RTP_Port_From = SEARCH_PORT_RTP_FROM;
-		}
 	media_session->RTPPort = 0;
 	// media_session->RTPSockfd = -1;
 	media_session->RTCPPort = 0;
@@ -2144,6 +2166,38 @@ int CRTSPClientSocket::GetChannelNum(CString media_type) {
 	return it->second->ChannelNum;
 	}
 
+CString CRTSPClientSocket::GetSPS(CString media_type) {
+	map<CString, MediaSession *>::iterator it;
+	CString S;
+
+	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
+		if(!it->first.CompareNoCase(media_type)) 
+			break;
+		}
+
+	if(it == MediaSessionMap->end())
+		return S;
+
+	S=it->second->SPS;
+	return S;
+	}
+
+CString CRTSPClientSocket::GetPPS(CString media_type) {
+	map<CString, MediaSession *>::iterator it;
+	CString S;
+
+	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
+		if(!it->first.CompareNoCase(media_type)) 
+			break;
+		}
+
+	if(it == MediaSessionMap->end())
+		return S;
+
+	S=it->second->PPS;
+	return S;
+	}
+
 void CRTSPClientSocket::SetAudioByeFromServerClbk(DESTROIED_CLBK clbk) {
 
 	ByeFromServerAudioClbk = clbk;
@@ -2326,7 +2380,7 @@ void MyRTPTCPSession::MyRTP_Teardown(MediaSession *media_session, struct timeval
 	BYEDestroy(RTPTime(Timeout.tv_sec, Timeout.tv_usec), 0, 0);
 	}
 
-BYTE *MyRTPTCPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long timeout_ms) {
+BYTE *MyRTPTCPSession::GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeout_ms) {
 
 	if(!data_buf) {
 //		fprintf(stderr, "%s: Invalid argument('data_buf==NULL')", __func__);
@@ -2339,7 +2393,7 @@ BYTE *MyRTPTCPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long 
 		}
   *size = 0;
 
-	unsigned long UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
+	uint16_t UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
 
 	do {
 #ifndef RTP_SUPPORT_THREAD
@@ -2402,7 +2456,7 @@ BYTE *MyRTPTCPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long 
 	return data_buf;
 	}
 
-BYTE *MyRTPTCPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned long timeout_ms) {
+BYTE *MyRTPTCPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms) {
 
 	if(!packet_buf) {
 //		fprintf(stderr, "%s: Invalid argument('packet_buf==NULL')", __func__);
@@ -2413,9 +2467,9 @@ BYTE *MyRTPTCPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned l
 //		fprintf(stderr, "%s: Invalid argument('size==NULL')", __func__);
 		return NULL;
 		}
-  *size = 0;
 
-	unsigned long UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
+  *size = 0;
+	uint16_t UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
 
 	do {
 #ifndef RTP_SUPPORT_THREAD
@@ -2443,9 +2497,9 @@ BYTE *MyRTPTCPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned l
 			EndDataAccess();
 			Sleep(USLEEP_UNIT);
 			UsleepTimes--;
-            if(UsleepTimes <= 0) {
-                break;
-            }
+      if(UsleepTimes <= 0) {
+        break;
+        }
 			continue;
 			// return NULL;
 			}
@@ -2459,8 +2513,7 @@ BYTE *MyRTPTCPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned l
 		*size = PacketSize;
 		memcpy(packet_buf, Packet, PacketSize);
 
-		// we don't longer need the packet, so
-		// we'll delete it
+		// we don't longer need the packet, so we'll delete it
 		DeletePacket(pack);
 		EndDataAccess();
 		UsleepTimes = 0;
@@ -2514,7 +2567,6 @@ int MyRTPTCPSession::MyTcpCreate(const RTPSessionParams &sessparams, const RTPTr
 	sentpackets = false;
 	
 	// Check max packet size
-	
 	if((maxpacksize = sessparams.GetMaximumPacketSize()) < RTP_MINPACKETSIZE)
 		return ERR_RTP_SESSION_MAXPACKETSIZETOOSMALL;
 		
@@ -2525,12 +2577,10 @@ int MyRTPTCPSession::MyTcpCreate(const RTPSessionParams &sessparams, const RTPTr
 	if(!rtptrans)
 		return ERR_RTP_OUTOFMEM;
 	if((status = rtptrans->Init(needthreadsafety)) < 0) {
-//		delete rtptrans;
 		delete rtptrans;
 		return status;
 		}
 	if((status = rtptrans->Create(maxpacksize,transparams)) < 0) {
-//		delete rtptrans;
 		delete rtptrans;
 		return status;
 		}
@@ -2696,7 +2746,8 @@ void MyRTPUDPSession::MyRTP_Teardown(MediaSession *media_session, struct timeval
 		}
 
 	media_session->RTPPort = 0;
-	BYEDestroy(RTPTime(Timeout.tv_sec, Timeout.tv_usec), 0, 0);
+//	BYEDestroy(RTPTime(Timeout.tv_sec, Timeout.tv_usec), 0, 0);
+	Destroy();
 	}
 
 void MyRTPUDPSession::OnNewSource(RTPSourceData *dat) {
@@ -2793,7 +2844,7 @@ void MyRTPUDPSession::OnRemoveSource(RTPSourceData *dat) {
 		DestroiedClbk();
 	}
 
-BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long timeout_ms) {
+BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeout_ms) {
 
 	if(!data_buf) {
 //		fprintf(stderr, "%s: Invalide argument('data_buf==NULL')", __func__);
@@ -2805,8 +2856,8 @@ BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long 
 		return NULL;
 		}
 
-	unsigned long UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
-    *size = 0;
+  *size = 0;
+	uint16_t UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
 
 	do {
 #ifndef RTP_SUPPORT_THREAD
@@ -2865,20 +2916,20 @@ BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long 
 	return data_buf;
 	}
 
-BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned long timeout_ms) {
+BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms) {
 
 	if(!packet_buf) {
-//		fprintf(stderr, "%s: Invalide argument('packet_buf==NULL')", __func__);
+//		fprintf(stderr, "%s: Invalid argument('packet_buf==NULL')", __func__);
 		return NULL;
 		}
 
 	if(!size) {
-//		fprintf(stderr, "%s: Invalide argument('size==NULL')", __func__);
+//		fprintf(stderr, "%s: Invalid argument('size==NULL')", __func__);
 		return NULL;
 		}
-  *size = 0;
 
-	unsigned long UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
+  *size = 0;
+	uint16_t UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
 
 	do {
 #ifndef RTP_SUPPORT_THREAD
@@ -2945,6 +2996,13 @@ void MyRTPUDPSession::OnPollThreadStop() {
 
     printf("RTP Poll stop\n");
 	}
+
+/*void MyRTPUDPSession::FlushPackets() {
+
+	if(rtptrans)
+		for(POSITION pos = rtptrans->rawpacketlist.GetHeadPosition(); pos; )
+			delete rtptrans->rawpacketlist.GetNext(pos);
+	}*/
 
 
 
@@ -3069,7 +3127,6 @@ int RTPSession::Create(const RTPSessionParams &sessparams,const RTPTransmissionP
 	sentpackets = false;
 	
 	// Check max packet size
-	
 	if((maxpacksize = sessparams.GetMaximumPacketSize()) < RTP_MINPACKETSIZE)
 		return ERR_RTP_SESSION_MAXPACKETSIZETOOSMALL;
 		
@@ -3080,11 +3137,11 @@ int RTPSession::Create(const RTPSessionParams &sessparams,const RTPTransmissionP
 		case RTPTransmitter::IPv4UDPProto:
 			rtptrans = new RTPUDPv4Transmitter();
 			break;
-	#ifdef RTP_SUPPORT_IPV6
+#ifdef RTP_SUPPORT_IPV6
 		case RTPTransmitter::IPv6UDPProto:
 			rtptrans = new RTPUDPv6Transmitter();
 			break;
-	#endif // RTP_SUPPORT_IPV6
+#endif // RTP_SUPPORT_IPV6
 		case RTPTransmitter::ExternalProto:
 			rtptrans = new RTPExternalTransmitter();
 			break;
@@ -3132,7 +3189,6 @@ int RTPSession::Create(const RTPSessionParams &sessparams,RTPTransmitter *transm
 	sentpackets = false;
 	
 	// Check max packet size
-	
 	if((maxpacksize = sessparams.GetMaximumPacketSize()) < RTP_MINPACKETSIZE)
 		return ERR_RTP_SESSION_MAXPACKETSIZETOOSMALL;
 		
@@ -3149,7 +3205,6 @@ int RTPSession::InternalCreate(const RTPSessionParams &sessparams) {
 	int status;
 
 	// Initialize packet builder
-	
 	if((status = packetbuilder.Init(maxpacksize)) < 0)	{
 		if(deletetransmitter)
 			delete rtptrans;
@@ -3397,12 +3452,17 @@ void RTPSession::BYEDestroy(const RTPTime &maxwaittime,const void *reason,size_t
 			if(rtcpsched.IsTime()) {
 				pack = byepackets.GetHead();
 //				byepackets.pop_front();
+				pack = byepackets.RemoveHead();
+
 			
 				SendRTCPData(pack->GetCompoundPacketData(),pack->GetCompoundPacketLength());
 				
 				OnSendRTCPCompoundPacket(pack); // we'll place this after the actual send to avoid tampering
 				
 				delete pack;
+#pragma message("RIMETTEWRE")
+
+
 				if(!byepackets.IsEmpty()) // more bye packets to send, schedule them
 					rtcpsched.ScheduleBYEPacket((byepackets.GetHead())->GetCompoundPacketLength());
 				else
@@ -3413,8 +3473,10 @@ void RTPSession::BYEDestroy(const RTPTime &maxwaittime,const void *reason,size_t
 			}
 		}
 	
-	if(deletetransmitter)
+	if(deletetransmitter) {
 		delete rtptrans;
+		deletetransmitter=FALSE;
+		}
 	packetbuilder.Destroy();
 	rtcpbuilder.Destroy();
 	rtcpsched.Reset();
@@ -3473,15 +3535,13 @@ int RTPSession::ProcessPolledData() {
 				return status;
 				}
 
-			if(created) {	// first time we've encountered this address, send bye packet and
-				            // change our own SSRC
+			if(created) {	// first time we've encountered this address, send bye packet and change our own SSRC
 				PACKSENT_LOCK
 				bool hassentpackets = sentpackets;
 				PACKSENT_UNLOCK
 
 				if(hassentpackets) {
 					// Only send BYE packet if we've actually sent data using this SSRC
-					
 					RTCPCompoundPacket *rtcpcomppack;
 
 					BUILDER_LOCK
@@ -3494,8 +3554,7 @@ int RTPSession::ProcessPolledData() {
 					BUILDER_UNLOCK
 
 					byepackets.AddTail(rtcpcomppack);
-					if(byepackets.GetCount() == 1) // was the first packet, schedule a BYE packet (otherwise there's already one scheduled)
-					{
+					if(byepackets.GetCount() == 1) {	 // was the first packet, schedule a BYE packet (otherwise there's already one scheduled)
 						SCHED_LOCK
 						rtcpsched.ScheduleBYEPacket(rtcpcomppack->GetCompoundPacketLength());
 						SCHED_UNLOCK
@@ -3513,7 +3572,6 @@ int RTPSession::ProcessPolledData() {
 				PACKSENT_UNLOCK
 	
 				// remove old entry in source table and add new one
-
 				if((status = sources.DeleteOwnSSRC()) < 0) {
 					SOURCES_UNLOCK
 					delete rawpack;
@@ -3590,8 +3648,7 @@ int RTPSession::ProcessPolledData() {
 
 			OnSendRTCPCompoundPacket(pack); // we'll place this after the actual send to avoid tampering
 			
-			if(!byepackets.IsEmpty()) // more bye packets to send, schedule them
-			{
+			if(!byepackets.IsEmpty()) {	 // more bye packets to send, schedule them
 				SCHED_LOCK
 				rtcpsched.ScheduleBYEPacket((byepackets.GetHead())->GetCompoundPacketLength());
 				SCHED_UNLOCK
@@ -3622,8 +3679,7 @@ int RTPSession::CreateCNAME(BYTE *buffer,size_t *bufferlength,bool resolve) {
 			gotlogin = false;
 		}
 	
-	if(!gotlogin) // try regular getlogin
-	{
+	if(!gotlogin) {		// try regular getlogin
 		char *loginname = getlogin();
 		if(loginname == 0)
 			gotlogin = false;
@@ -3741,19 +3797,17 @@ void RTPSourceStats::ProcessPacket(RTPPacket *pack,const RTPTime &receivetime,do
 					else
 						*onprobation = true;
 					}
-				else // not next packet
-				{
+				else {		// not next packet
 					probation = RTP_PROBATIONCOUNT;
 					prevseqnr = (WORD)pack->GetExtendedSequenceNumber();
 					*onprobation = true;
 					}
 				}
-			else // first packet received with this SSRC ID, start probation
-			{
+			else {		// first packet received with this SSRC ID, start probation
 				probation = RTP_PROBATIONCOUNT;
 				prevseqnr = (WORD)pack->GetExtendedSequenceNumber();	
 				*onprobation = true;
-			}
+				}
 	
 			if(acceptpack)	{
 				ACCEPTPACKETCODE
@@ -3764,9 +3818,8 @@ void RTPSourceStats::ProcessPacket(RTPPacket *pack,const RTPTime &receivetime,do
 				}
 			}
 		else // No probation
-		{
 			ACCEPTPACKETCODE
-			}
+
 #else // No compiled-in probation support
 
 		ACCEPTPACKETCODE
@@ -3779,7 +3832,6 @@ void RTPSourceStats::ProcessPacket(RTPPacket *pack,const RTPTime &receivetime,do
 		DWORD extseqnr;
 
 		// Adjust max extended sequence number and set extende seq nr of packet
-
 		*accept = true;
 		packetsreceived++;
 		numnewpackets++;
@@ -3879,11 +3931,23 @@ void RTPSourceStats::ProcessPacket(RTPPacket *pack,const RTPTime &receivetime,do
 		}
 	}
 
+void RTPSession::FlushPackets() {
+
+	if(rtptrans) {
+		for(POSITION pos = rtptrans->rawpacketlist.GetHeadPosition(); pos; )
+			delete rtptrans->rawpacketlist.GetNext(pos);
+		rtptrans->rawpacketlist.RemoveAll();
+		}
+
+		//v. anche in RTPTransmitter... non so come trovarlo :)  e pure in RTPSourceData...
+	}
+
+
+
 RTPSources::RTPSources(ProbationType probtype ,char *mgr/*,RTPMemoryManager *mgr*/) 
 //	: sourcelist(32,owndata,RTPSources_GetHashIndex,RTPSOURCES_HASHSIZE /*?? RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/) 
 //	: sourcelist(mgr,32/*RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/)
-		: sourcelist()
-{
+		: sourcelist() {
 
 	totalcount = 0;
 	sendercount = 0;
@@ -4119,7 +4183,7 @@ int RTPSources::ProcessRTCPCompoundPacket(RTCPCompoundPacket *rtcpcomppack,const
 								}
 							}
 						}
-					if(!gotinfo)					{
+					if(!gotinfo) {
 						status = UpdateReceiveTime(senderssrc,receivetime,senderaddress);
 						if(status < 0)
 							return status;
@@ -4288,17 +4352,14 @@ bool RTPSources::CheckCollision(RTPInternalSourceData *srcdat,const RTPAddress *
 		}
 
 	if(!isset) {
-		if(otherisset) // got other address, can check if it comes from same host
-		{
-			if(!otheraddr) // other came from our own session
-			{
+		if(otherisset) {		// got other address, can check if it comes from same host
+			if(!otheraddr) {		// other came from our own session
 				if(senderaddress) {
 					OnSSRCCollision(srcdat,senderaddress,isrtp);
 					return true;
 					}
 
 				// Ok, store it
-
 				if(isrtp)
 					srcdat->SetRTPDataAddress(senderaddress);
 				else
@@ -4311,23 +4372,20 @@ bool RTPSources::CheckCollision(RTPInternalSourceData *srcdat,const RTPAddress *
 					}
 
 				// Ok, comes from same host, store the address
-
 				if(isrtp)
 					srcdat->SetRTPDataAddress(senderaddress);
 				else
 					srcdat->SetRTCPDataAddress(senderaddress);
 				}
 			}
-		else // no other address, store this one
-		{
+		else {		// no other address, store this one
 			if(isrtp)
 				srcdat->SetRTPDataAddress(senderaddress);
 			else
 				srcdat->SetRTCPDataAddress(senderaddress);
 			}
 		}
-	else // already got an address
-	{
+	else {		// already got an address
 		if(!addr) {
 			if(senderaddress)	{
 				OnSSRCCollision(srcdat,senderaddress,isrtp);
@@ -4349,7 +4407,7 @@ bool RTPSources::CheckCollision(RTPInternalSourceData *srcdat,const RTPAddress *
 RTPPacket *RTPSources::GetNextPacket() {
 
 	if(!sourcelist.HasCurrentElement())
-		return 0;
+		return NULL;
 	
 	RTPInternalSourceData *srcdat = sourcelist.GetCurrentElement();
 	RTPPacket *pack = srcdat->GetNextPacket();
@@ -4524,8 +4582,7 @@ int RTPSources::ObtainSourceDataInstance(DWORD ssrc,RTPInternalSourceData **srcd
 	RTPInternalSourceData *srcdat2;
 	int status;
 	
-	if(sourcelist.GotoElement(ssrc) < 0) // No entry for this source
-	{
+	if(sourcelist.GotoElement(ssrc) < 0) {	 // No entry for this source
 #ifdef RTP_SUPPORT_PROBATION
 		srcdat2 = new RTPInternalSourceData(ssrc,probationtype);
 #else
@@ -4563,8 +4620,7 @@ int RTPSources::GetRTCPSourceData(DWORD ssrc,const RTPAddress *senderaddress,
 		if((status = srcdat->SetRTCPDataAddress(senderaddress)) < 0)
 			return status;
 		}
-	else // got a previously existing source
-	{
+	else {		// got a previously existing source
 		if(CheckCollision(srcdat,senderaddress,false))
 			return 0; // ignore packet on collision
 		}
@@ -4625,8 +4681,7 @@ void RTPSources::MultipleTimeouts(const RTPTime &curtime,const RTPTime &senderti
 		notetimeout = false;
 
    	srcdat->SDES_GetNote(&notelen);
-		if(notelen != 0) // Note has been set
-		{
+		if(notelen != 0) {	 // Note has been set
 			RTPTime notetime = srcdat->INF_GetLastSDESNoteTime();
 			
 			if(notechecktime > notetime) {
@@ -4677,8 +4732,7 @@ void RTPSources::MultipleTimeouts(const RTPTime &curtime,const RTPTime &senderti
 
 			sourcelist.GotoNextElement();
 			}
-		else // deleted entry
-		{
+		else {		// deleted entry
 			if(issender)
 				sendercount--;
 			if(isactive)
@@ -4716,7 +4770,7 @@ void RTPSources::MultipleTimeouts(const RTPTime &curtime,const RTPTime &senderti
 
 int RTPSources::ProcessRawPacket(RTPRawPacket *rawpack,RTPTransmitter *rtptrans,bool acceptownpackets) {
 	RTPTransmitter *transmitters[1];
-	int num;
+	int8_t num;
 	
 	transmitters[0] = rtptrans;
 	if(!rtptrans)
@@ -4799,7 +4853,7 @@ int RTPSources::ProcessRawPacket(RTPRawPacket *rawpack,RTPTransmitter *rtptrans[
 			int i;
 			const RTPAddress *senderaddress = rawpack->GetSenderAddress();
 
-			for(i=0 ; !ownpacket && i < numtrans ; i++)	{
+			for(i=0 ; !ownpacket && i < numtrans; i++)	{
 				if(rtptrans[i]->ComesFromThisTransmitter(senderaddress))
 					ownpacket = true;
 				}
@@ -4813,8 +4867,7 @@ int RTPSources::ProcessRawPacket(RTPRawPacket *rawpack,RTPTransmitter *rtptrans[
 						return status;
 					}
 				}
-			else // not our own packet
-			{
+			else {	// not our own packet
 				status = ProcessRTCPCompoundPacket(&rtcpcomppack,rawpack->GetReceiveTime(),rawpack->GetSenderAddress());
 				if(status < 0)
 					return status;
@@ -4923,7 +4976,7 @@ RTPPacket::RTPPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,
 		error = ERR_RTP_PACKET_ILLEGALBUFFERSIZE;
 	else
 		error = BuildPacket(payloadtype,payloaddata,payloadlen,seqnr,timestamp,ssrc,gotmarker,numcsrcs,
-		                    csrcs,gotextension,extensionid,extensionlen_numwords,extensiondata,buffer,buffersize);
+													csrcs,gotextension,extensionid,extensionlen_numwords,extensiondata,buffer,buffersize);
 	}
 
 int RTPPacket::ParseRawPacket(RTPRawPacket &rawpack) {
@@ -4947,8 +5000,8 @@ int RTPPacket::ParseRawPacket(RTPRawPacket &rawpack) {
 	if(packetlen < sizeof(RTPHeader))
 		return ERR_RTP_PACKET_INVALIDPACKET;
 	
-	packetbytes = (BYTE *)rawpack.GetData();
-	rtpheader = (RTPHeader *)packetbytes;
+	packetbytes = (BYTE*)rawpack.GetData();
+	rtpheader = (RTPHeader*)packetbytes;
 	
 	// The version number should be correct
   if(rtpheader->version != RTP_VERSION) {
@@ -5002,28 +5055,35 @@ int RTPPacket::ParseRawPacket(RTPRawPacket &rawpack) {
 	// and fill in the members
 	RTPPacket::hasextension = hasextension;
 	if(hasextension)	{
-		RTPPacket::extid = ntohs(rtpextheader->extid);
-		RTPPacket::extensionlength = ((int)ntohs(rtpextheader->length))*sizeof(DWORD);
-		RTPPacket::extension = ((BYTE *)rtpextheader)+sizeof(RTPExtensionHeader);
+		extid = ntohs(rtpextheader->extid);
+		extensionlength = ((int)ntohs(rtpextheader->length))*sizeof(DWORD);
+		extension = ((BYTE *)rtpextheader)+sizeof(RTPExtensionHeader);
 		}
 
-	RTPPacket::hasmarker = marker;
-	RTPPacket::numcsrcs = csrccount;
+	hasmarker = marker;
+	numcsrcs = csrccount;
 	RTPPacket::payloadtype = payloadtype;
 	
 	// Note: we don't fill in the EXTENDED sequence number here, since we
 	// don't have information about the source here. We just fill in the low 16 bits
-	RTPPacket::extseqnr = (DWORD)ntohs(rtpheader->sequencenumber);
+	extseqnr = (DWORD)ntohs(rtpheader->sequencenumber);
 
-	RTPPacket::timestamp = ntohl(rtpheader->timestamp);
-	RTPPacket::ssrc = ntohl(rtpheader->ssrc);
-	RTPPacket::packet = packetbytes;
-	RTPPacket::payload = packetbytes+payloadoffset;
-	RTPPacket::packetlength = packetlen;
+	timestamp = ntohl(rtpheader->timestamp);
+	ssrc = ntohl(rtpheader->ssrc);
+	packet = packetbytes;
+	payload = /*new BYTE[payloadlength];		//*/ packetbytes+payloadoffset;
+
+//	memcpy(payload,packetbytes+payloadoffset,payloadlength);			// GD per leaks
+// non cambia un cazzo dio di merda
+//	delete packet; packet=NULL;
+
+
+
+	packetlength = packetlen;
 	RTPPacket::payloadlength = payloadlength;
 
 	// We'll zero the data of the raw packet, since we're using it here now!
-	rawpack.ZeroData();
+	rawpack.ZeroData();  // puttana la madonna  (GD 25/1/26  NO! mi causa leak di memoria nel distruttore...
 
 	return 0;
 	}
@@ -5037,8 +5097,8 @@ void RTPPacket::Clear() {
 	extseqnr = 0;
 	timestamp = 0;
 	ssrc = 0;
-	packet = 0;
-	payload = 0; 
+	packet = NULL;
+	payload = NULL;
 	packetlength = 0;
 	payloadlength = 0;
 	extid = 0;
@@ -5136,8 +5196,8 @@ int RTPPacket::BuildPacket(BYTE payloadtype,const void *payloaddata,size_t paylo
 	DWORD *curcsrc;
 	int i;
 
-	curcsrc = (DWORD *)(packet+sizeof(RTPHeader));
-	for(i=0 ; i < numcsrcs ; i++,curcsrc++)
+	curcsrc = (DWORD*)(packet+sizeof(RTPHeader));
+	for(i=0; i < numcsrcs; i++,curcsrc++)
 		*curcsrc = htonl(csrcs[i]);
 
 	payload = packet+sizeof(RTPHeader)+((size_t)numcsrcs)*sizeof(DWORD); 
@@ -5205,7 +5265,7 @@ int RTPPacketBuilder::Init(size_t max) {
 	
 	maxpacksize = max;
 	buffer = new /*RTPNew(GetMemoryManager(),RTPMEM_TYPE_BUFFER_RTPPACKETBUILDERBUFFER) */ BYTE[max];
-	if(buffer == NULL)
+	if(!buffer)
 		return ERR_RTP_OUTOFMEM;
 	packetlength=0;
 	
@@ -5394,7 +5454,7 @@ void RTPTCPTransmitter::Destroy() {
 	if(!m_created) {
 		MAINMUTEX_UNLOCK;
 		return;
-	}
+		}
 
 	ClearDestSockets();
 	FlushPackets();
@@ -5581,18 +5641,18 @@ int RTPTCPTransmitter::DeleteDestination(const RTPAddress &addr) {
 RTPRawPacket *RTPTCPTransmitter::GetNextPacket() {
 
 	if(!m_init)
-		return 0;
+		return NULL;
 	
 	MAINMUTEX_LOCK
 	
 	RTPRawPacket *p;
 	if(!m_created) {
 		MAINMUTEX_UNLOCK
-		return 0;
+		return NULL;
 		}
 	if(rawpacketlist.IsEmpty())	{
 		MAINMUTEX_UNLOCK
-		return 0;
+		return NULL;
 		}
 
 	p = rawpacketlist.GetHead();
@@ -6091,7 +6151,7 @@ void RTCPPacketBuilder::Destroy() {
 
 	if(!init)
 		return;
-//	ownsdesinfo.Clear();
+	ownsdesinfo.Clear();
 	init = false;
 	}
 
@@ -6114,12 +6174,12 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 	if((status = rtcpcomppack->InitBuild(maxpacketsize)) < 0) {
 		delete rtcpcomppack;
 		return status;
-	}
+		}
 	
 	if((srcdat = sources.GetOwnSourceInfo()) != 0) {
 		if(srcdat->IsSender())
 			sender = true;
-	}
+		}
 	
 	DWORD ssrc = rtppacketbuilder.GetSSRC();
 	RTPTime curtime = RTPTime::CurrentTime();
@@ -6142,16 +6202,16 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 			if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 				return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 			return status;
+			}
 		}
-	}
 	else {
 		if((status = rtcpcomppack->StartReceiverReport(ssrc)) < 0)	{
 			delete  rtcpcomppack;
 			if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 				return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 			return status;
+			}
 		}
-	}
 
 	BYTE *owncname;
 	size_t owncnamelen;
@@ -6159,13 +6219,13 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 	owncname = ownsdesinfo.GetCNAME(&owncnamelen);
 
 	if((status = rtcpcomppack->AddSDESSource(ssrc)) < 0)	{
-		delete  rtcpcomppack;
+		delete rtcpcomppack;
 		if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 			return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 		return status;
 		}
 	if((status = rtcpcomppack->AddSDESNormalItem(RTCPSDESPacket::CNAME,owncname,owncnamelen)) < 0)	{
-		delete  rtcpcomppack;
+		delete rtcpcomppack;
 		if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 			return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 		return status;
@@ -6176,12 +6236,12 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 		bool full,atendoflist;
 
 		if((status = FillInReportBlocks(rtcpcomppack,curtime,sources.GetTotalCount(),&full,&added,&skipped,&atendoflist)) < 0)	{
-			delete  rtcpcomppack;
+			delete rtcpcomppack;
 			return status;
 			}
 		
 		if(full && added == 0)	{
-			delete  rtcpcomppack;
+			delete rtcpcomppack;
 			return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 			}
 	
@@ -6208,9 +6268,9 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 			int itemcount;
 			
 			if((status = FillInSDES(rtcpcomppack,&full,&processedall,&itemcount)) < 0)	{
-				delete  rtcpcomppack;
+				delete rtcpcomppack;
 				return status;
-			}
+				}
 
 			if(processedall)	{
 				processingsdes = false;
@@ -6218,11 +6278,10 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 				if(!full && skipped > 0) {
 					// if the packet isn't full and we skipped some sources that we already got in a previous packet,
 					// we can add some of them now
-					
 					bool atendoflist;
 					 
 					if((status = FillInReportBlocks(rtcpcomppack,curtime,skipped,&full,&added,&skipped,&atendoflist)) < 0)	{
-						delete  rtcpcomppack;
+						delete rtcpcomppack;
 						return status;
 						}
 					}
@@ -6236,9 +6295,9 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 		bool full;
 			
 		if((status = FillInSDES(rtcpcomppack,&full,&processedall,&itemcount)) < 0)	{
-			delete  rtcpcomppack;
+			delete rtcpcomppack;
 			return status;
-		}
+			}
 
 		if(itemcount == 0) // Big problem: packet size is too small to let any progress happen
 		{
@@ -6257,7 +6316,7 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 				bool atendoflist;
 
 				if((status = FillInReportBlocks(rtcpcomppack,curtime,sources.GetTotalCount(),&full,&added,&skipped,&atendoflist)) < 0) {
-					delete  rtcpcomppack;
+					delete rtcpcomppack;
 					return status;
 					}
 				if(atendoflist) // filled in all possible sources
@@ -6267,7 +6326,7 @@ int RTCPPacketBuilder::BuildNextPacket(RTCPCompoundPacket **pack) {
 		}
 		
 	if((status = rtcpcomppack->EndBuild()) < 0) {
-		delete  rtcpcomppack;
+		delete rtcpcomppack;
 		return status;
 		}
 
@@ -6301,33 +6360,27 @@ int RTCPPacketBuilder::FillInReportBlocks(RTCPCompoundPacketBuilder *rtcpcomppac
 			bool shouldprocess = false;
 			
 			srcdat = sources.GetCurrentSourceInfo();
-			if(!srcdat->IsOwnSSRC()) // don't send to ourselves
-			{
-				if(!srcdat->IsCSRC()) // p 35: no reports should go to CSRCs
-				{
-					if(srcdat->INF_HasSentData()) // if this isn't true, INF_GetLastRTPPacketTime() won't make any sense
-					{
+			if(!srcdat->IsOwnSSRC()) {	// don't send to ourselves
+				if(!srcdat->IsCSRC()) {		// p 35: no reports should go to CSRCs
+					if(srcdat->INF_HasSentData()) {	// if this isn't true, INF_GetLastRTPPacketTime() won't make any sense
 						if(firstpacket)
 							shouldprocess = true;
-						else
-						{
+						else {
 							// p 35: only if rtp packets were received since the last RTP packet, a report block
 							// should be added
-							
 							RTPTime lastrtptime = srcdat->INF_GetLastRTPPacketTime();
 							
 							if(lastrtptime > prevbuildtime)
 								shouldprocess = true;
+							}
 						}
 					}
 				}
-			}
 
 			if(shouldprocess) {
-				if(srcdat->IsProcessedInRTCP()) // already covered this one
-				{
+				if(srcdat->IsProcessedInRTCP()) {	// already covered this one
 					skippedcount++;
-				}
+					}
 				else {
 					DWORD rr_ssrc = srcdat->GetSSRC();
 					DWORD num = srcdat->INF_GetNumPacketsReceivedInInterval();
@@ -6427,10 +6480,10 @@ int RTCPPacketBuilder::FillInReportBlocks(RTCPCompoundPacketBuilder *rtcpcomppac
 							
 							if(lastrtptime > prevbuildtime)
 								shouldprocess = true;
+							}
 						}
 					}
 				}
-			}
 			
 			if(shouldprocess)	{
 				if(srcdat->IsProcessedInRTCP())
@@ -6599,16 +6652,16 @@ int RTCPPacketBuilder::BuildBYEPacket(RTCPCompoundPacket **pack,const void *reas
 			if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 				return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 			return status;
+			}
 		}
-	}
 	else {
 		if((status = rtcpcomppack->StartReceiverReport(ssrc)) < 0)	{
 			delete rtcpcomppack;
 			if(status == ERR_RTP_RTCPCOMPPACKBUILDER_NOTENOUGHBYTESLEFT)
 				return ERR_RTP_RTCPPACKETBUILDER_PACKETFILLEDTOOSOON;
 			return status;
+			}
 		}
-	}
 
 	BYTE *owncname;
 	size_t owncnamelen;
@@ -6763,7 +6816,7 @@ int RTCPCompoundPacket::ParseData(BYTE *data, size_t datalen) {
 				break;
 			default:
 	//			p = new RTCPUnknownPacket(data,length);		GD
-				;
+				break;
 			}
 
 		if(!p) {
@@ -7061,7 +7114,7 @@ int RTCPCompoundPacketBuilder::EndBuild() {
 			memcpy(curbuf,apppackets.GetAt(pos).packetdata,apppackets.GetAt(pos).packetlength);
 			
 			p = new RTCPAPPPacket(curbuf,apppackets.GetAt(pos).packetlength);
-			if(!p)	{
+			if(!p) {
 				if(!external)
 					delete []buf;
 				ClearPacketList();
@@ -7078,7 +7131,7 @@ int RTCPCompoundPacketBuilder::EndBuild() {
 	// adding the unknown data
 	{
 		for(POSITION pos = unknownpackets.GetHeadPosition(); pos;) {
-			memcpy(curbuf,(*it).packetdata,(*it).packetlength);
+			memcpy(curbuf,it->packetdata,it->packetlength);
 			
 			p = new RTCPUnknownPacket(curbuf,(*it).packetlength);
 			if(!p) {
@@ -7609,7 +7662,7 @@ int RTPCollisionList::UpdateAddress(const RTPAddress *addr,const RTPTime &receiv
 RTPPacket *RTPSession::GetNextPacket() {
 
 	if(!created)
-		return 0;
+		return NULL;
 	return sources.GetNextPacket();
 	}
 
@@ -7934,8 +7987,10 @@ void RTPAbortDescriptors::Destroy() {
 	if(!m_init)
 		return;
 
-	m_descriptors[0]->Close();
-	m_descriptors[1]->Close();
+	if(m_descriptors[0])
+		m_descriptors[0]->Close();
+	if(m_descriptors[1])
+		m_descriptors[1]->Close();
 	delete m_descriptors[0];
 	delete m_descriptors[1];
 	m_descriptors[0] = NULL;
@@ -8078,7 +8133,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 	while(attempts++ < maxAttempts) {
 		CSocket *sock=new CSocket;
 		if(!sock->Create(0, SOCK_DGRAM, 0)) {
-			for(size_t i=0 ; i < toClose.size() ; i++)
+			for(size_t i=0; i < toClose.size(); i++)
 				toClose[i]->Close();
 			return ERR_RTP_UDPV4TRANS_CANTCREATESOCKET;
 			}
@@ -8086,7 +8141,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 		// First we get an automatically chosen port
 		if(!sock->Bind(0,bindIP))	{
 			sock->Close();
-			for(size_t i=0 ; i < toClose.size() ; i++)
+			for(size_t i=0; i < toClose.size(); i++)
 				toClose[i]->Close();
 			return ERR_RTP_UDPV4TRANS_CANTGETVALIDSOCKET;
 			}
@@ -8095,7 +8150,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 		int status = GetIPv4SocketPort(sock, &basePort);
 		if(status < 0) {
 			sock->Close();
-			for(size_t i=0 ; i < toClose.size() ; i++)
+			for(size_t i=0; i < toClose.size(); i++)
 				toClose[i]->Close();
 			return status;
 			}
@@ -8107,7 +8162,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 				pRtcpSock = sock;
 				*pRtpPort = basePort;
 				*pRtcpPort = basePort;
-				for(size_t i=0 ; i < toClose.size() ; i++)
+				for(size_t i=0; i < toClose.size(); i++)
 					toClose[i]->Close();
 
 				return 0;
@@ -8119,7 +8174,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 			CSocket *sock2=new CSocket;
 			if(!sock2->Create(0, SOCK_DGRAM, 0)) {
 				sock->Close();
-				for(size_t i=0 ; i < toClose.size() ; i++)
+				for(size_t i=0; i < toClose.size(); i++)
 					toClose[i]->Close();
 				return ERR_RTP_UDPV4TRANS_CANTCREATESOCKET;
 				}
@@ -8156,7 +8211,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 						*pRtcpPort = basePort;
 						}
 
-					for(size_t i=0 ; i < toClose.size(); i++)
+					for(size_t i=0; i < toClose.size(); i++)
 						toClose[i]->Close();
 
 					return 0;
@@ -8168,7 +8223,7 @@ int GetAutoSockets(DWORD bindIP, bool allowOdd, bool rtcpMux,
 			}
 		}
 
-	for(size_t i=0 ; i < toClose.size(); i++)
+	for(size_t i=0; i < toClose.size(); i++)
 		toClose[i]->Close();
 
 	return ERR_RTP_UDPV4TRANS_TOOMANYATTEMPTSCHOOSINGSOCKET;
@@ -8248,17 +8303,17 @@ int RTPUDPv4Transmitter::Create(size_t maximumpacketsize,const RTPTransmissionPa
 			// If we're multiplexing, we're just going to set the RTCP socket to equal the RTP socket
 			if(params->GetRTCPMultiplexing())
 				rtcpsock = rtpsock;
-/*			else {
+			else {
 				bool b=TRUE;
-				rtcpsock=new CSocket();
+				rtcpsock=new CDataSocket();
 //				rtcpsock->SetSockOpt(SO_REUSEADDR,&b,1);
-				if(!rtcpsock->Create(0,SOCK_DGRAM,0)) {
+				if(!rtcpsock) {
 //					int i=WSAGetLastError();
 					rtpsock->Close();
 					MAINMUTEX_UNLOCK
 					return ERR_RTP_UDPV4TRANS_CANTCREATESOCKET;
 					}
-				}*/
+				}
 
 			// bind sockets
 			DWORD bindIP = params->GetBindIP();
@@ -8282,7 +8337,6 @@ int RTPUDPv4Transmitter::Create(size_t maximumpacketsize,const RTPTransmissionPa
 						rtcpport++;
 					}
 
-				rtcpsock=new CDataSocket();
 //				rtcpsock->SetSockOpt(SO_REUSEADDR,&b,1);
 				if(!rtcpsock->Create(rtcpport)) {
 //					int i=WSAGetLastError();
@@ -8781,8 +8835,7 @@ int RTPUDPv4Transmitter::PollSocket(bool rtp) {
 		len = 0;
 		int i=sock->IOCtl(FIONREAD,&len);
 
-		if(len <= 0) // make sure a packet of length zero is not queued
-		{
+		if(len <= 0) { // make sure a packet of length zero is not queued
 			// An alternative workaround would be to just use non-blocking sockets.
 			// However, since the user does have access to the sockets and I do not
 			// know how this would affect anyone else's code, I chose to do it using
@@ -8848,9 +8901,7 @@ int RTPUDPv4Transmitter::PollSocket(bool rtp) {
 
 						if((size_t)recvlen > sizeof(RTCPCommonHeader)) {
 							RTCPCommonHeader *rtcpheader = (RTCPCommonHeader *)datacopy;
-							BYTE packettype = rtcpheader->packettype;
-
-    					if(packettype >= 200 && packettype <= 204)
+    					if(rtcpheader->packettype >= 200 && rtcpheader->packettype <= 204)
 								isrtp = false;
 							}
 						}
@@ -8924,11 +8975,11 @@ RTPRawPacket *RTPUDPv4Transmitter::GetNextPacket() {
 	RTPRawPacket *p;
 	if(!created) {
 		MAINMUTEX_UNLOCK
-		return 0;
+		return NULL;
 		}
 	if(rawpacketlist.IsEmpty())	{
 		MAINMUTEX_UNLOCK
-		return 0;
+		return NULL;
 		}
 
 	p = rawpacketlist.GetHead();
@@ -9130,8 +9181,8 @@ RTPInternalSourceData::~RTPInternalSourceData() {
 
 
 void RTCPSDESInfo::Clear() {
-#ifdef RTP_SUPPORT_SDESPRIV
 
+#ifdef RTP_SUPPORT_SDESPRIV
 	for(POSITION pos = privitems.GetHeadPosition(); pos; )
 		delete privitems.GetNext(pos);
 	privitems.RemoveAll();
@@ -9195,8 +9246,7 @@ int RTPInternalSourceData::ProcessRTPPacket(RTPPacket *rtppack,const RTPTime &re
 	bool ispackethandled = false;
 
 	sources->OnValidatedRTPPacket(this, rtppack, isonprobation, &ispackethandled);
-	if(ispackethandled) // Packet is already handled in the callback, no need to store it in the list
-	{
+	if(ispackethandled) {	// Packet is already handled in the callback, no need to store it in the list
 		// Set 'stored' to true to avoid the packet being deallocated
 		*stored = true;
 		return 0;
@@ -9209,8 +9259,7 @@ int RTPInternalSourceData::ProcessRTPPacket(RTPPacket *rtppack,const RTPTime &re
 		return 0;
 		}
 	
-	if(!validated) // still on probation
-	{
+	if(!validated) {		// still on probation
 		// Make sure that we don't buffer too much packets to avoid wasting memory
 		// on a bad source. Delete the packet in the queue with the lowest sequence
 		// number.
@@ -9250,9 +9299,8 @@ int RTPInternalSourceData::ProcessRTPPacket(RTPPacket *rtppack,const RTPTime &re
 			done = true;
 			*stored = true;
 			}
-		else {	// they're equal !! Drop packet
+		else 	// they're equal !! Drop packet
 			done = true;
-			}
 		}
 
 	return 0;
@@ -9271,8 +9319,7 @@ int RTPInternalSourceData::ProcessSDESItem(BYTE sdesid,const BYTE *data,size_t i
 				
 				// NOTE: we're going to make sure that the CNAME is only set once.
 				oldcname = SDESinf.GetCNAME(&curlen);
-				if(curlen == 0)	{
-					// if CNAME is set, the source is validated
+				if(curlen == 0)	{			// if CNAME is set, the source is validated
 					SDESinf.SetCNAME(data,itemlen);
 					validated = true;
 				}
@@ -9574,6 +9621,7 @@ SocketData::SocketData() {
 	}
 
 void SocketData::Reset() {
+
 	m_lengthBufferOffset = 0;
 	m_dataLength = 0; 
 	m_dataBufferOffset = 0;
@@ -9605,8 +9653,7 @@ int SocketData::ProcessAvailableBytes(SocketType sock, int availLen, bool &compl
 		availLen -= r;
 
 //		assert(m_lengthBufferOffset <= numLengthBuffer);
-		if(m_lengthBufferOffset == numLengthBuffer) // we can constuct a length
-		{
+		if(m_lengthBufferOffset == numLengthBuffer) {		// we can construct a length
 			int l=0;
 			for(int i=numLengthBuffer-1, shift=0; i>=0; i--, shift += 8)
 				l |= ((int)m_lengthBuffer[i]) << shift;
@@ -9627,8 +9674,7 @@ int SocketData::ProcessAvailableBytes(SocketType sock, int availLen, bool &compl
 			}
 		}
 
-	if(m_lengthBufferOffset == numLengthBuffer && m_pDataBuffer) // the last one is to make sure we didn't run out of memory
-	{
+	if(m_lengthBufferOffset == numLengthBuffer && m_pDataBuffer) {	// the last one is to make sure we didn't run out of memory
 		if(m_dataBufferOffset < m_dataLength) {
 			int num = m_dataLength-m_dataBufferOffset;
 			if(num > availLen)
@@ -9704,7 +9750,7 @@ uint8_t *NALUTypeBase::PrefixXPS(uint8_t *buf, size_t *size, CStringEx xps) {
 
 	*size = 0;
 
-	buf[0] = 0; buf[1] = 0; buf[2] = 0; buf[3] = 1;
+	buf[0]=0; buf[1]=0; buf[2]=0; buf[3]=1;
 	*size += 4;
 
 	unsigned int XpsSize = 0;
@@ -9714,7 +9760,7 @@ uint8_t *NALUTypeBase::PrefixXPS(uint8_t *buf, size_t *size, CStringEx xps) {
 		return NULL;
 	memcpy(buf + (*size), xpsBuf, XpsSize);
 	*size += XpsSize;
-	delete[] xpsBuf;
+	delete []xpsBuf;
 	xpsBuf = NULL;
 
 	return buf;

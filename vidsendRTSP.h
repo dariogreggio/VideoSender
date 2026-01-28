@@ -9,6 +9,8 @@
 using namespace std;
 
 #include <stdint.h>
+//#include "vidsendH264.h"		// per sps e pps, v.sotto
+// non posso includere h264.h perché a sua volta include questo... per ora copio la struct con i tipi base!
 
 #define PORT_RTSP 				554
 #define VERSION_RTSP 			"1.0"
@@ -27,7 +29,7 @@ using namespace std;
 
 typedef void (*DESTROIED_CLBK) ();
 
-#define TIMEOUT_MICROSECONDS 	1000000 // wait for a packet at most 1 second
+#define TIMEOUT_MILLISECONDS 	1000 // wait for a packet at most 1 second
 #define GET_SPS_PPS_PERIOD 1000		// GD
 #define MEDIA_BUFSIZ 65535
 #define MD5_BUF_SIZE 256
@@ -653,6 +655,7 @@ inline RTPTime::RTPTime(double t) {
 	}
 
 inline RTPTime::RTPTime(/*long*/ long int seconds, DWORD microseconds) {
+
 	if(seconds >= 0)	{
 		m_t = (double)seconds + 1e-6*(double)microseconds;
 		}
@@ -850,7 +853,7 @@ public:
 	 *  for the component will be used.
 	 */
 	virtual int Create(size_t maxpacksize, const RTPTransmissionParams *transparams) = 0;
-	/** By calling this function, buffers are cleared and the component cannot be used anymore. 
+	/** 
 	 *  By calling this function, buffers are cleared and the component cannot be used anymore.
 	 *  Only when the Create function is called again can the component be used again. */
 	virtual void Destroy() = 0;
@@ -895,6 +898,9 @@ public:
 #ifdef RTPDEBUG
 	virtual void Dump() = 0;
 #endif // RTPDEBUG
+
+	friend class MyRTPUDPSession;
+	friend class RTPSession;
 	};
 
 #define RTPUDPV4TRANS_HEADERSIZE						(20+8)
@@ -1245,29 +1251,24 @@ inline int RTPKeyHashTable<Key,Element,GetIndex,hashsize>::DeleteCurrentElement(
 		int index;
 		
 		// First, relink elements in current hash bucket
-		
 		index = curhashelem->GetHashIndex();
 		tmp1 = curhashelem->hashprev;
 		tmp2 = curhashelem->hashnext;
-		if(tmp1) // no previous element in hash bucket
-		{
+		if(tmp1) {		// no previous element in hash bucket
 			table[index] = tmp2;
 			if(tmp2)
 				tmp2->hashprev=NULL;
 			}
-		else // there is a previous element in the hash bucket
-		{
+		else {		// there is a previous element in the hash bucket
 			tmp1->hashnext = tmp2;
 			if(tmp2)
 				tmp2->hashprev = tmp1;
 			}
 
-		// Relink elements in list
-		
+		// Relink elements in list		
 		tmp1 = curhashelem->listprev;
 		tmp2 = curhashelem->listnext;
-		if(!tmp1) // curhashelem is first in list
-		{
+		if(!tmp1) {		// curhashelem is first in list
 			firsthashelem = tmp2;
 			if(tmp2)
 				tmp2->listprev=NULL;
@@ -1398,13 +1399,11 @@ inline int RTPKeyHashTable<Key,Element,GetIndex,hashsize>::AddElement(const Key 
 		e->hashprev = newelem;
 	
 	// Now, we still got to add it to the linked list
-	
 	if(!firsthashelem)	{
 		firsthashelem = newelem;
 		lasthashelem = newelem;
 		}
-	else // there already are some elements in the list
-	{
+	else {		// there already are some elements in the list
 		lasthashelem->listnext = newelem;
 		newelem->listprev = lasthashelem;
 		lasthashelem = newelem;
@@ -1652,30 +1651,30 @@ public:
 		Unknown /**< Used when there is an item present, but the type is not recognized. */
 		};
 	
-	/** Creates an instance based on the data in data with length datalen.
+	/** 
 	 *  Creates an instance based on the data in data with length datalen. Since the data pointer
 	 *  is referenced inside the class (no copy of the data is made) one must make sure that the memory it 
 	 *  points to is valid as long as the class instance exists.
 	 */
 	RTCPSDESPacket(BYTE *data,size_t datalen);
 	~RTCPSDESPacket()							{ }
-	/** Returns the number of SDES chunks in the SDES packet.
+	/** 
 	 *  Returns the number of SDES chunks in the SDES packet. Each chunk has its own SSRC identifier. 
 	 */
 	int GetChunkCount() const;
-	/** Starts the iteration over the chunks.
+	/** 
 	 *  Starts the iteration. If no SDES chunks are present, the function returns false. Otherwise,
 	 *  it returns true and sets the current chunk to be the first chunk.
 	 */
 	bool GotoFirstChunk();
-	/** Sets the current chunk to the next available chunk.
+	/** 
 	 *  Sets the current chunk to the next available chunk. If no next chunk is present, this function returns
 	 *  false, otherwise it returns true.
 	 */
 	bool GotoNextChunk();
 	/** Returns the SSRC identifier of the current chunk. */
 	DWORD GetChunkSSRC() const;
-	/** Starts the iteration over the SDES items in the current chunk.
+	/** 
 	 *  Starts the iteration over the SDES items in the current chunk. If no SDES items are 
 	 *  present, the function returns false. Otherwise, the function sets the current item
 	 *  to be the first one and returns true.
@@ -2090,7 +2089,7 @@ public:
 	size_t GetHeaderOverhead()							{ return RTPUDPV4TRANS_HEADERSIZE; }
 	
 	int Poll();
-	int WaitForIncomingData(const RTPTime &delay,bool *dataavailable = 0);
+	int WaitForIncomingData(const RTPTime &delay,bool *dataavailable=NULL);
 	int AbortWait();
 	
 	int SendRTPData(const void *data,size_t len);	
@@ -2192,10 +2191,8 @@ public:
 
 	/** This member function will be called when RTP data needs to be transmitted. */
 	virtual bool SendRTP(const void *data, size_t len) = 0;
-
 	/** This member function will be called when an RTCP packet needs to be transmitted. */
 	virtual bool SendRTCP(const void *data, size_t len) = 0;
-
 	/** Used to identify if an RTPAddress instance originated from this sender (to be able to detect own packets). */
 	virtual bool ComesFromThisSender(const RTPAddress *a) = 0;
 	};
@@ -2214,15 +2211,13 @@ public:
 
 	/** This function can be called to insert an RTP packet into the transmission component. */
 	void InjectRTP(const void *data, size_t len, const RTPAddress &a);
-
 	/** This function can be called to insert an RTCP packet into the transmission component. */
 	void InjectRTCP(const void *data, size_t len, const RTPAddress &a);
-
 	/** Use this function to inject an RTP or RTCP packet and the transmitter will try to figure out which type of packet it is. */
 	void InjectRTPorRTCP(const void *data, size_t len, const RTPAddress &a);
 private:
 	RTPExternalTransmitter *transmitter;
-};
+	};
 
 class RTPTransmissionParams {
 protected:
@@ -2242,22 +2237,18 @@ public:
 
 	/** Sets the IP address which is used to bind the sockets to ip. */
 	void SetBindIP(DWORD ip)									{ bindIP = ip; }
-
 	/** Sets the multicast interface IP address. */
 	void SetMulticastInterfaceIP(DWORD ip)					{ mcastifaceIP = ip; }
-
 	/** Sets the RTP portbase to pbase, which has to be an even number
 	 *  unless RTPUDPv4TransmissionParams::SetAllowOddPortbase was called;
 	 *  a port number of zero will cause a port to be chosen automatically. */
 	void SetPortbase(WORD pbase)							{ portbase = pbase; }
-
 	/** Sets the multicast TTL to be used to mcastTTL. */
 	void SetMulticastTTL(BYTE mcastTTL)						{ multicastTTL = mcastTTL; }
-
 	/** Passes a list of IP addresses which will be used as the local IP addresses. */
 	void SetLocalIPList(CList <DWORD,DWORD> &iplist)	{ for(POSITION pos = iplist.GetHeadPosition(); pos; ) { const auto& item = iplist.GetNext(pos); localIPs.AddTail(item); } } 
 
-	/** Clears the list of local IP addresses. 
+	/** 
 	 *  Clears the list of local IP addresses. An empty list will make the transmission 
 	 *  component itself determine the local IP addresses.
 	 */
@@ -2265,37 +2256,26 @@ public:
 
 	/** Returns the IP address which will be used to bind the sockets. */
 	DWORD GetBindIP() const									{ return bindIP; }
-
 	/** Returns the multicast interface IP address. */
 	DWORD GetMulticastInterfaceIP() const					{ return mcastifaceIP; }
-
 	/** Returns the RTP portbase which will be used (default is 5000). */
 	WORD GetPortbase() const								{ return portbase; }
-
 	/** Returns the multicast TTL which will be used (default is 1). */
 	BYTE GetMulticastTTL() const								{ return multicastTTL; }
-
 	/** Returns the list of local IP addresses. */
 	const CList <DWORD,DWORD> &GetLocalIPList() const			{ return localIPs; }
-
 	/** Sets the RTP socket's send buffer size. */
 	void SetRTPSendBuffer(int s)								{ rtpsendbuf = s; }
-
 	/** Sets the RTP socket's receive buffer size. */
 	void SetRTPReceiveBuffer(int s)								{ rtprecvbuf = s; }
-
 	/** Sets the RTCP socket's send buffer size. */
 	void SetRTCPSendBuffer(int s)								{ rtcpsendbuf = s; }
-
 	/** Sets the RTCP socket's receive buffer size. */
 	void SetRTCPReceiveBuffer(int s)							{ rtcprecvbuf = s; }
-
 	/** Enables or disables multiplexing RTCP traffic over the RTP channel, so that only a single port is used. */
 	void SetRTCPMultiplexing(bool f)							{ rtcpmux = f; }
-
 	/** Can be used to allow the RTP port base to be any number, not just even numbers. */
 	void SetAllowOddPortbase(bool f)							{ allowoddportbase = f; }
-
 	/** Force the RTCP socket to use a specific port, not necessarily one more than
 	 *  the RTP port (set this to zero to disable). */
 	void SetForcedRTCPPort(WORD rtcpport)					{ forcedrtcpport = rtcpport; }
@@ -2312,22 +2292,17 @@ public:
 
 	/** Returns the RTP socket's send buffer size. */
 	int GetRTPSendBuffer() const								{ return rtpsendbuf; }
-
 	/** Returns the RTP socket's receive buffer size. */
 	int GetRTPReceiveBuffer() const								{ return rtprecvbuf; }
-
 	/** Returns the RTCP socket's send buffer size. */
 	int GetRTCPSendBuffer() const								{ return rtcpsendbuf; }
-
 	/** Returns the RTCP socket's receive buffer size. */
 	int GetRTCPReceiveBuffer() const							{ return rtcprecvbuf; }
 
 	/** Returns a flag indicating if RTCP traffic will be multiplexed over the RTP channel. */
 	bool GetRTCPMultiplexing() const							{ return rtcpmux; }
-
 	/** If true, any RTP portbase will be allowed, not just even numbers. */
 	bool GetAllowOddPortbase() const							{ return allowoddportbase; }
-
 	/** If non-zero, the specified port will be used to receive RTCP traffic. */
 	WORD GetForcedRTCPPort() const							{ return forcedrtcpport; }
 
@@ -2452,7 +2427,7 @@ public:
 	RTPExternalPacketInjecter *GetPacketInjector() const						{ return packetinjector; }
 private:
 	RTPExternalPacketInjecter *packetinjector;
-};
+	};
 	
 /** A transmission component which will use user specified functions to transmit the data and
  *  which will expose functions to inject received RTP or RTCP data into this component.
@@ -2686,15 +2661,14 @@ public:
 	 *  whether own packets should be accepted or ignored.
 	 */
 	int ProcessRawPacket(RTPRawPacket *rawpack,RTPTransmitter *trans[],int numtrans,bool acceptownpackets);
-	/** Processes an RTPPacket instance rtppack which was received at time receivetime and 
-	 *  which originated from senderaddres.
+	/** 
 	 *  Processes an RTPPacket instance rtppack which was received at time receivetime and 
 	 *  which originated from senderaddres. The senderaddress parameter must be NULL if
 	 *  the packet was sent by the local participant. The flag stored indicates whether the packet 
 	 *  was stored in the table or not.  If so, the rtppack instance may not be deleted.
 	 */
 	int ProcessRTPPacket(RTPPacket *rtppack,const RTPTime &receivetime,const RTPAddress *senderaddress,bool *stored);
-	/** Processes the RTCP compound packet rtcpcomppack which was received at time receivetime from senderaddress.
+	/** 
 	 *  Processes the RTCP compound packet rtcpcomppack which was received at time receivetime from senderaddress.
 	 *  The senderaddress parameter must be NULL if the packet was sent by the local participant.
 	 */
@@ -2710,7 +2684,7 @@ public:
 	                          DWORD packetcount,DWORD octetcount,const RTPTime &receivetime,
 				  const RTPAddress *senderaddress);
 
-    /** Processes the report block information which was sent by participant ssrc into the source table.
+   /**
 	 *  Processes the report block information which was sent by participant ssrc into the source table.
 	 *  The information was received at time receivetime from address senderaddress The senderaddress
 	 *  parameter must be NULL if the packet was sent by the local participant.
@@ -2719,7 +2693,7 @@ public:
 	                           DWORD exthighseqnr,DWORD jitter,DWORD lsr,
 	                           DWORD dlsr,const RTPTime &receivetime,const RTPAddress *senderaddress);
 
-	/** Processes the non-private SDES item from source ssrc into the source table. 
+	/** 
 	 *  Processes the non-private SDES item from source ssrc into the source table. The information was
 	 *  received at time receivetime from address senderaddress. The senderaddress parameter must
 	 *  be NULL if the packet was sent by the local participant.
@@ -2727,7 +2701,7 @@ public:
 	int ProcessSDESNormalItem(DWORD ssrc,RTCPSDESPacket::ItemType t,size_t itemlength,
 	                          const void *itemdata,const RTPTime &receivetime,const RTPAddress *senderaddress);
 #ifdef RTP_SUPPORT_SDESPRIV
-	/** Processes the SDES private item from source ssrc into the source table. 
+	/** 
 	 *  Processes the SDES private item from source ssrc into the source table. The information was 
 	 *  received at time receivetime from address senderaddress. The senderaddress 
 	 *  parameter must be NULL if the packet was sent by the local participant.
@@ -2762,13 +2736,13 @@ public:
 	 *  otherwise it returns true.
 	 */
 	bool GotoFirstSourceWithData();
-	/** Sets the current source to be the next source in the table.
+	/** 
 	 *  Sets the current source to be the next source in the table. If we're already at the last source, 
 	 *  the function returns false, otherwise it returns true.
 	 */
 	bool GotoNextSource();
 	bool GotoPreviousSource();
-	/** Starts the iteration over the participants by going to the first member in the table.
+	/** 
 	 *  Starts the iteration over the participants by going to the first member in the table.
 	 *  If a member was found, the function returns true, otherwise it returns false.
 	 */
@@ -2956,25 +2930,18 @@ public:
 
 	/** Clears all SDES information. */
 	void Clear();
-
 	/** Sets the SDES CNAME item to s with length l. */
 	int SetCNAME(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_CNAME-1,s,l); }
-
 	/** Sets the SDES name item to s with length l. */
 	int SetName(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_NAME-1,s,l); }
-
 	/** Sets the SDES e-mail item to s with length l. */
 	int SetEMail(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_EMAIL-1,s,l); }
-
 	/** Sets the SDES phone item to s with length l. */
 	int SetPhone(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_PHONE-1,s,l); }
-
 	/** Sets the SDES location item to s with length l. */
 	int SetLocation(const BYTE *s,size_t l)				{ return SetNonPrivateItem(RTCP_SDES_ID_LOCATION-1,s,l); }
-
 	/** Sets the SDES tool item to s with length l. */
 	int SetTool(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_TOOL-1,s,l); }
-
 	/** Sets the SDES note item to s with length l. */
 	int SetNote(const BYTE *s,size_t l)					{ return SetNonPrivateItem(RTCP_SDES_ID_NOTE-1,s,l); }
 
@@ -3020,8 +2987,7 @@ public:
 	 *  Looks for the entry which corresponds to the SDES private
 	 *  item prefix prefix with length prefixlen. If found,
 	 *  the function returns true and stores the associated
-	 *  value and its length in value and valuelen
-	 *  respectively. 
+	 *  value and its length in value and valuelen respectively. 
 	 */
 	bool GetPrivateValue(const BYTE *prefix,size_t prefixlen,BYTE **value,size_t *valuelen) const;
 #endif // RTP_SUPPORT_SDESPRIV
@@ -3169,7 +3135,7 @@ public:
 	/** Creates an RTCPCompoundPacket instance from the data in rawpack, installing a memory manager if specified. */
 	RTCPCompoundPacket(RTPRawPacket &rawpack);
 
-	/** Creates an RTCPCompoundPacket instance from the data in packet}, with size len.
+	/** 
 	 *  Creates an RTCPCompoundPacket instance from the data in packet}, with size len. The deletedata
 	 *  flag specifies if the data in packet should be deleted when the compound packet is destroyed. If
 	 *  specified, a memory manager will be installed.
@@ -3253,37 +3219,31 @@ public:
 	 *  valid).
 	 */
 	DWORD GetSSRC(int index) const;
-
 	/** Returns the `fraction lost' field of the reception report described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	BYTE GetFractionLost(int index) const;
-
 	/** Returns the number of lost packets in the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	int GetLostPacketCount(int index) const;
-
 	/** Returns the extended highest sequence number of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetExtendedHighestSequenceNumber(int index) const;
-
 	/** Returns the jitter field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetJitter(int index) const;
-
 	/** Returns the LSR field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetLSR(int index) const;
-
 	/** Returns the DLSR field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
@@ -3443,25 +3403,21 @@ public:
 	 *  valid).
 	 */
 	int GetLostPacketCount(int index) const;
-
 	/** Returns the extended highest sequence number of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetExtendedHighestSequenceNumber(int index) const;
-
 	/** Returns the jitter field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetJitter(int index) const;
-
 	/** Returns the LSR field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
 	 */
 	DWORD GetLSR(int index) const;
-
 	/** Returns the DLSR field of the reception report block described by index which may have 
 	 *  a value from 0 to GetReceptionReportCount()-1 (note that no check is performed to see if index is
 	 *  valid).
@@ -3642,13 +3598,12 @@ public:
 	 *  to store the packet.
 	 */
 	int InitBuild(size_t maxpacketsize);
-
 	/** 
 	 *  Starts building a RTCP compound packet. Data will be stored in externalbuffer which
 	 *  can contain buffersize bytes.
 	 */
 	int InitBuild(void *externalbuffer,size_t buffersize);
-	
+
 	/** Adds a sender report to the compound packet.
 	 *  Tells the packet builder that the packet should start with a sender report which will contain
 	 *  the sender information specified by this function's arguments. Once the sender report is started,
@@ -3656,24 +3611,20 @@ public:
 	 */
 	int StartSenderReport(DWORD senderssrc,const RTPNTPTime &ntptimestamp,DWORD rtptimestamp,
 	                    DWORD packetcount,DWORD octetcount);
-
 	/** Adds a receiver report to the compound packet.
 	 *  Tells the packet builder that the packet should start with a receiver report which will contain
 	 *  he sender SSRC senderssrc. Once the sender report is started, report blocks can be added using the
 	 *  AddReportBlock function.
 	 */
 	int StartReceiverReport(DWORD senderssrc);
-
 	/** Adds the report block information specified by the function's arguments.
 	 *  Adds the report block information specified by the function's arguments. If more than 31 report blocks
 	 *  are added, the builder will automatically use a new RTCP receiver report packet.
 	 */
 	int AddReportBlock(DWORD ssrc,BYTE fractionlost,int packetslost,DWORD exthighestseq,
 	                   DWORD jitter,DWORD lsr,DWORD dlsr);
-	
 	/** Starts an SDES chunk for participant ssrc. */
 	int AddSDESSource(DWORD ssrc);
-
 	/** Adds a normal (non-private) SDES item of type t to the current SDES chunk.
 	 *  Adds a normal (non-private) SDES item of type t to the current SDES chunk. The item's value
 	 *  will have length itemlength and will contain the data itemdata.
@@ -3691,13 +3642,11 @@ public:
 	 *  containing data reasondata.
 	 */
 	int AddBYEPacket(DWORD *ssrcs,BYTE numssrcs,const void *reasondata,BYTE reasonlength);
-
 	/** Adds the APP packet specified by the arguments to the compound packet.
 	 *  Adds the APP packet specified by the arguments to the compound packet. Note that appdatalen has to be
 	 *  a multiple of four.
 	 */
 	int AddAPPPacket(BYTE subtype,DWORD ssrc,const BYTE name[4],const void *appdata,size_t appdatalen);
-
 	/** Finishes building the compound packet.
 	 *  Finishes building the compound packet. If successful, the RTCPCompoundPacket member functions
 	 *  can be used to access the RTCP packet data.
@@ -4078,6 +4027,7 @@ public:
 	 *  source table is freed again.
 	 */
 	int BeginDataAccess();
+	void FlushPackets();
 	/** Frees the memory used by p. */
 	void DeletePacket(RTPPacket *p);
 	/** See BeginDataAccess. */
@@ -4142,7 +4092,6 @@ public:
 	RTPCollisionList collisionlist;
 
 	CList<RTCPCompoundPacket *,RTCPCompoundPacket *> byepackets;
-
 	};
 
 //inline RTPTransmitter *RTPSession::NewUserDefinedTransmitter()                                          { return 0; }
@@ -4283,6 +4232,102 @@ inline RTPSourceStats::RTPSourceStats():prevpacktime(0,0),lastmsgtime(0,0),lastr
 	probation = 0; 
 	prevseqnr = 0; 
 #endif // RTP_SUPPORT_PROBATION
+	}
+
+/** Represents an RTP Packet.
+ *  The RTPPacket class can be used to parse a RTPRawPacket instance if it represents RTP data. 
+ *  The class can also be used to create a new RTP packet according to the parameters specified by
+ *  the user.
+ */
+class RTPPacket /*: public RTPMemoryObject */ {
+public:
+	/** 
+	 *  Creates an RTPPacket instance based upon the data in rawpack, optionally installing a memory manager. 
+	 *  If successful, the data is moved from the raw packet to the RTPPacket instance.
+	 */
+	RTPPacket(RTPRawPacket &rawpack /*,RTPMemoryManager *mgr=0*/);
+
+	/** 
+	 *  Creates a new buffer for an RTP packet and fills in the fields according to the specified parameters.
+	 *  If maxpacksize is not equal to zero, an error is generated if the total packet size would exceed 
+	 *  maxpacksize. The arguments of the constructor are self-explanatory. Note that the size of a header 
+	 *  extension is specified in a number of 32-bit words. A memory manager can be installed.
+	 */
+	RTPPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
+		  DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
+		  bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
+		  size_t maxpacksize /*, RTPMemoryManager *mgr = 0*/);
+	
+	/** This constructor is similar to the other constructor, but here data is stored in an external buffer
+	 *   with size buffersize. */
+	RTPPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
+		  DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
+		  bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
+		  void *buffer,size_t buffersize/*,RTPMemoryManager *mgr = 0*/);
+	/** Returns a pointer to the data of the entire packet. */
+	BYTE *GetPacketData() const					{ return packet; }
+	/** Returns a pointer to the actual payload data. */
+	BYTE *GetPayloadData() const				{ return payload; }
+	/** Returns the length of the entire packet. */
+	size_t GetPacketLength() const			{ return packetlength; }
+	/** Returns the payload length. */
+	size_t GetPayloadLength() const			{ return payloadlength; }
+	/** Returns the extended sequence number of the packet.
+	 *  Returns the extended sequence number of the packet. When the packet is just received, 
+	 *  only the low $16$ bits will be set. The high 16 bits can be filled in later.
+	 */
+	DWORD GetExtendedSequenceNumber() const											{ return extseqnr; }
+	/** Sets the extended sequence number of this packet to seq. */
+	void SetExtendedSequenceNumber(DWORD seq)										{ extseqnr = seq; }
+	/** Returns the timestamp of this packet. */
+	DWORD GetTimestamp() const														{ return timestamp; }
+	virtual ~RTPPacket()		{ DeleteData(); }
+	/** If an error occurred in one of the constructors, this function returns the error code. */
+	int GetCreationError() const														{ return error; }
+	/** Returns \c true if the RTP packet has a header extension and \c false otherwise. */
+	bool HasExtension() const															{ return hasextension; }
+	/** Returns \c true if the marker bit was set and \c false otherwise. */
+	bool HasMarker() const																{ return hasmarker; }
+	/** Returns the number of CSRCs contained in this packet. */
+	int GetCSRCCount() const															{ return numcsrcs; }
+	/** 
+	 *  Returns a specific CSRC identifier. The parameter \c num can go from 0 to GetCSRCCount()-1.
+	 */
+	DWORD GetCSRC(int num) const;
+	/** Returns the SSRC identifier stored in this packet. */
+	DWORD GetSSRC() const															{ return ssrc; }
+	void DeleteData();
+private:
+	void Clear();
+	int ParseRawPacket(RTPRawPacket &rawpack);
+	int BuildPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
+	                DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
+	                bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
+	                void *buffer,size_t maxsize);
+
+	int error;
+	bool hasextension,hasmarker;
+	int numcsrcs;
+	BYTE payloadtype;
+	DWORD extseqnr,timestamp,ssrc;
+	BYTE *packet,*payload;
+	WORD extid;
+	BYTE *extension;
+	size_t extensionlength;
+	size_t packetlength,payloadlength;
+	bool externalbuffer;
+	RTPTime receivetime;
+	};
+inline void RTPPacket::DeleteData() {
+
+	if(packet && !externalbuffer) {
+		delete packet /*RTPDeleteByteArray(packet /*,GetMemoryManager())*/; 
+		packet=NULL;
+		}
+
+//	if(payload)
+//		delete payload;
+//	payload= NULL;
 	}
 
 class RTPSourceData /*: public RTPMemoryObject*/ {
@@ -4439,7 +4484,7 @@ inline RTPPacket *RTPSourceData::GetNextPacket() {
 	RTPPacket *p;
 
 	if(packetlist.IsEmpty())
-		return 0;
+		return NULL;
 	p = packetlist.GetHead();
 	packetlist.RemoveHead();
 	return p;
@@ -4668,14 +4713,14 @@ public:
 	/** Returns true if this data is RTP data, false if it is RTCP data. */
 	bool IsRTP() const			{ return isrtp; }
 
-	/** Sets the pointer to the data stored in this packet to zero.
+	/** 
 	 *  Sets the pointer to the data stored in this packet to zero. This will prevent 
 	 *  a delete call for the actual data when the destructor of RTPRawPacket is called. 
 	 *  This function is used by the RTPPacket and RTCPCompoundPacket classes to obtain 
 	 *  the packet data (without having to copy it)	and to make sure the data isn't deleted 
 	 *  when the destructor of RTPRawPacket is called.
 	 */
-	void ZeroData()					{ packetdata = 0; packetdatalength = 0; }
+	void ZeroData()					{ packetdata = NULL; packetdatalength = 0; }
 	/** Allocates a number of bytes for RTP or RTCP data using the memory manager that
 	 *  was used for this raw packet instance, can be useful if the RTPRawPacket::SetData
 	 *  function will be used. */
@@ -4695,11 +4740,11 @@ private:
 	RTPAddress *senderaddress;
 	bool isrtp;
 	};
-inline RTPRawPacket::RTPRawPacket(BYTE *data,size_t datalen,RTPAddress *address,RTPTime &recvtime,bool rtp) : receivetime(recvtime) {
+inline RTPRawPacket::RTPRawPacket(BYTE *data,size_t datalen,RTPAddress *address,RTPTime &recvtime,bool rtp) : 
+	receivetime(recvtime),isrtp(rtp) {
 	packetdata = data;
 	packetdatalength = datalen;
 	senderaddress = address;
-	isrtp = rtp;
 	}
 inline RTPRawPacket::~RTPRawPacket() {
 	DeleteData();
@@ -4713,6 +4758,23 @@ inline void RTPRawPacket::DeleteData() {
 
 	packetdata = NULL;
 	senderaddress = NULL;
+	}
+inline void RTPRawPacket::SetData(uint8_t *data, size_t datalen) {
+	if (packetdata)
+		delete []packetdata;
+
+	packetdata = data;
+	packetdatalength = datalen;
+	}
+inline uint8_t *RTPRawPacket::AllocateBytes(bool isrtp, int recvlen) const {
+//	JRTPLIB_UNUSED(isrtp); // possibly unused
+	return new uint8_t[recvlen];
+	}
+inline void RTPRawPacket::SetSenderAddress(RTPAddress *address) {
+	if (senderaddress)
+		delete senderaddress;
+
+	senderaddress = address;
 	}
 
 #pragma pack( push, before_rtcph )
@@ -4746,100 +4808,16 @@ struct RTPExtensionHeader {
 	};
 #pragma pack( pop, before_rtcph )
 
-/** Represents an RTP Packet.
- *  The RTPPacket class can be used to parse a RTPRawPacket instance if it represents RTP data. 
- *  The class can also be used to create a new RTP packet according to the parameters specified by
- *  the user.
- */
-class RTPPacket /*: public RTPMemoryObject */ {
-public:
-	/** 
-	 *  Creates an RTPPacket instance based upon the data in rawpack, optionally installing a memory manager. 
-	 *  If successful, the data is moved from the raw packet to the RTPPacket instance.
-	 */
-	RTPPacket(RTPRawPacket &rawpack /*,RTPMemoryManager *mgr=0*/);
-
-	/** 
-	 *  Creates a new buffer for an RTP packet and fills in the fields according to the specified parameters.
-	 *  If maxpacksize is not equal to zero, an error is generated if the total packet size would exceed 
-	 *  maxpacksize. The arguments of the constructor are self-explanatory. Note that the size of a header 
-	 *  extension is specified in a number of 32-bit words. A memory manager can be installed.
-	 */
-	RTPPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
-		  DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
-		  bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
-		  size_t maxpacksize /*, RTPMemoryManager *mgr = 0*/);
-	
-	/** This constructor is similar to the other constructor, but here data is stored in an external buffer
-	 *   with size buffersize. */
-	RTPPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
-		  DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
-		  bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
-		  void *buffer,size_t buffersize/*,RTPMemoryManager *mgr = 0*/);
-	/** Returns a pointer to the data of the entire packet. */
-	BYTE *GetPacketData() const					{ return packet; }
-	/** Returns a pointer to the actual payload data. */
-	BYTE *GetPayloadData() const				{ return payload; }
-	/** Returns the length of the entire packet. */
-	size_t GetPacketLength() const			{ return packetlength; }
-	/** Returns the payload length. */
-	size_t GetPayloadLength() const			{ return payloadlength; }
-	/** Returns the extended sequence number of the packet.
-	 *  Returns the extended sequence number of the packet. When the packet is just received, 
-	 *  only the low $16$ bits will be set. The high 16 bits can be filled in later.
-	 */
-	DWORD GetExtendedSequenceNumber() const											{ return extseqnr; }
-	/** Sets the extended sequence number of this packet to seq. */
-	void SetExtendedSequenceNumber(DWORD seq)										{ extseqnr = seq; }
-	/** Returns the timestamp of this packet. */
-	DWORD GetTimestamp() const														{ return timestamp; }
-	virtual ~RTPPacket()		{ if(packet && !externalbuffer) delete packet /*RTPDeleteByteArray(packet /*,GetMemoryManager())*/;  }
-	/** If an error occurred in one of the constructors, this function returns the error code. */
-	int GetCreationError() const														{ return error; }
-	/** Returns \c true if the RTP packet has a header extension and \c false otherwise. */
-	bool HasExtension() const															{ return hasextension; }
-	/** Returns \c true if the marker bit was set and \c false otherwise. */
-	bool HasMarker() const																{ return hasmarker; }
-	/** Returns the number of CSRCs contained in this packet. */
-	int GetCSRCCount() const															{ return numcsrcs; }
-	/** 
-	 *  Returns a specific CSRC identifier. The parameter \c num can go from 0 to GetCSRCCount()-1.
-	 */
-	DWORD GetCSRC(int num) const;
-	/** Returns the SSRC identifier stored in this packet. */
-	DWORD GetSSRC() const															{ return ssrc; }
-private:
-	void Clear();
-	int ParseRawPacket(RTPRawPacket &rawpack);
-	int BuildPacket(BYTE payloadtype,const void *payloaddata,size_t payloadlen,WORD seqnr,
-	                DWORD timestamp,DWORD ssrc,bool gotmarker,BYTE numcsrcs,const DWORD *csrcs,
-	                bool gotextension,WORD extensionid,WORD extensionlen_numwords,const void *extensiondata,
-	                void *buffer,size_t maxsize);
-
-	int error;
-	bool hasextension,hasmarker;
-	int numcsrcs;
-	BYTE payloadtype;
-	DWORD extseqnr,timestamp,ssrc;
-	BYTE *packet,*payload;
-	WORD extid;
-	BYTE *extension;
-	size_t extensionlength;
-	size_t packetlength,payloadlength;
-	bool externalbuffer;
-	RTPTime receivetime;
-	};
-
 
 class MyRTPSession : public RTPSession {
 public:
 	MyRTPSession() { DestroiedClbk = NULL; }
   virtual ~MyRTPSession() {}
-	MyRTP_Teardown(MediaSession *,struct timeval *);
+	virtual void MyRTP_Teardown(MediaSession *,struct timeval *);
 	virtual int MyRTP_SetUp(MediaSession *media_session, CSocket *tunnelling_sock) {return 0;}
 	virtual int MyRTP_SetUp(MediaSession *media_session) { return 0;}
-	virtual BYTE *GetMyRTPData(BYTE *, size_t *, unsigned long);
-	virtual BYTE *GetMyRTPPacket(BYTE *, size_t *, unsigned long);
+	virtual BYTE *GetMyRTPData(BYTE *, size_t *, uint16_t);
+	virtual BYTE *GetMyRTPPacket(BYTE *, size_t *, uint16_t);
 	virtual void SetDestroiedClbk(DESTROIED_RTP_CLBK clbk) {DestroiedClbk = clbk;}
   // virtual DESTROIED_RTP_CLBK GetDestroiedClbk() { return DestroiedClbk; }
 	virtual void SetRecvRtspCmdClbk(void (*clbk)(char * cmd)) {}
@@ -4873,9 +4851,9 @@ public:
 	virtual int MyRTP_SetUp(MediaSession *media_session, CSocket *tunnelling_sock);
 
 	/* Wait 1 second for TEARDOWN at default */
-	virtual void MyRTP_Teardown(MediaSession *media_session, struct timeval *tval = NULL);
-	BYTE *GetMyRTPData(BYTE *data_buf, size_t * size, unsigned long timeout_ms);
-	BYTE *GetMyRTPPacket(BYTE *packet_buf, size_t * size, unsigned long timeout_ms);
+	void MyRTP_Teardown(MediaSession *media_session, struct timeval *tval = NULL);
+	BYTE *GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeout_ms);
+	BYTE *GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms);
 
 	void SetDestroiedClbk(void (*clbk)()) {DestroiedClbk = clbk;}
 
@@ -4910,8 +4888,8 @@ public:
 
 	/* Wait 1 second for TEARDOWN at default */
 	void MyRTP_Teardown(MediaSession *media_session, struct timeval *tval=NULL);
-	BYTE * GetMyRTPData(BYTE *data_buf, size_t *size, unsigned long timeout_ms);
-	BYTE * GetMyRTPPacket(BYTE *packet_buf, size_t *size, unsigned long timeout_ms);
+	BYTE *GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeout_ms);
+	BYTE *GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms);
 
 	void SetDestroiedClbk(void (*clbk)()) {DestroiedClbk = clbk;}
 
@@ -4945,7 +4923,7 @@ public:
 	 * <timeout_ms> in unit of microsecond.
 	 * Why we set 'timeout' here is to avoid continuously occupying CPU.
 	 * */
-	BYTE *GetMediaData(BYTE *buf, size_t *size, unsigned long timeout_ms=TIMEOUT_MICROSECONDS);
+	BYTE *GetMediaData(BYTE *buf, size_t *size, uint16_t timeout_ms=TIMEOUT_MILLISECONDS);
 
 	/* Function Name: GetMediaPacket;
 	 * Description: Get RTP Packet;
@@ -4953,7 +4931,7 @@ public:
 	 * <timeout_ms> in unit of microsecond.
 	 * Why we set 'timeout' here is to avoid continuously occupying CPU.
 	 * */
-	BYTE *GetMediaPacket(BYTE *buf, size_t *size, unsigned long timeout_ms=TIMEOUT_MICROSECONDS);
+	BYTE *GetMediaPacket(BYTE *buf, size_t *size, uint16_t timeout_ms=TIMEOUT_MILLISECONDS);
 
 	int MediaInfoCheck();
 	void SetRtpDestroiedClbk(void (*clbk)());
@@ -4973,6 +4951,7 @@ public:
 	unsigned int TimeRate;
 	unsigned int ChannelNum;
 	// std::map<unsigned int, StreamParameters> StreamParams;
+	char SPS[128],PPS[64];
 
 	CString ControlURI;
 	CString SessionID;
@@ -4989,7 +4968,11 @@ public:
 
 protected:
 	MyRTPSession *RTPInterface;
+
+	friend class CRTSPClientSocket;
 	};
+
+
 
 class CRTSPClientSocket : public CSocketEx {
 public:
@@ -5143,9 +5126,14 @@ public:
 	void SetDestroiedClbk(MediaSession *, DESTROIED_CLBK);
 	void SetDestroiedClbk(CString, DESTROIED_CLBK);
 	int GetTimeRate(CString);
+	int GetVideoParams(CString,BITMAPINFOHEADER*);
+	CString GetSPS(CString);
+	CString GetPPS(CString);
 	int GetChannelNum(CString);
 	void SetAudioByeFromServerClbk(DESTROIED_CLBK);
 	void SetVideoByeFromServerClbk(DESTROIED_CLBK);
+
+	void Flush();
 
 	CString ParseError(ErrorType);
 
@@ -5270,7 +5258,7 @@ public:
   virtual uint8_t *PrefixXPS(uint8_t *buf, size_t *size, CStringEx xps);
 public:
   virtual bool NeedPrefixParameterOnce();
-  virtual int ParseParaFromSDP(SDPMediaInfo & sdpMediaInfo);
+  virtual int ParseParaFromSDP(SDPMediaInfo &sdpMediaInfo);
 protected:
 	CString Name;
 	bool EndFlag;
@@ -5437,7 +5425,7 @@ public:
   virtual void Init();
   virtual uint8_t * PrefixParameterOnce(uint8_t *buf, size_t *size);
   virtual bool NeedPrefixParameterOnce();
-  virtual int ParseParaFromSDP(SDPMediaInfo & sdpMediaInfo);
+  virtual int ParseParaFromSDP(SDPMediaInfo &sdpMediaInfo);
 	virtual int ParsePacket(const uint8_t *RTPPayload, size_t size, bool *EndFlag);
 	virtual size_t CopyData(uint8_t *buf, uint8_t *data, size_t size);
 
@@ -5555,9 +5543,9 @@ public:
   virtual void Init();
   virtual uint8_t *PrefixParameterOnce(uint8_t *buf, size_t *size);
   virtual bool NeedPrefixParameterOnce();
-  virtual int ParseParaFromSDP(SDPMediaInfo & sdpMediaInfo);
-virtual int ParsePacket(const uint8_t *RTPPayload, size_t size, bool *EndFlag);
-virtual size_t CopyData(uint8_t *buf, uint8_t *data, size_t size);
+  virtual int ParseParaFromSDP(SDPMediaInfo &sdpMediaInfo);
+	virtual int ParsePacket(const uint8_t *RTPPayload, size_t size, bool *EndFlag);
+	virtual size_t CopyData(uint8_t *buf, uint8_t *data, size_t size);
   void InsertXPS() { prefixParameterOnce = true; }
   void NotInsertXPSAgain() { prefixParameterOnce = false; }
 
