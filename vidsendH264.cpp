@@ -6,7 +6,7 @@
 
 
 #include "stdafx.h"
-#include "vidsendocx.h"
+#include "vidsend.h"
 #include "vidsendLog.h"
 
 #include <stdint.h>
@@ -1486,8 +1486,8 @@ extern void ihadamard2x2(int block[4], int tblock[4]);
 *   Inverse 4x4 transformation, transforms cof to mb_rres
  ***********************************************************************
  */
-extern void compute_residue   (imgpel **curImg, imgpel **mb_pred, int **mb_rres, int mb_x, int opix_x, int width, int height);
-extern void sample_reconstruct(imgpel **curImg, imgpel **mb_pred, int **mb_rres, int mb_x, int opix_x, int width, int height, int max_imgpel_value, int dq_bits);
+extern void compute_residue   (imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, PIXEL_COORD width, PIXEL_COORD height);
+extern void sample_reconstruct(imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, PIXEL_COORD width, PIXEL_COORD height, imgpel max_imgpel_value, uint8_t dq_bits);
 void itrans4x4(Macroblock *currMB,   //!< current macroblock
                ColorPlane pl,        //!< used color plane
                PIXEL_COORD ioff,             //!< index to 4x4 block
@@ -1516,7 +1516,7 @@ void itrans4x4_ls(Macroblock *currMB,   //!< current macroblock
 
   Slice *currSlice=currMB->p_Slice;
   VideoParameters *p_Vid=currMB->p_Vid;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
 
   imgpel **mb_pred=currSlice->mb_pred[pl];
   imgpel **mb_rec =currSlice->mb_rec[pl];
@@ -2077,7 +2077,7 @@ void itrans_sp(Macroblock *currMB,   //!< current macroblock
   imgpel **mb_rec =currSlice->mb_rec[pl];
   int    **mb_rres=currSlice->mb_rres[pl];
   int    **cof    =currSlice->cof[pl];
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
 
   const int16_t(*InvLevelScale4x4)  [4]=dequant_coef[qp_rem];
   const int16_t(*InvLevelScale4x4SP)[4]=dequant_coef[qp_rem_sp];  
@@ -2252,7 +2252,7 @@ void iMBtrans4x4(Macroblock *currMB, ColorPlane pl, int smb) {
   int block8x8;
   int k;  
 
-  imgpel **curr_img=pl ? dec_picture->imgUV[pl-1]: dec_picture->imgY;
+  imgpel **curr_img=pl ? dec_picture->imgUV[pl-1] : dec_picture->imgY;
 
   // =============== 4x4 itrans ================
   // -------------------------------------------
@@ -2305,10 +2305,10 @@ void iMBtrans4x4(Macroblock *currMB, ColorPlane pl, int smb) {
         inverse4x4(cof, mb_rres, jj, 4);
         inverse4x4(cof, mb_rres, jj, 8);
         inverse4x4(cof, mb_rres, jj, 12);
-      }
-    }
+				}
+			}
     sample_reconstruct(currSlice->mb_rec[pl], currSlice->mb_pred[pl], mb_rres, 0, 0, MB_BLOCK_SIZE, MB_BLOCK_SIZE, currMB->p_Vid->max_pel_value_comp[pl], DQ_BITS);
-  }
+	  }
 
   // construct picture from 4x4 blocks
   copy_image_data_16x16(&curr_img[currMB->pix_y], currSlice->mb_rec[pl], currMB->pix_x, 0);
@@ -2317,7 +2317,7 @@ void iMBtrans4x4(Macroblock *currMB, ColorPlane pl, int smb) {
 void iMBtrans8x8(Macroblock *currMB, ColorPlane pl) {
   //VideoParameters *p_Vid=currMB->p_Vid;
   StorablePicture *dec_picture=currMB->p_Slice->dec_picture;
-  imgpel **curr_img=pl ? dec_picture->imgUV[pl-1]: dec_picture->imgY;
+  imgpel **curr_img=pl ? dec_picture->imgUV[pl-1] : dec_picture->imgY;
 
   // Perform 8x8 idct
   if(currMB->cbp & 0x01) 
@@ -8381,7 +8381,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice) {
 
   pSlice->delta_pic_order_cnt[0]=pSlice->delta_pic_order_cnt[1]=0;
 
-  // theApp.FileSpool->print(CLogFile::flagError,"A gap in frame number is found, try to fill it.");
+  theApp.FileSpool->print(CLogFile::flagError,"A gap in frame number is found, try to fill it /1.");
 
   if(p_Vid->IDR_concealment_flag) {
     // Conceals an IDR frame loss. Uses the reference frame in the previous
@@ -8481,7 +8481,7 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, SliceType cu
 
   unsigned i;
   int j;
-  int max_frame_num= 1 <<(active_sps->log2_max_frame_num_minus4+4);
+  int max_frame_num= 1 << (active_sps->log2_max_frame_num_minus4+4);
   bool diff;
 
   int list0idx=0;
@@ -8490,7 +8490,7 @@ void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, SliceType cu
   StorablePicture *tmp_s;
 
   if(currPicStructure == FRAME) {
-    for(i=0;i<p_Dpb->ref_frames_in_buffer; i++) {
+    for(i=0; i<p_Dpb->ref_frames_in_buffer; i++) {
       if(p_Dpb->fs[i]->concealment_reference) {
         if(p_Dpb->fs[i]->frame_num>p_Vid->frame_to_conceal)
           p_Dpb->fs_ref[i]->frame_num_wrap=p_Dpb->fs[i]->frame_num-max_frame_num;
@@ -12977,7 +12977,7 @@ static void intrapred_chroma_plane(Macroblock *currMB) {
     for(uv=0; uv<2; uv++) {
       imgpel **imgUV=dec_picture->imgUV[uv];
       imgpel **mb_pred=currSlice->mb_pred[uv+1];
-      int max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+      imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
       imgpel *upPred=&imgUV[up.pos_y][up.pos_x];
       BLOCK_COORD pos_x =up_left.pos_x;
       BLOCK_COORD pos_y1=left.pos_y+cr_MB_y2;
@@ -13327,7 +13327,7 @@ void intra_pred_chroma_mbaff(Macroblock *currMB) {
         for(uv=0; uv<2; uv++) {
           imgpel **imgUV=dec_picture->imgUV[uv];
           imgpel **mb_pred=currSlice->mb_pred[uv+1];
-          int max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+          imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
           imgpel *upPred=&imgUV[up.pos_y][up.pos_x];
 
           ih=cr_MB_x2 *(upPred[cr_MB_x-1]-imgUV[left[0].pos_y][left[0].pos_x]);
@@ -17702,7 +17702,7 @@ static int intra16x16_plane_pred(Macroblock *currMB, ColorPlane pl) {
   imgpel **imgY = pl ? currSlice->dec_picture->imgUV[pl-1] : currSlice->dec_picture->imgY;
   imgpel **mb_pred=&currSlice->mb_pred[pl][0];
   imgpel *mpr_line;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   BLOCK_COORD pos_y,pos_x;
 
   PixelPos a, b, d;  
@@ -17966,7 +17966,7 @@ static int intra16x16_plane_pred_mbaff(Macroblock *currMB, ColorPlane pl) {
   imgpel **imgY = pl ? currSlice->dec_picture->imgUV[pl-1] : currSlice->dec_picture->imgY;
   imgpel **mb_pred=&currSlice->mb_pred[pl][0];
   imgpel *mpr_line;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   PixelPos b;          //!< pixel position p(0,-1)
   PixelPos left[17];    //!< pixel positions p(-1, -1..15)
   bool up_avail, left_avail, left_up_avail;
@@ -19871,7 +19871,7 @@ static void edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
   PixelPos pixP, pixQ;
   VideoParameters *p_Vid=MbQ->p_Vid;
   int      bitdepth_scale=pl? p_Vid->bitdepth_scale[IS_CHROMA] : p_Vid->bitdepth_scale[IS_LUMA];
-  int      max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   int AlphaC0Offset=MbQ->DFAlphaC0Offset;
   int BetaOffset=MbQ->DFBetaOffset;  
   Macroblock *MbP;
@@ -19976,7 +19976,7 @@ static void edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
   PixelPos pixP, pixQ;
   VideoParameters *p_Vid=MbQ->p_Vid;
   int      bitdepth_scale=pl? p_Vid->bitdepth_scale[IS_CHROMA] : p_Vid->bitdepth_scale[IS_LUMA];
-  int      max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
 
   getAffNeighbour(MbQ, 0, yQ-1, p_Vid->mb_size[IS_LUMA], &pixP);     
 
@@ -20091,7 +20091,7 @@ static void edge_loop_chroma_ver_MBAff(imgpel** Img, uint8_t *Strength, Macroblo
   int      xQ=edge, yQ;
   PixelPos pixP, pixQ;
   int      bitdepth_scale=p_Vid->bitdepth_scale[IS_CHROMA];
-  int      max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
   
   int      AlphaC0Offset=MbQ->DFAlphaC0Offset;
   int      BetaOffset   =MbQ->DFBetaOffset;
@@ -20161,7 +20161,7 @@ static void edge_loop_chroma_hor_MBAff(imgpel** Img, uint8_t *Strength, Macroblo
   int      yQ =(edge<MB_BLOCK_SIZE? edge : 1);
   PixelPos pixP, pixQ;
   int      bitdepth_scale=p_Vid->bitdepth_scale[IS_CHROMA];
-  int      max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
   
   int      AlphaC0Offset=MbQ->DFAlphaC0Offset;
   int      BetaOffset   =MbQ->DFBetaOffset;
@@ -20811,7 +20811,7 @@ static void luma_ver_deblock_strong(imgpel **cur_img, PIXEL_COORD pos_x1, int Al
 *   Vertical Deblocking with Normal Strength
  *****************************************************************************************
  */
-static void luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1, int Alpha, int Beta, int C0, int max_imgpel_value) {
+static void luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1, int Alpha, int Beta, int C0, imgpel max_imgpel_value) {
   int i;
   imgpel *SrcPtrP, *SrcPtrQ;
   int edge_diff;
@@ -20905,7 +20905,7 @@ static void edge_loop_luma_ver(ColorPlane pl, imgpel** Img, uint8_t *Strength, M
 
     if((Alpha | Beta)!= 0) {
       const uint8_t *ClipTab=CLIP_TAB[indexA];
-      int max_imgpel_value=p_Vid->max_pel_value_comp[pl];      
+      imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];      
 
       PIXEL_COORD pos_x1=get_pos_x_luma(MbP,(edge-1));
       imgpel **cur_img=&Img[get_pos_y_luma(MbP, 0)];
@@ -20983,7 +20983,7 @@ static void luma_hor_deblock_strong(imgpel *imgP, imgpel *imgQ, uint8_t width, i
 *   Horizontal Deblocking with Strength=4
  *****************************************************************************************
  */
-static void luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COORD width, int Alpha, int Beta, int C0, int max_imgpel_value) {
+static void luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COORD width, int Alpha, int Beta, int C0, imgpel max_imgpel_value) {
   int i;
   int edge_diff;
   int tc0, dif, aq, ap;
@@ -21078,8 +21078,8 @@ static void edge_loop_luma_hor(ColorPlane pl, imgpel** Img, uint8_t *Strength, M
 
     if((Alpha | Beta)!= 0) {
       const uint8_t *ClipTab=CLIP_TAB[indexA];
-      int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
-      int width=p->iLumaStride; //p->size_x;
+      imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+			PIXEL_COORD width=p->iLumaStride; //p->size_x;
 
       imgpel *imgP=&Img[get_pos_y_luma(MbP, ypos)][get_pos_x_luma(MbP, 0)];
       imgpel *imgQ=imgP+width;
@@ -21116,7 +21116,7 @@ static void edge_loop_chroma_ver(imgpel** Img, uint8_t *Strength, Macroblock *Mb
 
   if(MbP || (MbQ->DFDisableIdc == 0)) {
     int      bitdepth_scale  =p_Vid->bitdepth_scale[IS_CHROMA];
-    int      max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+    imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
 
     int AlphaC0Offset=MbQ->DFAlphaC0Offset;
     int BetaOffset=MbQ->DFBetaOffset;
@@ -21192,7 +21192,7 @@ static void edge_loop_chroma_hor(imgpel** Img, uint8_t *Strength, Macroblock *Mb
 
   if(MbP || (MbQ->DFDisableIdc == 0)) {
     int      bitdepth_scale  =p_Vid->bitdepth_scale[IS_CHROMA];
-    int      max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
+    imgpel max_imgpel_value=p_Vid->max_pel_value_comp[uv+1];
 
     int AlphaC0Offset=MbQ->DFAlphaC0Offset;
     int BetaOffset=MbQ->DFBetaOffset;
@@ -23222,7 +23222,7 @@ void setup_slice_methods(Slice *currSlice) {
 	#endif
 			break;
 		default:
-			theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type\n");
+			theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type");
 			break;
 		}
 
@@ -23241,7 +23241,7 @@ void setup_slice_methods(Slice *currSlice) {
 			set_read_CBP_and_coeffs_cavlc(currSlice);
 			break;
 		default:
-			theApp.FileSpool->print(CLogFile::flagError,"Unsupported entropy coding mode\n");
+			theApp.FileSpool->print(CLogFile::flagError,"Unsupported entropy coding mode");
 			break;
 		}
 	}
@@ -24468,19 +24468,19 @@ int mb_pred_p_inter8x8(Macroblock *currMB, ColorPlane curr_plane, StorablePictur
   set_chroma_vector(currMB);
 
   for(block8x8=0; block8x8<4; block8x8++) {
-    int mv_mode =currMB->b8mode[block8x8];
-    int pred_dir=currMB->b8pdir[block8x8];
+    int8_t mv_mode =currMB->b8mode[block8x8];
+    int8_t pred_dir=currMB->b8pdir[block8x8];
 
     int k_start =(block8x8 << 2);
     int k_inc =(mv_mode == SMB8x4) ? 2 : 1;
     int k_end =(mv_mode == SMB8x8) ? k_start+1 :((mv_mode == SMB4x4) ? k_start+4 : k_start+k_inc+1);
 
-    int block_size_x =(mv_mode == SMB8x4 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
-    int block_size_y =(mv_mode == SMB4x8 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
+    BLOCK_COORD block_size_x =(mv_mode == SMB8x4 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
+    BLOCK_COORD block_size_y =(mv_mode == SMB4x8 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
 
     for(k=k_start; k<k_end; k += k_inc) {
-      i=(decode_block_scan[k] & 3);
-      j =((decode_block_scan[k] >> 2) & 3);
+      i= decode_block_scan[k] & 3;
+      j = (decode_block_scan[k] >> 2) & 3;
       perform_mc(currMB, curr_plane, dec_picture, pred_dir, i, j, block_size_x, block_size_y);
 			}
 		}
@@ -24560,7 +24560,7 @@ int mb_pred_b_d8x8temporal(Macroblock *currMB, ColorPlane curr_plane, imgpel **c
 
   //printf("currMB %d\n", currMB->mbAddrX);
   for(block8x8=0; block8x8<4; block8x8++) {      
-    int pred_dir=currMB->b8pdir[block8x8];
+    int8_t pred_dir=currMB->b8pdir[block8x8];
 
     int k_start =(block8x8 << 2);
     int k_end=k_start+1;
@@ -24726,7 +24726,7 @@ int mb_pred_b_d4x4temporal(Macroblock *currMB, ColorPlane curr_plane, imgpel **c
   set_chroma_vector(currMB);
 
   for(block8x8=0; block8x8<4; block8x8++) {      
-    int pred_dir=currMB->b8pdir[block8x8];
+    int8_t pred_dir=currMB->b8pdir[block8x8];
 
     int k_start =(block8x8 << 2);
     int k_end=k_start+BLOCK_MULTIPLE;
@@ -24828,7 +24828,7 @@ int mb_pred_b_d8x8spatial(Macroblock *currMB, ColorPlane curr_plane, imgpel **cu
   StorablePicture **list0=currSlice->listX[LIST_0+list_offset];
   StorablePicture **list1=currSlice->listX[LIST_1+list_offset];
 
-  int pred_dir=0;
+  int8_t pred_dir=0;
 
   set_chroma_vector(currMB);
 
@@ -25018,7 +25018,7 @@ int mb_pred_b_d4x4spatial(Macroblock *currMB, ColorPlane curr_plane, imgpel **cu
   StorablePicture **list0=currSlice->listX[LIST_0+list_offset];
   StorablePicture **list1=currSlice->listX[LIST_1+list_offset];
 
-  int pred_dir=0;
+  int8_t pred_dir=0;
 
   set_chroma_vector(currMB);
   prepare_direct_params(currMB, dec_picture, &pmvl0, &pmvl1, &l0_rFrame, &l1_rFrame);
@@ -25167,7 +25167,7 @@ int mb_pred_b_d4x4spatial(Macroblock *currMB, ColorPlane curr_plane, imgpel **cu
 int mb_pred_b_inter8x8(Macroblock *currMB, ColorPlane curr_plane, StorablePicture *dec_picture) {
   int8_t l0_rFrame=-1, l1_rFrame=-1;
   MotionVector pmvl0=zero_mv, pmvl1=zero_mv;
-  int block_size_x, block_size_y;
+  BLOCK_COORD block_size_x, block_size_y;
   int k;
   int block8x8;   // needed for ABT
   Slice *currSlice=currMB->p_Slice;
@@ -25184,8 +25184,8 @@ int mb_pred_b_inter8x8(Macroblock *currMB, ColorPlane curr_plane, StorablePictur
     prepare_direct_params(currMB, dec_picture, &pmvl0, &pmvl1, &l0_rFrame, &l1_rFrame);
 
   for(block8x8=0; block8x8<4; block8x8++) {
-    int mv_mode =currMB->b8mode[block8x8];
-    int pred_dir=currMB->b8pdir[block8x8];
+    int8_t mv_mode =currMB->b8mode[block8x8];
+    int8_t pred_dir=currMB->b8pdir[block8x8];
 
     if(mv_mode != 0) {
       int k_start =(block8x8 << 2);
@@ -25253,8 +25253,8 @@ int mb_pred_b_inter8x8(Macroblock *currMB, ColorPlane curr_plane, StorablePictur
 					}
 				}
 
-      for(k=k_start; k<k_end; k ++) {
-        int i=(decode_block_scan[k] & 3);
+      for(k=k_start; k<k_end; k++) {
+        int i= decode_block_scan[k] & 3;
         int j =((decode_block_scan[k] >> 2) & 3);
         perform_mc(currMB, curr_plane, dec_picture, pred_dir, i, j, block_size_x, block_size_y);
 				} 
@@ -27218,7 +27218,7 @@ void setup_read_macroblock(Slice *currSlice) {
 				currSlice->read_one_macroblock=read_one_macroblock_i_slice_cabac;
 				break;
 			default:
-				theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type\n");
+				theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type");
 				break;
 			}
 		}
@@ -27236,7 +27236,7 @@ void setup_read_macroblock(Slice *currSlice) {
 				currSlice->read_one_macroblock=read_one_macroblock_i_slice_cavlc;
 				break;
 			default:
-				theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type\n");
+				theApp.FileSpool->print(CLogFile::flagError,"Unsupported slice type");
 				break;
 			}
 		}
@@ -28625,7 +28625,7 @@ void reorder_ref_pic_list(Slice *currSlice, int cur_list) {
 
   for(i=0; modification_of_pic_nums_idc[i]!=3; i++) {
     if(modification_of_pic_nums_idc[i]>3)
-      error ("Invalid modification_of_pic_nums_idc command", 500);
+      error("Invalid modification_of_pic_nums_idc command", 500);
 
     if(modification_of_pic_nums_idc[i]<2) {
       if(modification_of_pic_nums_idc[i] == 0) {
@@ -29706,7 +29706,7 @@ void fill_frame_num_gap(VideoParameters *p_Vid, Slice *currSlice) {
   int tmp2=currSlice->delta_pic_order_cnt[1];
   currSlice->delta_pic_order_cnt[0]=currSlice->delta_pic_order_cnt[1]=0;
 
-  theApp.FileSpool->print(CLogFile::flagError,"A gap in frame number is found, try to fill it.\n");
+  theApp.FileSpool->print(CLogFile::flagError,"A gap in frame number is found, try to fill it /2.");
 
   UnusedShortTermFrameNum=(p_Vid->pre_frame_num+1) % p_Vid->max_frame_num;
   CurrFrameNum=currSlice->frame_num; //p_Vid->frame_num;
@@ -30829,7 +30829,7 @@ void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, 
 
   for(i=0; modification_of_pic_nums_idc[i]!=3; i++) {
     if(modification_of_pic_nums_idc[i]>5)
-      error ("Invalid modification_of_pic_nums_idc command", 500);
+      error("Invalid modification_of_pic_nums_idc command", 500);
 
     if(modification_of_pic_nums_idc[i]<2) {
       if(modification_of_pic_nums_idc[i] == 0) {
@@ -30837,7 +30837,7 @@ void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, 
           picNumLXNoWrap=picNumLXPred-(abs_diff_pic_num_minus1[i]+1)+maxPicNum;
         else
           picNumLXNoWrap=picNumLXPred-(abs_diff_pic_num_minus1[i]+1);
-      }
+				}
       else // (modification_of_pic_nums_idc[i] == 1)
  {
         if(picNumLXPred+(abs_diff_pic_num_minus1[i]+1)  >=  maxPicNum)
@@ -31190,7 +31190,7 @@ bool get_colocated_info_8x8(Macroblock *currMB, StorablePicture *list1, int i, i
       (!p_Vid->active_sps->frame_mbs_only_flag && ((!currSlice->structure && list1->iCodingType == FIELD_CODING)|| (currSlice->structure!=list1->structure && list1->coded_frame)))) {
       int jj=RSD(j);
       int ii=RSD(i);
-      int jdiv=(jj>>1);
+      int jdiv= jj >> 1;
       bool moving;
       PicMotionParams *fs=&list1->mv_info[jj][ii];
       
@@ -31211,10 +31211,10 @@ bool get_colocated_info_8x8(Macroblock *currMB, StorablePicture *list1, int i, i
 					}
 				}
       moving=!((((fs->ref_idx[LIST_0] == 0)
-        &&  (iabs(fs->mv[LIST_0].mv_x)>>1 == 0) && (iabs(fs->mv[LIST_0].mv_y)>>1 == 0)))
+        &&  (iabs(fs->mv[LIST_0].mv_x)>>1 == 0) && (iabs(fs->mv[LIST_0].mv_y) >> 1 == 0)))
         || ((fs->ref_idx[LIST_0] == -1)
         &&  (fs->ref_idx[LIST_1] == 0)
-        &&  (iabs(fs->mv[LIST_1].mv_x)>>1 == 0) && (iabs(fs->mv[LIST_1].mv_y)>>1 == 0)));
+        &&  (iabs(fs->mv[LIST_1].mv_x)>>1 == 0) && (iabs(fs->mv[LIST_1].mv_y) >> 1 == 0)));
       return moving;
 		  }
     else {
@@ -31260,8 +31260,8 @@ static void update_direct_mv_info_spatial_8x8(Macroblock *currMB) {
         j=2*(k >> 1);
 
         //j6=currMB->block_y_aff+j;
-        j4=currMB->block_y    +j;
-        i4=currMB->block_x    +i;
+        j4=currMB->block_y +j;
+        i4=currMB->block_x +i;
 
         mv_info=&dec_picture->mv_info[j4][i4];
 
@@ -31325,9 +31325,9 @@ static void update_direct_mv_info_spatial_8x8(Macroblock *currMB) {
               mv_info->ref_pic[LIST_1]=list1[(int16_t)l1_rFrame];
               mv_info->mv[LIST_1]=pmvl1;
               mv_info->ref_idx[LIST_1]=l1_rFrame;
-            }
-          }
-        }
+							}
+						}
+					}
         else {
           if(l0_rFrame<0 && l1_rFrame<0) {
             mv_info->ref_pic[LIST_0]=list0[0];
@@ -31571,9 +31571,9 @@ static void weighted_mc_prediction(imgpel **mb_pred,
     for(i=0; i<block_size_x; i++) {
       result=rshift_rnd((wp_scale*block[j][i]), weight_denom)+wp_offset;      
       mb_pred[j][i+ioff]=(imgpel)iClip3(0, color_clip, result);
-    }
-  }
-}
+			}
+		}
+	}
 
 
 
@@ -31592,12 +31592,12 @@ static void bi_prediction(imgpel **mb_pred, imgpel **block_l0, imgpel **block_l1
   int ii, jj;
   int row_inc=MB_BLOCK_SIZE-block_size_x;
 
-  for(jj=0;jj<block_size_y;jj++) {
+  for(jj=0; jj<block_size_y; jj++) {
     // unroll the loop 
     for(ii=0; ii<block_size_x; ii += 2) {
-      *(mpr++)=(imgpel)(((*(b0++)+*(b1++))+1) >> 1);
-      *(mpr++)=(imgpel)(((*(b0++)+*(b1++))+1) >> 1);
-    }
+      *mpr++=(imgpel)(((*(b0++)+*(b1++))+1) >> 1);
+      *mpr++=(imgpel)(((*(b0++)+*(b1++))+1) >> 1);
+			}
     mpr += row_inc;
     b0  += row_inc;
     b1  += row_inc;
@@ -31614,7 +31614,7 @@ static void bi_prediction(imgpel **mb_pred, imgpel **block_l0, imgpel **block_l1
  */
 static void weighted_bi_prediction(imgpel *mb_pred, 
                                    imgpel *block_l0, imgpel *block_l1, 
-                                   int block_size_y, int block_size_x, 
+                                   BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
                                    int wp_scale_l0, int wp_scale_l1, 
                                    int wp_offset, 
                                    int weight_denom, 
@@ -31624,7 +31624,7 @@ static void weighted_bi_prediction(imgpel *mb_pred,
 
   for(j=0; j<block_size_y; j++) {
     for(i=0; i<block_size_x; i++) {
-      result=rshift_rnd_sf((wp_scale_l0**(block_l0++)+wp_scale_l1**(block_l1++)),  weight_denom);
+      result=rshift_rnd_sf((wp_scale_l0**(block_l0++)+wp_scale_l1**(block_l1++)), weight_denom);
       *(mb_pred++)=(imgpel)iClip1(color_clip, result+wp_offset);
 	    }
     mb_pred += row_inc;
@@ -31639,7 +31639,7 @@ static void weighted_bi_prediction(imgpel *mb_pred,
 *   Integer positions
  ************************************************************************
  */ 
-static void get_block_00(imgpel *block, imgpel *cur_img, int span, int block_size_y) {
+static void get_block_00(imgpel *block, imgpel *cur_img, int span, BLOCK_COORD block_size_y) {
   // fastest to just move an entire block, since block is a temp block is a 256 uint8_t block (16x16)
   // writes 2 lines of 16 imgpel 1 to 8 times depending in block_size_y
   int j;
@@ -31651,8 +31651,8 @@ static void get_block_00(imgpel *block, imgpel *cur_img, int span, int block_siz
     memcpy(block, cur_img, MB_BLOCK_SIZE*sizeof(imgpel));
     block += MB_BLOCK_SIZE;
     cur_img += span;
-  }
-}
+		}
+	}
 
 
 /*!
@@ -31661,7 +31661,8 @@ static void get_block_00(imgpel *block, imgpel *cur_img, int span, int block_siz
 *   Qpel (1,0) horizontal
  ************************************************************************
  */ 
-static void get_luma_10(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos , int max_imgpel_value) {
+static void get_luma_10(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x,
+												BLOCK_COORD x_pos , imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line, *cur_line;
   int i, j;
@@ -31693,7 +31694,8 @@ static void get_luma_10(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Half horizontal
  ************************************************************************
  */ 
-static void get_luma_20(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos , int max_imgpel_value) {
+static void get_luma_20(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line;
   int i, j;
@@ -31722,7 +31724,8 @@ static void get_luma_20(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel (3,0) horizontal
  ************************************************************************
  */ 
-static void get_luma_30(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos , int max_imgpel_value) {
+static void get_luma_30(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos , imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line, *cur_line;
   int i, j;
@@ -31754,7 +31757,8 @@ static void get_luma_30(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel vertical (0, 1)
  ************************************************************************
  */ 
-static void get_luma_01(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_01(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x,
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line, *cur_line;
   int i, j;
@@ -31774,7 +31778,7 @@ static void get_luma_01(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+16) >> 5);
       *orig_line=(imgpel)((*orig_line+*(cur_line++)+1) >> 1);
       orig_line++;
 	    }
@@ -31789,7 +31793,8 @@ static void get_luma_01(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Half vertical
  ************************************************************************
  */ 
-static void get_luma_02(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_02(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line;
   int i, j;
@@ -31806,7 +31811,7 @@ static void get_luma_02(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 
     for(i=0; i<block_size_x; i++) {
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
-      *orig_line++=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *orig_line++=(imgpel)iClip1(max_imgpel_value, (result+16) >> 5);
 	    }
     p0=p1-block_size_x;
 		}
@@ -31819,7 +31824,8 @@ static void get_luma_02(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel vertical (0, 3)
  ************************************************************************
  */ 
-static void get_luma_03(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_03(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line, *cur_line;
   int i, j;
@@ -31839,7 +31845,7 @@ static void get_luma_03(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+16) >> 5);
       *orig_line=(imgpel)((*orig_line+*(cur_line++)+1) >> 1);
 			orig_line++;
 			}
@@ -31853,7 +31859,8 @@ static void get_luma_03(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Hpel horizontal, Qpel vertical (2, 1)
  ************************************************************************
  */ 
-static void get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res, int block_size_y, int block_size_x, int x_pos, int max_imgpel_value) {
+static void get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, imgpel max_imgpel_value) {
   int i, j;
   /* Vertical & horizontal interpolation */
   int *tmp_line;
@@ -31873,13 +31880,13 @@ static void get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     tmp_line =tmp_res[j];
 
     for(i=0; i<block_size_x; i++)
-      *(tmp_line++)=(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
+      *tmp_line++ = (*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 		}  
 
   jj=2;
   for(j=0; j<block_size_y; j++) {
     tmp_line =tmp_res[jj++];
-    x0=tmp_res[j    ];
+    x0=tmp_res[j  ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31888,10 +31895,10 @@ static void get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     orig_line=block[j];
 
     for(i=0; i<block_size_x; i++) {
-      result =(*x0+++*x5++)-5*(*x1+++*x4++)+20*(*x2+++*x3++);
+      result =(*x0++ +*x5++)-5*(*x1++ +*x4++)+20*(*x2++ +*x3++);
 
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+512)>>10));
-      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*(tmp_line++)+16) >> 5))+1)>> 1);
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+512) >> 10);
+      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*(tmp_line++)+16) >> 5))+1) >> 1);
       orig_line++;
 			}
 		}
@@ -31903,7 +31910,8 @@ static void get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 *   Hpel horizontal, Hpel vertical (2, 2)
  ************************************************************************
  */ 
-static void get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res, int block_size_y, int block_size_x, int x_pos, int max_imgpel_value) {
+static void get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, imgpel max_imgpel_value) {
   int i, j;
   /* Vertical & horizontal interpolation */
   int *tmp_line;
@@ -31924,11 +31932,11 @@ static void get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     tmp_line =tmp_res[j];
 
     for(i=0; i<block_size_x; i++)
-      *(tmp_line++)=(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
+      *tmp_line++ = (*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 	  }
 
   for(j=0; j<block_size_y; j++) {
-    x0=tmp_res[j    ];
+    x0=tmp_res[j  ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31937,8 +31945,8 @@ static void get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     orig_line=block[j];
 
     for(i=0; i<block_size_x; i++) {
-      result =(*x0+++*x5++)-5*(*x1+++*x4++)+20*(*x2+++*x3++);
-      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, ((result+512)>>10));
+      result =(*x0++ +*x5++)-5*(*x1++ +*x4++)+20*(*x2++ +*x3++);
+      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, (result+512)>>10);
 			}
 		}
 	}
@@ -31949,7 +31957,8 @@ static void get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 *   Hpel horizontal, Qpel vertical (2, 3)
  ************************************************************************
  */ 
-static void get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res, int block_size_y, int block_size_x, int x_pos, int max_imgpel_value) {
+static void get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, imgpel max_imgpel_value) {
   int i, j;
   /* Vertical & horizontal interpolation */
   int *tmp_line;
@@ -31970,13 +31979,13 @@ static void get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     tmp_line =tmp_res[j];
 
     for(i=0; i<block_size_x; i++)
-      *(tmp_line++)=(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
+      *tmp_line++ = (*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 	  }
 
   jj=3;
   for(j=0; j<block_size_y; j++) {
     tmp_line =tmp_res[jj++];
-    x0=tmp_res[j    ];
+    x0=tmp_res[j  ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31986,12 +31995,12 @@ static void get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 
     for(i=0; i<block_size_x; i++) {
       result =(*x0+++*x5++)-5*(*x1+++*x4++)+20*(*x2+++*x3++);
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+512)>>10));
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+512)>>10);
       *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*(tmp_line++)+16) >> 5))+1)>> 1);
       orig_line++;
-    }
-  }
-}
+			}
+		}
+	}
 
 /*!
  ************************************************************************
@@ -31999,7 +32008,8 @@ static void get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 *   Qpel horizontal, Hpel vertical (1, 2)
  ************************************************************************
  */ 
-static void get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   int i, j;
   int *tmp_line;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;        
@@ -32017,7 +32027,7 @@ static void get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     tmp_line =tmp_res[j];
 
     for(i=0; i<block_size_x+5; i++)
-      *(tmp_line++) =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
+      *tmp_line++ =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
     p0=p1-(block_size_x+5);
 		}
 
@@ -32033,8 +32043,8 @@ static void get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 
     for(i=0; i<block_size_x; i++) {
       result =(*(x0++)+*(x5++))-5*(*(x1++)+*(x4++))+20*(*(x2++)+*(x3++));
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+512)>>10));
-      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*(tmp_line++)+16)>>5))+1)>>1);
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+512)>>10);
+      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*tmp_line++ +16) >> 5))+1) >> 1);
       orig_line ++;
 			}
 		}  
@@ -32047,7 +32057,8 @@ static void get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 *   Qpel horizontal, Hpel vertical (3, 2)
  ************************************************************************
  */ 
-static void get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   int i, j;
   int *tmp_line;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;        
@@ -32065,7 +32076,7 @@ static void get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     tmp_line =tmp_res[j];
 
     for(i=0; i<block_size_x+5; i++)
-      *(tmp_line++) =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
+      *tmp_line++ =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
     p0=p1-(block_size_x+5);
 		}
 
@@ -32082,8 +32093,8 @@ static void get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
     for(i=0; i<block_size_x; i++) {
       result =(*(x0++)+*(x5++))-5*(*(x1++)+*(x4++))+20*(*(x2++)+*(x3++));
 
-      *orig_line=(imgpel)iClip1(max_imgpel_value, ((result+512)>>10));
-      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*(tmp_line++)+16)>>5))+1)>>1);
+      *orig_line=(imgpel)iClip1(max_imgpel_value, (result+512) >> 10);
+      *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((*tmp_line++ +16) >> 5))+1) >> 1);
       orig_line ++;
 			}
 		}
@@ -32095,7 +32106,8 @@ static void get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res, int bl
 *   Qpel horizontal, Qpel vertical (3, 3)
  ************************************************************************
  */ 
-static void get_luma_33(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_33(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   int i, j;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line;  
@@ -32116,7 +32128,7 @@ static void get_luma_33(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {        
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *(orig_line++)=(imgpel)iClip1(max_imgpel_value,(result+16)>>5);
 			}
 		}
 
@@ -32147,7 +32159,8 @@ static void get_luma_33(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel horizontal, Qpel vertical (1, 1)
  ************************************************************************
  */ 
-static void get_luma_11(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_11(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   int i, j;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
   imgpel *orig_line;  
@@ -32168,7 +32181,7 @@ static void get_luma_11(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {        
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, (result+16) >> 5);
 			}
 		}
 
@@ -32186,10 +32199,10 @@ static void get_luma_11(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 
       *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((result+16) >> 5))+1) >> 1);
       orig_line++;
-    }
+			}
     p0=p1-block_size_x ;
-  }      
-}
+		}
+	}
 
 /*!
  ************************************************************************
@@ -32197,7 +32210,8 @@ static void get_luma_11(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel horizontal, Qpel vertical (1, 3)
  ************************************************************************
  */ 
-static void get_luma_13(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_13(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   /* Diagonal interpolation */
   int i, j;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
@@ -32219,7 +32233,7 @@ static void get_luma_13(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {        
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *(orig_line++)=(imgpel)iClip1(max_imgpel_value,(result+16) >> 5);
 			}
 		}
 
@@ -32248,7 +32262,8 @@ static void get_luma_13(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Qpel horizontal, Qpel vertical (3, 1)
  ************************************************************************
  */ 
-static void get_luma_31(imgpel **block, imgpel **cur_imgY, int block_size_y, int block_size_x, int x_pos, int shift_x, int max_imgpel_value) {
+static void get_luma_31(imgpel **block, imgpel **cur_imgY, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+												BLOCK_COORD x_pos, BLOCK_COORD shift_x, imgpel max_imgpel_value) {
   /* Diagonal interpolation */
   int i, j;
   imgpel *p0, *p1, *p2, *p3, *p4, *p5;
@@ -32270,7 +32285,7 @@ static void get_luma_31(imgpel **block, imgpel **cur_imgY, int block_size_y, int
     for(i=0; i<block_size_x; i++) {        
       result =(*(p0++)+*(p5++))-5*(*(p1++)+*(p4++))+20*(*(p2++)+*(p3++));
 
-      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, ((result+16)>>5));
+      *(orig_line++)=(imgpel)iClip1(max_imgpel_value, (result+16) >> 5);
 			}
 		}
 
@@ -32288,10 +32303,10 @@ static void get_luma_31(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 
       *orig_line=(imgpel)((*orig_line+iClip1(max_imgpel_value, ((result+16) >> 5))+1) >> 1);
       orig_line++;
-    }
+	    }
     p0=p1-block_size_x ;
-  }      
-}
+		}      
+	}
 
 /*!
  ************************************************************************
@@ -32299,8 +32314,8 @@ static void get_luma_31(imgpel **block, imgpel **cur_imgY, int block_size_y, int
 *   Interpolation of 1/4 subpixel
  ************************************************************************
  */ 
-void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_pos, BLOCK_COORD block_size_x, BLOCK_COORD block_size_y, imgpel **block,
-                    BLOCK_COORD shift_x, BLOCK_COORD maxold_x, BLOCK_COORD maxold_y, int **tmp_res, int max_imgpel_value, imgpel no_ref_value, Macroblock *currMB) {
+void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_pos, PIXEL_COORD block_size_x, PIXEL_COORD block_size_y, imgpel **block,
+                    BLOCK_COORD shift_x, PIXEL_COORD maxold_x, PIXEL_COORD maxold_y, int **tmp_res, imgpel max_imgpel_value, imgpel no_ref_value, Macroblock *currMB) {
 
   if(curr_ref->no_ref) {
     //printf("list[ref_frame] is equal to 'no reference picture' before RAP\n");
@@ -32333,7 +32348,7 @@ void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_
           get_luma_02(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
         else
           get_luma_03(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
-      }
+				}
       else if(dx == 2) {  /* Vertical & horizontal interpolation */
         if(dy == 1)
           get_luma_21(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
@@ -32373,7 +32388,8 @@ void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_
 *   Chroma (0,X)
  ************************************************************************
  */ 
-static void get_chroma_0X(imgpel *block, imgpel *cur_img, int span, int block_size_y, int block_size_x, int w00, int w01, int total_scale) {
+static void get_chroma_0X(imgpel *block, imgpel *cur_img, int span, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+													int w00, int w01, int total_scale) {
   imgpel *cur_row=cur_img;
   imgpel *nxt_row=cur_img+span;
 
@@ -32390,8 +32406,8 @@ static void get_chroma_0X(imgpel *block, imgpel *cur_img, int span, int block_si
       cur_row=nxt_row;
       nxt_row += span;
     for(i=0; i<block_size_x; i++) {
-      result=(w00**cur_line+++w01**cur_line_p1++);
-      *(blk_line++)=(imgpel)rshift_rnd_sf(result, total_scale);
+      result=(w00* *cur_line+++w01* *cur_line_p1++);
+      *blk_line++=(imgpel)rshift_rnd_sf(result, total_scale);
 			}
 		}
 	}
@@ -32403,7 +32419,8 @@ static void get_chroma_0X(imgpel *block, imgpel *cur_img, int span, int block_si
 *   Chroma (X,0)
  ************************************************************************
  */ 
-static void get_chroma_X0(imgpel *block, imgpel *cur_img, int span, int block_size_y, int block_size_x, int w00, int w10, int total_scale) {
+static void get_chroma_X0(imgpel *block, imgpel *cur_img, int span, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+													int w00, int w10, int total_scale) {
   imgpel *cur_row=cur_img;
  
     imgpel *cur_line, *cur_line_p1;
@@ -32418,9 +32435,9 @@ static void get_chroma_X0(imgpel *block, imgpel *cur_img, int span, int block_si
       block += 16;
       cur_row += span;
       for(i=0; i<block_size_x; i++) {
-        result=(w00**cur_line+++w10**cur_line_p1++);
+        result=(w00* *cur_line+++w10* *cur_line_p1++);
         //*(blk_line++)=(imgpel)iClip1(max_imgpel_value, rshift_rnd_sf(result, total_scale));
-        *(blk_line++)=(imgpel)rshift_rnd_sf(result, total_scale);
+        *blk_line++=(imgpel)rshift_rnd_sf(result, total_scale);
       }
     }
 	}
@@ -32431,7 +32448,8 @@ static void get_chroma_X0(imgpel *block, imgpel *cur_img, int span, int block_si
 *   Chroma (X,X)
  ************************************************************************
  */ 
-static void get_chroma_XY(imgpel *block, imgpel *cur_img, int span, int block_size_y, int block_size_x, int w00, int w01, int w10, int w11, int total_scale) { 
+static void get_chroma_XY(imgpel *block, imgpel *cur_img, int span, BLOCK_COORD block_size_y, BLOCK_COORD block_size_x, 
+													int w00, int w01, int w10, int w11, int total_scale) { 
   imgpel *cur_row=cur_img;
   imgpel *nxt_row=cur_img+span;
 
@@ -32448,9 +32466,9 @@ static void get_chroma_XY(imgpel *block, imgpel *cur_img, int span, int block_si
       cur_row=nxt_row;
       nxt_row += span;
       for(i=0; i<block_size_x; i++) {
-        result =(w00**(cur_line++)+w01**(cur_line_p1++));
-        result += (w10**(cur_line )+w11**(cur_line_p1 ));
-        *(blk_line++)=(imgpel)rshift_rnd_sf(result, total_scale);
+        result =(w00* *(cur_line++)+w01* *(cur_line_p1++));
+        result += (w10* *(cur_line )+w11* *(cur_line_p1 ));
+        *blk_line++=(imgpel)rshift_rnd_sf(result, total_scale);
 				}
 			}
 		}
@@ -32554,10 +32572,10 @@ void intra_cr_decoding(Macroblock *currMB, int8_t yuv) {
         for(ioff=0; ioff<8; ioff+=4) {          
           currMB->itrans_4x4(currMB, (ColorPlane) (uv+1), ioff, joff);
           copy_image_data_4x4(&curUV[currMB->pix_c_y+joff], &currSlice->mb_rec[uv+1][joff], currMB->pix_c_x+ioff, ioff);
-        }
-      }
+					}
+				}
       currSlice->is_reset_coeff_cr=FALSE;
-    }
+	    }
     else {      
       for(b8=0; b8<(p_Vid->num_uv_blocks); b8++) {
         for(b4=0; b4<4; b4++) {
@@ -32683,7 +32701,7 @@ static inline int check_vert_mv(int llimit, int vec1_y,int rlimit) {
     return 0;
 	}
 
-static void perform_mc_single_wp(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, 
+static void perform_mc_single_wp(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int8_t pred_dir, 
 																 BLOCK_COORD i, BLOCK_COORD j, BLOCK_COORD block_size_x, BLOCK_COORD block_size_y) {
   VideoParameters *p_Vid=currMB->p_Vid;  
   Slice *currSlice=currMB->p_Slice;
@@ -32707,9 +32725,9 @@ static void perform_mc_single_wp(Macroblock *currMB, ColorPlane pl, StorablePict
   // vars for get_block_luma
   int maxold_x=dec_picture->size_x_m1;
   int maxold_y=(currMB->mb_field) ? (dec_picture->size_y >> 1)-1 : dec_picture->size_y_m1;   
-  int shift_x =dec_picture->iLumaStride;
+  BLOCK_COORD shift_x =dec_picture->iLumaStride;
   int **tmp_res=currSlice->tmp_res;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   imgpel no_ref_value=(imgpel)p_Vid->dc_pred_value_comp[pl];
   //
 
@@ -32773,15 +32791,15 @@ static void perform_mc_single_wp(Macroblock *currMB, ColorPlane pl, StorablePict
 	}
 
 
-static void perform_mc_single(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, int i, int j, 
+static void perform_mc_single(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int8_t pred_dir, int i, int j, 
 															BLOCK_COORD block_size_x, BLOCK_COORD block_size_y) {
   VideoParameters *p_Vid=currMB->p_Vid;  
   Slice *currSlice=currMB->p_Slice;
   seq_parameter_set_rbsp_t *active_sps=currSlice->active_sps;
   imgpel **tmp_block_l0=currSlice->tmp_block_l0;
   imgpel **tmp_block_l1=currSlice->tmp_block_l1;
-  BLOCK_COORD i4  =currMB->block_x+i;
-  BLOCK_COORD j4  =currMB->block_y+j;
+  BLOCK_COORD i4 =currMB->block_x+i;
+  BLOCK_COORD j4 =currMB->block_y+j;
   ColorFormat chroma_format_idc=dec_picture->chroma_format_idc;
   //===== Single List Prediction =====
   PIXEL_COORD ioff=(i << 2);
@@ -32795,9 +32813,9 @@ static void perform_mc_single(Macroblock *currMB, ColorPlane pl, StorablePicture
   // vars for get_block_luma
   int maxold_x=dec_picture->size_x_m1;
   int maxold_y=(currMB->mb_field) ? (dec_picture->size_y >> 1)-1 : dec_picture->size_y_m1;   
-  int shift_x =dec_picture->iLumaStride;
+  BLOCK_COORD shift_x =dec_picture->iLumaStride;
   int **tmp_res=currSlice->tmp_res;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   imgpel no_ref_value=(imgpel)p_Vid->dc_pred_value_comp[pl];
   //
 #if ENABLE_DEC_STATS
@@ -32900,7 +32918,7 @@ static void perform_mc_bi_wp(Macroblock *currMB, ColorPlane pl, StorablePicture 
   BLOCK_COORD maxold_x=dec_picture->size_x_m1;
   PIXEL_COORD shift_x =dec_picture->iLumaStride;
   int **tmp_res=currSlice->tmp_res;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   imgpel no_ref_value=(imgpel)p_Vid->dc_pred_value_comp[pl];
 
   check_motion_vector_range(l0_mv_array, currSlice);
@@ -32972,8 +32990,8 @@ static void perform_mc_bi_wp(Macroblock *currMB, ColorPlane pl, StorablePicture 
     weighted_bi_prediction(&currSlice->mb_pred[1][joff_cr][ioff_cr],block0,block1,block_size_y_cr,block_size_x_cr,weight0[1],weight1[1],wp_offset,chroma_log2,p_Vid->max_pel_value_comp[1]);
     wp_offset=((offset0[2]+offset1[2]+1) >>1);
     weighted_bi_prediction(&currSlice->mb_pred[2][joff_cr][ioff_cr],block2,block3,block_size_y_cr,block_size_x_cr,weight0[2],weight1[2],wp_offset,chroma_log2,p_Vid->max_pel_value_comp[2]);
-  }    
-}
+		}
+	}
 
 static void perform_mc_bi(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int i, int j, 
 													BLOCK_COORD block_size_x, BLOCK_COORD block_size_y) {
@@ -33011,9 +33029,9 @@ static void perform_mc_bi(Macroblock *currMB, ColorPlane pl, StorablePicture *de
   imgpel *block3=tmp_block_l3[0];
   // vars for get_block_luma
   int maxold_x=dec_picture->size_x_m1;
-  int shift_x =dec_picture->iLumaStride;
+  BLOCK_COORD shift_x =dec_picture->iLumaStride;
   int **tmp_res=currSlice->tmp_res;
-  int max_imgpel_value=p_Vid->max_pel_value_comp[pl];
+  imgpel max_imgpel_value=p_Vid->max_pel_value_comp[pl];
   imgpel no_ref_value=(imgpel)p_Vid->dc_pred_value_comp[pl];
 
   check_motion_vector_range(l0_mv_array, currSlice);
@@ -33080,11 +33098,12 @@ static void perform_mc_bi(Macroblock *currMB, ColorPlane pl, StorablePicture *de
 	}
 
 
-void perform_mc(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, int i, int j, 
+void perform_mc(Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int8_t pred_dir, int i, int j, 
 								BLOCK_COORD block_size_x, BLOCK_COORD block_size_y) {
   Slice *currSlice=currMB->p_Slice;
 
-  assert (pred_dir<=2);
+  assert(pred_dir<=2);
+
   if(pred_dir != 2) {
     if(currSlice->weighted_pred_flag)
       perform_mc_single_wp(currMB, pl, dec_picture, pred_dir, i, j, block_size_x, block_size_y);
@@ -33827,13 +33846,17 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 		uint8_t *cr=*pcr;
 
 		while(h>=0) {
-			int c=*luma-16;
-			int d=*cb-128;
-			int e=*cr-128;
+			int16_t c=*luma-16;
+			int16_t d=*cb-128;
+			int16_t e=*cr-128;
 
-			uint8_t r=(uint32_t)CLIP1((298*c        +409*e+128) >> 8);
-			uint8_t g=(uint32_t)CLIP1((298*c-100*d-208*e+128) >> 8);
-			uint8_t b=(uint32_t)CLIP1((298*c+516*d        +128) >> 8);
+//https://fourcc.org/fccyvrgb.php  o usare array come in PIR_CAM
+//	B = 1.164(Y - 16)                   + 2.018(U - 128)
+//	G = 1.164(Y - 16) - 0.813(V - 128) - 0.391(U - 128)
+//	R = 1.164(Y - 16) + 1.596(V - 128)
+			uint8_t r=(uint16_t)CLIP1((298*c        +409*e+128) >> 8);
+			uint8_t g=(uint16_t)CLIP1((298*c-100*d  -208*e+128) >> 8);
+			uint8_t b=(uint16_t)CLIP1((298*c+516*d        +128) >> 8);
 
 			*bgra++=b;
 			*bgra++=g;
@@ -33926,7 +33949,7 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 				}
 
 			if(!rgb_output) {
-				buf=(pDecPic->bValid==1) ? pDecPic->pV : pDecPic->pV+iChromaSizeX*symbol_size_in_bytes;
+				buf= pDecPic->bValid==1 ? pDecPic->pV : pDecPic->pV+iChromaSizeX*symbol_size_in_bytes;
 				p_Vid->img2buf(p->imgUV[1], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, crop_top, crop_bottom, pDecPic->iUVBufStride);
 				if(p_out>0) {
 					ret=_lwrite(p_out, (const char*)buf, (p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
@@ -41869,7 +41892,7 @@ void interpret_green_metadata_info(uint8_t *payload, int16_t size, VideoParamete
 	}
 
 
-static void recon8x8(int **m7, imgpel **mb_rec, imgpel **mpr, int max_imgpel_value, PIXEL_COORD ioff) {
+static void recon8x8(int **m7, imgpel **mb_rec, imgpel **mpr, imgpel max_imgpel_value, PIXEL_COORD ioff) {
   int j;
   int    *m_tr =NULL;
   imgpel *m_rec=NULL;
@@ -41898,7 +41921,7 @@ static void copy8x8(imgpel **mb_rec, imgpel **mpr, PIXEL_COORD ioff) {
     memcpy((*mb_rec++)+ioff,(*mpr++)+ioff, 8*sizeof(imgpel));
 	}
 
-static void recon8x8_lossless(int **m7, imgpel **mb_rec, imgpel **mpr, int max_imgpel_value, PIXEL_COORD ioff) {
+static void recon8x8_lossless(int **m7, imgpel **mb_rec, imgpel **mpr, imgpel max_imgpel_value, PIXEL_COORD ioff) {
   int i, j;
 
   for(j=0; j<8; j++) {
@@ -47504,7 +47527,7 @@ int DisplayParams(Mapping *Map, char *message) {
 
 
 
-void sample_reconstruct(imgpel **curImg, imgpel **mpr, int **mb_rres, int mb_x, int opix_x, int width, int height, int max_imgpel_value, int dq_bits) {
+void sample_reconstruct(imgpel **curImg, imgpel **mpr, int **mb_rres, BLOCK_COORD mb_x, int opix_x, PIXEL_COORD width, PIXEL_COORD height, imgpel max_imgpel_value, uint8_t dq_bits) {
   imgpel *imgOrg, *imgPred;
   int    *m7;
   int i, j;
@@ -47515,8 +47538,8 @@ void sample_reconstruct(imgpel **curImg, imgpel **mpr, int **mb_rres, int mb_x, 
     m7=&mb_rres[j][mb_x]; 
     for(i=0; i<width; i++)
       *imgOrg++ =(imgpel)iClip1(max_imgpel_value, rshift_rnd_sf(*m7++, dq_bits)+*imgPred++);
+			}
 		}
-	}
 
 
 // Mapping_Map Syntax:

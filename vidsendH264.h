@@ -19,7 +19,7 @@
 
 //#define INT64T int64_t
 typedef int64_t INT64T;		// provato a 32bit ma non va...
-typedef uint16_t PIXEL_COORD;
+typedef int16_t PIXEL_COORD;		// se metto unsigned escono artifatti e poi si pianta... RIVERIFICARE
 typedef int16_t BLOCK_COORD;
 
 #define JTRACE 0
@@ -106,7 +106,7 @@ typedef int32_t  transpel;
 #define MAX_REFERENCE_PICTURES 32               //!< H.264 allows 32 fields
 #define MAX_CODED_FRAME_SIZE 512000    /*8000000*/         //!< bytes for one frame (occhio hi-res, 952x576 ecc specie quando la compressione è bassa! di giorno
 #define MAX_NUM_DECSLICES  16
-#define MAX_DEC_THREADS    16                  //16 core decoding;
+#define MAX_DEC_THREADS    16                  //16 core deocoding;
 #define MCBUF_LUMA_PAD_X        32
 #define MCBUF_LUMA_PAD_Y        12
 #define MCBUF_CHROMA_PAD_X      16
@@ -145,15 +145,15 @@ typedef enum {
 #define MAXIMUMVALUEOFcpb_cnt   32
 typedef struct {
   unsigned int cpb_cnt_minus1;                                   // ue(v)
-  unsigned int bit_rate_scale;                                   // u(4)
-  unsigned int cpb_size_scale;                                   // u(4)
+  uint8_t bit_rate_scale;                                   // u(4)
+  uint8_t cpb_size_scale;                                   // u(4)
   unsigned int bit_rate_value_minus1 [MAXIMUMVALUEOFcpb_cnt];    // ue(v)
   unsigned int cpb_size_value_minus1 [MAXIMUMVALUEOFcpb_cnt];    // ue(v)
   bool  cbr_flag              [MAXIMUMVALUEOFcpb_cnt];    // u(1)
-  unsigned int initial_cpb_removal_delay_length_minus1;          // u(5)
-  unsigned int cpb_removal_delay_length_minus1;                  // u(5)
-  unsigned int dpb_output_delay_length_minus1;                   // u(5)
-  unsigned int time_offset_length;                               // u(5)
+  uint8_t initial_cpb_removal_delay_length_minus1;          // u(5)
+  uint8_t cpb_removal_delay_length_minus1;                  // u(5)
+  uint8_t dpb_output_delay_length_minus1;                   // u(5)
+  uint8_t time_offset_length;                               // u(5)
 	} hrd_parameters_t;
 
 typedef struct {
@@ -836,7 +836,11 @@ typedef struct coding_par {
   int8_t bitdepth_luma_qp_scale;
   int8_t bitdepth_chroma_qp_scale;
   unsigned int dc_pred_value_comp[MAX_PLANE]; //!< component value for DC prediction (depends on component pel bit depth)
-  int max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#if IMGTYPE == 0
+  uint8_t max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#else
+  uint16_t max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#endif
 
   ColorFormat yuv_format;
   bool lossless_qpprime_flag;
@@ -1528,7 +1532,11 @@ typedef struct video_par {
   int8_t bitdepth_luma_qp_scale;
   int8_t bitdepth_chroma_qp_scale;
   unsigned int dc_pred_value_comp[MAX_PLANE]; //!< component value for DC prediction (depends on component pel bit depth)
-  int max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#if IMGTYPE == 0
+  uint8_t max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#else
+  uint16_t max_pel_value_comp[MAX_PLANE];       //!< max value that one picture element (pixel) can take (depends on pic_unit_bitdepth)
+#endif
 
   bool separate_colour_plane_flag;
   int pic_unit_size_on_disk;
@@ -2794,12 +2802,12 @@ extern void reorder_long_term(Slice *currSlice, StorablePicture **RefPicListX, i
 extern int  allocate_pred_mem(Slice *currSlice);
 extern void free_pred_mem    (Slice *currSlice);
 
-extern void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_pos, BLOCK_COORD block_size_x, BLOCK_COORD block_size_y, imgpel **block,
-                           BLOCK_COORD shift_x,BLOCK_COORD maxold_x,BLOCK_COORD maxold_y,int **tmp_res,int max_imgpel_value,imgpel no_ref_value,Macroblock *currMB);
+extern void get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, BLOCK_COORD y_pos, PIXEL_COORD block_size_x, PIXEL_COORD block_size_y, imgpel **block,
+                           BLOCK_COORD shift_x,PIXEL_COORD maxold_x,PIXEL_COORD maxold_y,int **tmp_res,imgpel max_imgpel_value,imgpel no_ref_value,Macroblock *currMB);
 
 extern void intra_cr_decoding    (Macroblock *currMB, int8_t yuv);
 extern void prepare_direct_params(Macroblock *currMB, StorablePicture *dec_picture, MotionVector *pmvl0, MotionVector *pmvl1,int8_t *l0_rFrame, int8_t *l1_rFrame);
-extern void perform_mc           (Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int pred_dir, int i, int j, 
+extern void perform_mc           (Macroblock *currMB, ColorPlane pl, StorablePicture *dec_picture, int8_t pred_dir, int i, int j, 
 																	BLOCK_COORD block_size_x, BLOCK_COORD block_size_y);
 
 
