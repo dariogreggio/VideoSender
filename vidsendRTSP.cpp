@@ -1,11 +1,12 @@
 // GD/C adapted 2023-2026 da Ansersion https://www.cnblogs.com/ansersion/p/6959690.html
 
+// se non siamo abbastanza veloci a leggere i pacchetti, la lista e la memoria si riempiono...
+
 #include "stdafx.h"
-#include "vidsendocx.h"
+#include "vidsend.h"
 #include "vidsendLog.h"
 
 #include "re.h"
-#include "vidsend_http.h"
 #include "vidsendRTSP.h"
 
 
@@ -206,7 +207,7 @@ int MediaSession::RTP_SetUp(CSocket *tunnelling_sock) {
 		return MEDIA_SESSION_OK;
 		}
 
-//			theApp.FileSpool->print(CLogFile::flagInfo,"MyRTP_SetUp TCP: %d\n", tunnelling_sock);
+//			theApp.FileSpool->print(CLogFile::flagInfo,"MyRTP_SetUp TCP: %d", tunnelling_sock);
   if(tunnelling_sock) {
 		RTPInterface = new MyRTPTCPSession;
 	  if(!RTPInterface->MyRTP_SetUp(this, tunnelling_sock)) 
@@ -779,9 +780,22 @@ int CRTSPClientSocket::ParseSDP(CString SDP) {
 void CRTSPClientSocket::Flush() {
 	map<CString, MediaSession *>::iterator it;
 
+	RTPSessionSources *t;
+
 	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
 		if(it->second->RTPInterface) 
 			it->second->RTPInterface->FlushPackets();
+		t=&it->second->RTPInterface->sources;
+//		t->rtpsession.FlushPackets();
+		/* PORCO DI QUEL DIO succhiacazzi non si capisce come trovare sta merda di lista porcodio!
+		{
+	t->GetOwnSourceInfo();
+		RTPSourceData *sourcedata;
+
+		sourcedata = t->GetOwnSourceInfo();
+		delete sourcedata;
+				theApp.FileSpool->print(CLogFile::flagInfo," Flush()" );
+		}*/
 		}
 
 	}
@@ -2066,6 +2080,9 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 	size_t size2;
 	BYTE *p=buf+4;
 	BYTE NAL;
+	bool foundStart=FALSE;		// fa schiantare... boh
+
+//				theApp.FileSpool->print(CLogFile::flagInfo,"entra getMediaFrame" );
 
 	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
 		if(!it->first.CompareNoCase(media_type)) 
@@ -2083,6 +2100,9 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 	do {
 		if(!it->second->GetMediaPacket(mybuf,&size2))
 			break;
+//		if(!foundStart && !fua->S)		// mmm no, vale solo per SLICE ma SPS ecc non ce l'hanno...
+//			continue;
+//		foundStart=TRUE;
 		if(p-buf+size2 > max_size /*-12*/)
 			break;
 		pack=(struct RTPHeader*)&mybuf;
@@ -2111,27 +2131,52 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 					*p=NAL;		//0x65   mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
 					memcpy(p+1,mybuf  +14,size2-14);		// salto header
 					p+=size2-13;
+//					foundStart=TRUE;
 					}
 				else {
+//					if(!foundStart)
+//						goto skippa;
 					memcpy(p,mybuf  +14,size2-14);		// salto header
 					p+=size2-14;
 					}
 				break;
 			case H264TypeInterfaceFU_A::_SLICE:	//  video 
+//				if(!foundStart)
+//						goto skippa;
 				*p=0x61 /*NAL ma verrebbe 0x60 e non va bene... */;		//0x61 mybuf[12] & 0xe0 | mybuf[13] & 0x1f;
 				memcpy(p+1,mybuf  +13,size2-13);		// salto header
 				p+=size2-12;
 				break;
-			default:	//non-video
+			default:	//non-video ossia SPS PPS ecc
 				memcpy(p,mybuf  +12,size2-12);		// 
 				p+=size2-12;
 				break;
 			}
 // https://stackoverflow.com/questions/9618369/h-264-over-rtp-identify-sps-and-pps-frames
+skippa:
+			;
 		} while(!fua->E /*pack->marker*/);
 //	*p++=0; *p++=0; *p++=0; *p++=0;		// marker di fine/next NAL, per decoder H264...
 	*size=p-buf;
+//				theApp.FileSpool->print(CLogFile::flagInfo," esce getMediaFrame" );
 	return buf;
+	}
+
+bool CRTSPClientSocket::FlushMedia(CString media_type) {
+	BYTE mybuf[2048];
+	size_t size2;
+	bool i=FALSE;
+	map<CString, MediaSession *>::iterator it;
+
+	for(it=MediaSessionMap->begin(); it != MediaSessionMap->end(); it++) {
+		if(!it->first.CompareNoCase(media_type)) 
+			break;
+		}
+	if(it != MediaSessionMap->end()) {
+		while(it->second->GetMediaPacket(mybuf,&size2))
+			i=TRUE;
+		}
+	return i;
 	}
 
 int CRTSPClientSocket::GetTimeRate(CString media_type) {
@@ -2391,8 +2436,8 @@ BYTE *MyRTPTCPSession::GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeo
 //		fprintf(stderr, "%s: Invalid argument('size==NULL')", __func__);
 		return NULL;
 		}
-  *size = 0;
 
+  *size = 0;
 	uint16_t UsleepTimes = (timeout_ms + USLEEP_UNIT - 1) / USLEEP_UNIT; // floor the 'timeout_ms / USLEEP_UNIT'
 
 	do {
@@ -2705,7 +2750,7 @@ int MyRTPUDPSession::MyRTP_SetUp(MediaSession *media_session) {
 //		fprintf(stderr, "%s: Invalid media session\n", __func__);
 		return RTP_ERROR;
 		}
-	if(0        && 0 == media_session->TimeRate) {		// idem patch 8/1/26
+	if(0 == media_session->TimeRate) {		// idem patch 8/1/26
 //		fprintf(stderr, "%s: Invalid MediaSession::TimeRate\n", __func__);
 		return RTP_ERROR;
 		}
@@ -2882,7 +2927,7 @@ BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeo
 			}
 
 		RTPPacket *pack;
-		if(!(pack = GetNextPacket())) 		{
+		if(!(pack = GetNextPacket())) {
 			EndDataAccess();
 			Sleep(USLEEP_UNIT);
 			UsleepTimes--;
@@ -2918,6 +2963,7 @@ BYTE *MyRTPUDPSession::GetMyRTPData(BYTE *data_buf, size_t *size, uint16_t timeo
 
 BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms) {
 
+//				theApp.FileSpool->print(CLogFile::flagInfo,"entra GetMyRTPPacket" );
 	if(!packet_buf) {
 //		fprintf(stderr, "%s: Invalid argument('packet_buf==NULL')", __func__);
 		return NULL;
@@ -2939,10 +2985,12 @@ BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t t
 #endif 
 
 		BeginDataAccess();
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  dataAccess");
 
 		// check incoming packets
 		if(!GotoFirstSourceWithData()) {
 			EndDataAccess();
+//				theApp.FileSpool->print(CLogFile::flagInfo,"sleep1" );
 			Sleep(USLEEP_UNIT);
 			UsleepTimes--;
       if(UsleepTimes <= 0) {
@@ -2955,6 +3003,7 @@ BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t t
 		RTPPacket *pack;
 		if(!(pack = GetNextPacket()))	{
 			EndDataAccess();
+//				theApp.FileSpool->print(CLogFile::flagInfo,"sleep2" );
 			Sleep(USLEEP_UNIT);
 			UsleepTimes--;
       if(UsleepTimes <= 0) {
@@ -2973,12 +3022,17 @@ BYTE *MyRTPUDPSession::GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t t
 		*size = PacketSize;
 		memcpy(packet_buf, Packet, PacketSize);
 
+//		delete Packet;
+//				theApp.FileSpool->print(CLogFile::flagInfo," uso %x",Packet );
+
+
 		// we don't longer need the packet, so we'll delete it
 		DeletePacket(pack);
 		EndDataAccess();
 		UsleepTimes = 0;
 		} while(UsleepTimes > 0);
 
+//				theApp.FileSpool->print(CLogFile::flagInfo," esce GetMyRTPPacket" );
 	return packet_buf;
 	}
 
@@ -2997,12 +3051,12 @@ void MyRTPUDPSession::OnPollThreadStop() {
     printf("RTP Poll stop\n");
 	}
 
-/*void MyRTPUDPSession::FlushPackets() {
+void MyRTPUDPSession::FlushPackets() {
 
 	if(rtptrans)
 		for(POSITION pos = rtptrans->rawpacketlist.GetHeadPosition(); pos; )
 			delete rtptrans->rawpacketlist.GetNext(pos);
-	}*/
+	}
 
 
 
@@ -3460,8 +3514,6 @@ void RTPSession::BYEDestroy(const RTPTime &maxwaittime,const void *reason,size_t
 				OnSendRTCPCompoundPacket(pack); // we'll place this after the actual send to avoid tampering
 				
 				delete pack;
-#pragma message("RIMETTEWRE")
-
 
 				if(!byepackets.IsEmpty()) // more bye packets to send, schedule them
 					rtcpsched.ScheduleBYEPacket((byepackets.GetHead())->GetCompoundPacketLength());
@@ -3945,9 +3997,9 @@ void RTPSession::FlushPackets() {
 
 
 RTPSources::RTPSources(ProbationType probtype ,char *mgr/*,RTPMemoryManager *mgr*/) 
-//	: sourcelist(32,owndata,RTPSources_GetHashIndex,RTPSOURCES_HASHSIZE /*?? RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/) 
-//	: sourcelist(mgr,32/*RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/)
-		: sourcelist() {
+//	: sourcelist(32,owndata,new RTPSources_GetHashIndex,RTPSOURCES_HASHSIZE /*?? RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/) {
+//: sourcelist(mgr,32/*RTPMEM_TYPE_CLASS_SOURCETABLEHASHELEMENT*/) {
+	: sourcelist() {
 
 	totalcount = 0;
 	sendercount = 0;
@@ -8889,6 +8941,7 @@ int RTPUDPv4Transmitter::PollSocket(bool rtp) {
 					if(!addr)
 						return ERR_RTP_OUTOFMEM;
 					datacopy = new BYTE[recvlen];
+//			theApp.FileSpool->print(CLogFile::flagInfo,"alloco : %x", datacopy );
 					if(!datacopy)	{
 						delete addr;
 						return ERR_RTP_OUTOFMEM;
@@ -8985,6 +9038,7 @@ RTPRawPacket *RTPUDPv4Transmitter::GetNextPacket() {
 	p = rawpacketlist.GetHead();
 	rawpacketlist.RemoveHead();
 
+//			theApp.FileSpool->print(CLogFile::flagInfo,"  GetNextPAcket %X, total %u",p->GetData(),rawpacketlist.GetCount());
 	MAINMUTEX_UNLOCK
 	return p;
 	}

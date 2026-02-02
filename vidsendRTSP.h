@@ -157,6 +157,7 @@ public:
   SDPConnectionData getSdpConnectionData() {return sdpConnectionData;}
   SDPSessionTime getSdpSessionTime() {return sdpSessionTime;}
   map<CString, SDPMediaInfo> getMediaInfoMap() {return mediaInfoMap;}
+#pragma message(" ev. provare CMap!")
 
 private:
   /* RFC2327.6 */
@@ -906,7 +907,7 @@ public:
 #define RTPUDPV4TRANS_HEADERSIZE						(20+8)
 class RTPTransmissionInfo;
 
-#define RTPSOURCES_HASHSIZE	8317
+#define RTPSOURCES_HASHSIZE	100  // 8317
 class RTPSources_GetHashIndex {
 public:
 	static int GetIndex(const DWORD &ssrc)				{ return ssrc % RTPSOURCES_HASHSIZE; }
@@ -2637,14 +2638,13 @@ public:
 	/** In the constructor you can select the probation type you'd like to use and also a memory manager. */
 	RTPSources(ProbationType = ProbationStore, char *m=0/*,RTPMemoryManager *mgr=0*/);
 	virtual ~RTPSources();
-		/** Sets the current source to be the first source in the table which has RTPPacket instances 
-	 *  that we haven't extracted yet.
+		/** 
 	 *  Sets the current source to be the first source in the table which has RTPPacket instances 
 	 *  that we haven't extracted yet. If no such member was found, the function returns false,
 	 *  otherwise it returns true.
 	 */
 
-	/** This function should be called if our own session has sent an RTP packet. 
+	/** 
 	 *  This function should be called if our own session has sent an RTP packet.
 	 *  For our own SSRC entry, the sender flag is updated based upon outgoing packets instead of incoming packets.
 	 */
@@ -2675,7 +2675,7 @@ public:
 	int ProcessRTCPCompoundPacket(RTCPCompoundPacket *rtcpcomppack,const RTPTime &receivetime,
 	                              const RTPAddress *senderaddress);
 
-	/** Process the sender information of SSRC ssrc into the source table. 
+	/** 
 	 *  Process the sender information of SSRC ssrc into the source table. The information was received
 	 *  at time receivetime from address senderaddress. The senderaddress} parameter must be NULL 
 	 *  if the packet was sent by the local participant.
@@ -2834,8 +2834,11 @@ public:
 	~RTPSessionSources()										{ }
 	void ClearOwnCollisionFlag()									{ owncollision = false; }
 	bool DetectedOwnCollision() const								{ return owncollision; }
-private:
+
+
 	RTPSession &rtpsession;
+
+private:
 	bool owncollision;
 	};
 
@@ -4321,6 +4324,10 @@ private:
 inline void RTPPacket::DeleteData() {
 
 	if(packet && !externalbuffer) {
+//		MEMORYSTATUS ms;
+//		ms.dwLength=sizeof(MEMORYSTATUS);		solo 32 bit / 4GB ...
+//		GlobalMemoryStatus(&ms);
+//		theApp.FileSpool->print(CLogFile::flagInfo,"libero: %x ", packet );
 		delete packet /*RTPDeleteByteArray(packet /*,GetMemoryManager())*/; 
 		packet=NULL;
 		}
@@ -4442,6 +4449,8 @@ protected:
 	BYTE *byereason;
 	size_t byereasonlen;
 	bool isrtpaddrset,isrtcpaddrset;
+
+	friend class CRTSPClientSocket;
 	};
 
 #define RTPINTERNALSOURCEDATA_MAXPROBATIONPACKETS		32
@@ -4490,7 +4499,7 @@ inline RTPPacket *RTPSourceData::GetNextPacket() {
 	return p;
 	}
 inline void RTPSourceData::FlushPackets() {
-
+// usare QUESTA per Flush()
 	for(POSITION pos = packetlist.GetHeadPosition(); pos; )
 		delete packetlist.GetNext(pos);
 	packetlist.RemoveAll();
@@ -4892,6 +4901,7 @@ public:
 	BYTE *GetMyRTPPacket(BYTE *packet_buf, size_t *size, uint16_t timeout_ms);
 
 	void SetDestroiedClbk(void (*clbk)()) {DestroiedClbk = clbk;}
+	void FlushPackets();
 
 protected:
 	void OnNewSource(RTPSourceData *dat);
@@ -5105,6 +5115,7 @@ public:
 	BYTE *GetMediaData(MediaSession *media_session, BYTE *buf, size_t * size, size_t max_size);
 	BYTE *GetMediaData(CString media_type, BYTE *buf, size_t *size, size_t max_size);
 	BYTE *GetMediaFrame(CString media_type, BYTE *buf, size_t *size, size_t max_size,uint32_t *timestamp);
+	bool FlushMedia(CString media_type);
 
 	BYTE *GetMediaPacket(MediaSession *media_session, BYTE *buf, size_t *size);
 	BYTE *GetMediaPacket(CString media_type, BYTE *buf, size_t *size);
