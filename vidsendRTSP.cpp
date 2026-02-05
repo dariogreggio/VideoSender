@@ -960,6 +960,17 @@ static const char *SDP_CONTROL_PATTERN="control:(.+)";
               it->second[CHANNEL_NUM] = S;
             }
           } 
+        else if(currentMediaInfo && 
+					//value.Regex(SDP_RTPMAP_PATTERN)
+					value.Left(9)=="framerate"
+					) {
+          int payloadId;
+				// leggere anche framerate!!! ce ne sono 2, direi ok il secondo, quello senza "S"
+          payloadId=atoi(value.Tokenize(_T(":"),i));
+          payloadId=atoi(value.Tokenize(_T(" "),i));
+					if(payloadId)
+						currentMediaInfo->frameRate=payloadId;		// alla veloce :) questo è attributo globale/unico
+					}
 				else if(currentMediaInfo && "video" == currentMediaInfo->mediaType && value.Regex(SDP_FMTP_H265_PATTERN)) {
 //          cout << "debug: Parse h265" << endl;
 
@@ -2099,6 +2110,8 @@ BYTE *CRTSPClientSocket::GetMediaFrame(CString media_type, BYTE *buf, size_t *si
 	struct FU_A *fua=(struct FU_A*)&mybuf[12];
 	do {
 		if(!it->second->GetMediaPacket(mybuf,&size2))
+			break;
+		if(!size2)
 			break;
 //		if(!foundStart && !fua->S)		// mmm no, vale solo per SLICE ma SPS ecc non ce l'hanno...
 //			continue;

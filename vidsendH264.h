@@ -19,7 +19,7 @@
 
 //#define INT64T int64_t
 typedef int64_t INT64T;		// provato a 32bit ma non va...
-typedef int16_t PIXEL_COORD;		// se metto unsigned escono artifatti e poi si pianta... RIVERIFICARE
+typedef int16_t PIXEL_COORD;		// se metto unsigned escono artefatti e poi si pianta... RIVERIFICARE
 typedef int16_t BLOCK_COORD;
 typedef int32_t PocType;		// serve 32...
 
@@ -327,7 +327,7 @@ typedef struct mvcvui_tag {
   int num_ops_minus1;
   uint8_t *temporal_id;
   int *num_target_output_views_minus1;
-  int **view_id;
+  int8_t **view_id;
   int8_t *timing_info_present_flag;
   int *num_units_in_tick;
   int *time_scale;
@@ -355,7 +355,7 @@ typedef struct {
 
   uint8_t bit_equal_to_one;
   int num_views_minus1;
-  int *view_id;
+  int8_t *view_id;
   int *num_anchor_refs_l0;
   int **anchor_ref_l0;
   int *num_anchor_refs_l1;
@@ -371,7 +371,7 @@ typedef struct {
   int *num_applicable_ops_minus1;
   uint8_t **applicable_op_temporal_id;
   int **applicable_op_num_target_views_minus1;
-  int ***applicable_op_target_view_id;
+  int8_t ***applicable_op_target_view_id;
   int **applicable_op_num_views_minus1;
 
   bool  mvc_vui_parameters_present_flag;
@@ -979,14 +979,14 @@ typedef struct {
 
 #if MVC_EXTENSION_ENABLE
 typedef struct nalunitheadermvcext_tag {
-   bool non_idr_flag;
-   unsigned int priority_id;
-   unsigned int view_id;
-   uint32_t temporal_id;
-   bool anchor_pic_flag;
-   bool inter_view_flag;
-   uint8_t reserved_one_bit;
-   unsigned int iPrefixNALU;
+  bool non_idr_flag;
+  unsigned int priority_id;
+  int8_t view_id;
+  uint32_t temporal_id;
+  bool anchor_pic_flag;
+  bool inter_view_flag;
+  uint8_t reserved_one_bit;
+  unsigned int iPrefixNALU;
 	} NALUnitHeaderMVCExt_t;
 #endif
 
@@ -1116,7 +1116,7 @@ typedef struct slice {
 #if MVC_EXTENSION_ENABLE
   int                 *abs_diff_view_idx_minus1[2];
 
-  int                 view_id;
+  int8_t              view_id;
   bool                inter_view_flag;
   bool                anchor_pic_flag;
 
@@ -1217,11 +1217,11 @@ typedef struct slice {
 		int8_t levarr[16], int8_t runarr[16], int8_t *number_coefficients);
 	} Slice;
 
-#define  TIMEB    timeb
-#define  TIME_T   struct timeval
-#define  OPENFLAGS_WRITE OF_WRITE //_O_WRONLY|_O_CREAT|_O_BINARY|_O_TRUNC
-#define  OPEN_PERMISSIONS _S_IREAD | _S_IWRITE
-#define  OPENFLAGS_READ  OF_READ //_O_RDONLY|_O_BINARY
+#define TIMEB    timeb
+#define TIME_T   struct timeval
+#define OPENFLAGS_WRITE OF_WRITE //_O_WRONLY|_O_CREAT|_O_BINARY|_O_TRUNC
+#define OPEN_PERMISSIONS _S_IREAD | _S_IWRITE
+#define OPENFLAGS_READ  OF_READ //_O_RDONLY|_O_BINARY
 #define FORMAT_OFF_T "I64d"
 
 typedef struct frame_format {  
@@ -1229,16 +1229,16 @@ typedef struct frame_format {
   ColorModel  color_model;                   //!< 4:4:4 format (0: YUV, 1: RGB, 2: XYZ)
   PixelFormat pixel_format;                  //!< pixel format support for certain interleaved yuv sources
   double      frame_rate;                    //!< frame rate
-  PIXEL_COORD    width[3];                      //!< component frame width
-  PIXEL_COORD    height[3];                     //!< component frame height    
+  PIXEL_COORD width[3];                      //!< component frame width
+  PIXEL_COORD height[3];                     //!< component frame height    
   int         auto_crop_right;               //!< luma component auto crop right
   int         auto_crop_bottom;              //!< luma component auto crop bottom
   int         auto_crop_right_cr;            //!< chroma component auto crop right
   int         auto_crop_bottom_cr;           //!< chroma component auto crop bottom
-  PIXEL_COORD    width_crop;                    //!< width after cropping consideration
-  PIXEL_COORD    height_crop;                   //!< height after cropping consideration
-  PIXEL_COORD    mb_width;                      //!< luma component frame width
-  PIXEL_COORD    mb_height;                     //!< luma component frame height    
+  PIXEL_COORD width_crop;                    //!< width after cropping consideration
+  PIXEL_COORD height_crop;                   //!< height after cropping consideration
+  PIXEL_COORD mb_width;                      //!< luma component frame width
+  PIXEL_COORD mb_height;                     //!< luma component frame height    
   int         size_cmp[3];                   //!< component sizes (width * height)
   int         size;                          //!< total image size (sum of size_cmp)
   int8_t      bit_depth[3];                  //!< component bit depth  
@@ -1472,7 +1472,7 @@ typedef struct video_par {
 
   struct storable_picture *pending_output;
   int    pending_output_state;
-  int    recovery_flag;
+  bool   recovery_flag;
 
   int32_t BitStreamFile;
 
@@ -1517,7 +1517,7 @@ typedef struct video_par {
 #endif
   pic_parameter_set_rbsp_t *pNextPPS;
   PocType last_dec_poc;
-  int last_dec_view_id;
+  int8_t last_dec_view_id;
   uint8_t last_dec_layer_id;
   uint8_t dpb_layer_id;
 
@@ -1614,7 +1614,7 @@ typedef struct nalu_t {
   int       startcodeprefix_len;   //!< 4 for parameter sets and first slice in picture, 3 for everything else (suggested)
   unsigned  len;                   //!< Length of the NAL unit (Excluding the start code, which does not belong to the NALU)
   unsigned  max_size;              //!< NAL Unit Buffer size
-  int       forbidden_bit;         //!< should be always FALSE
+  int8_t    forbidden_bit;         //!< should be always FALSE
   NaluType  nal_unit_type;         //!< NALU_TYPE_xxxx
   NalRefIdc nal_reference_idc;     //!< NALU_PRIORITY_xxxx  
   uint8_t   *buf;                   //!< contains the first uint8_t followed by the EBSP
@@ -1623,13 +1623,13 @@ typedef struct nalu_t {
   int8_t    svc_extension_flag;    //!< should be always 0, for MVC
   bool      non_idr_flag;          //!< 0 = current is IDR
   int       priority_id;           //!< a lower value of priority_id specifies a higher priority
-  int       view_id;               //!< view identifier for the NAL unit
+  int8_t    view_id;               //!< view identifier for the NAL unit
   bool      anchor_pic_flag;       //!< anchor access unit
   bool      inter_view_flag;       //!< inter-view prediction enable
   int8_t    reserved_one_bit;      //!< shall be equal to 1
 #endif
   uint32_t  temporal_id;           //!< temporal identifier for the NAL unit  MI SERVE anche in profile base!
-} NALU_t;
+	} NALU_t;
 
 //! allocate one NAL Unit
 extern NALU_t *AllocNALU(int);
@@ -2244,7 +2244,7 @@ typedef struct storable_picture {
 
   int         proc_flag;
 #if MVC_EXTENSION_ENABLE
-  int         view_id;
+  int8_t      view_id;
   bool        inter_view_flag;
   bool        anchor_pic_flag;
 #endif
@@ -2299,7 +2299,7 @@ typedef struct frame_store {
   StorablePicture *bottom_field;
 
 #if MVC_EXTENSION_ENABLE
-  int       view_id;
+  int8_t   view_id;
   bool      inter_view_flag[2];
   bool      anchor_pic_flag[2];
 #endif
@@ -2320,7 +2320,7 @@ typedef struct decoded_picture_buffer {
   unsigned      ltref_frames_in_buffer;
   PocType       last_output_poc;
 #if MVC_EXTENSION_ENABLE
-  int           last_output_view_id;
+  int8_t       last_output_view_id;
 #endif
   int           max_long_term_pic_idx;  
 
@@ -2333,7 +2333,7 @@ typedef struct decoded_picture_buffer {
 
   //DPB related function;
 
-} DecodedPictureBuffer;
+	} DecodedPictureBuffer;
 
 extern void init_lists_for_non_reference_loss(DecodedPictureBuffer *p_Dpb, SliceType, PictureStructure);
 
@@ -2425,8 +2425,8 @@ struct pic_motion_params;
  ***********************************************************************
  */
 typedef enum {
-   DEC_OPENED = 0,
-   DEC_STOPPED,
+  DEC_OPENED = 0,
+  DEC_STOPPED,
 	} DecoderStatus_e;
 
 typedef enum {
@@ -2495,7 +2495,7 @@ typedef struct old_slice_par {
   int      idr_pic_id;
   int      pps_id;
 #if MVC_EXTENSION_ENABLE
-  int      view_id;
+  int8_t  view_id;
   bool     inter_view_flag;
   bool     anchor_pic_flag;
 #endif
@@ -2518,21 +2518,21 @@ extern DecoderParams  *p_Dec;
 extern void error(const char *text, int code);
 
 // dynamic mem allocation
-extern int  init_global_buffers( VideoParameters *p_Vid, uint8_t layer_id);
-extern void free_global_buffers( VideoParameters *p_Vid);
-extern void free_layer_buffers( VideoParameters *p_Vid, uint8_t layer_id);
+extern int  init_global_buffers(VideoParameters *p_Vid, uint8_t layer_id);
+extern void free_global_buffers(VideoParameters *p_Vid);
+extern void free_layer_buffers(VideoParameters *p_Vid, uint8_t layer_id);
 
 extern int RBSPtoSODB(uint8_t *streamBuffer, int last_byte_pos);
 extern int EBSPtoRBSP(uint8_t *streamBuffer, int end_bytepos, int begin_bytepos);
 
-extern void FreePartition (DataPartition *dp, int n);
-extern DataPartition *AllocPartition(int n);
+extern void FreePartition(DataPartition *dp, uint8_t n);
+extern DataPartition *AllocPartition(uint8_t n);
 
 extern void tracebits (const char *trace_str, int len, int info, int value1);
 extern void tracebits2(const char *trace_str, int len, int info);
 
-extern unsigned CeilLog2   ( unsigned uiVal);
-extern unsigned CeilLog2_sf( unsigned uiVal);
+extern unsigned CeilLog2   (unsigned uiVal);
+extern unsigned CeilLog2_sf(unsigned uiVal);
 
 // For 4:4:4 independent mode
 extern void change_plane_JV      ( VideoParameters *p_Vid, int nplane, Slice *pSlice);
@@ -2544,7 +2544,7 @@ extern void nal_unit_header_mvc_extension(NALUnitHeaderMVCExt_t *NaluHeaderMVCEx
 
 extern void FreeDecPicList (DecodedPicList *pDecPicList);
 extern void ClearDecPicList(VideoParameters *p_Vid);
-extern DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, uint8_t view_id);
+extern DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, int8_t view_id);
 extern Slice *malloc_slice( InputParameters *p_Inp, VideoParameters *p_Vid);
 extern void copy_slice_info ( Slice *currSlice, OldSliceParams *p_old_slice);
 extern void OpenOutputFiles(VideoParameters *p_Vid, int view0_id, int view1_id);
@@ -2560,15 +2560,15 @@ static inline int is_HI_intra_only_profile(ProfileIDC profile_idc, bool constrai
 		(profile_idc == FREXT_CAVLC444));
 	}
 static inline int is_BL_profile(ProfileIDC profile_idc) {
-  return ( profile_idc == FREXT_CAVLC444 || profile_idc == BASELINE || profile_idc == MAIN || profile_idc == EXTENDED ||
-           profile_idc == FREXT_HP || profile_idc == FREXT_Hi10P || profile_idc == FREXT_Hi422 || profile_idc == FREXT_Hi444);
+  return (profile_idc == FREXT_CAVLC444 || profile_idc == BASELINE || profile_idc == MAIN || profile_idc == EXTENDED ||
+          profile_idc == FREXT_HP || profile_idc == FREXT_Hi10P || profile_idc == FREXT_Hi422 || profile_idc == FREXT_Hi444);
 	}
 static inline int is_EL_profile(ProfileIDC profile_idc) {
-  return ( (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH));
+  return ((profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH));
 	}
 
 static inline int is_MVC_profile(ProfileIDC profile_idc){
-  return ( (0)
+  return ((0)
 #if MVC_EXTENSION_ENABLE
 		|| (profile_idc == MVC_HIGH) || (profile_idc == STEREO_HIGH)
 #endif
@@ -2646,7 +2646,7 @@ extern void field_postprocessing(VideoParameters *p_Vid);
 #if MVC_EXTENSION_ENABLE
 extern int GetViewIdx(VideoParameters *p_Vid, int iVOIdx);
 extern int GetVOIdx(VideoParameters *p_Vid, int iViewId);
-extern int get_maxViewIdx(VideoParameters *p_Vid, int view_id, bool anchor_pic_flag, int listidx);
+extern int get_maxViewIdx(VideoParameters *p_Vid, int8_t view_id, bool anchor_pic_flag, int listidx);
 #endif
 
 extern void init_slice(VideoParameters *p_Vid, Slice *currSlice);
@@ -2747,30 +2747,30 @@ extern int              GetMaxDecFrameBuffering(VideoParameters *p_Vid);
 extern void             append_interview_list(DecodedPictureBuffer *p_Dpb, 
                                               PictureStructure currPicStructure, int list_idx, 
                                               FrameStore **list, int *listXsize, PocType currPOC, 
-                                              int curr_view_id, bool anchor_pic_flag);
+                                              int8_t curr_view_id, bool anchor_pic_flag);
 #endif
 
 extern void unmark_for_reference(FrameStore* fs);
 extern void unmark_for_long_term_reference(FrameStore* fs);
 extern void remove_frame_from_dpb(DecodedPictureBuffer *p_Dpb, int pos);
 
-extern void  flush_dpb(DecodedPictureBuffer *p_Dpb);
-extern void  init_lists_p_slice (Slice *currSlice);
-extern void  init_lists_b_slice (Slice *currSlice);
-extern void  init_lists_i_slice (Slice *currSlice);
-extern void  update_pic_num     (Slice *currSlice);
+extern void flush_dpb(DecodedPictureBuffer *p_Dpb);
+extern void init_lists_p_slice (Slice *currSlice);
+extern void init_lists_b_slice (Slice *currSlice);
+extern void init_lists_i_slice (Slice *currSlice);
+extern void update_pic_num     (Slice *currSlice);
 
-extern void  dpb_split_field      (VideoParameters *p_Vid, FrameStore *fs);
-extern void  dpb_combine_field    (VideoParameters *p_Vid, FrameStore *fs);
-extern void  dpb_combine_field_yuv(VideoParameters *p_Vid, FrameStore *fs);
+extern void dpb_split_field      (VideoParameters *p_Vid, FrameStore *fs);
+extern void dpb_combine_field    (VideoParameters *p_Vid, FrameStore *fs);
+extern void dpb_combine_field_yuv(VideoParameters *p_Vid, FrameStore *fs);
 
-extern void  reorder_ref_pic_list(Slice *currSlice, int cur_list);
+extern void reorder_ref_pic_list(Slice *currSlice, int cur_list);
 
-extern void  init_mbaff_lists     (VideoParameters *p_Vid, Slice *currSlice);
-extern void  alloc_ref_pic_list_reordering_buffer(Slice *currSlice);
-extern void  free_ref_pic_list_reordering_buffer(Slice *currSlice);
+extern void init_mbaff_lists     (VideoParameters *p_Vid, Slice *currSlice);
+extern void alloc_ref_pic_list_reordering_buffer(Slice *currSlice);
+extern void free_ref_pic_list_reordering_buffer(Slice *currSlice);
 
-extern void  fill_frame_num_gap(VideoParameters *p_Vid, Slice *pSlice);
+extern void fill_frame_num_gap(VideoParameters *p_Vid, Slice *pSlice);
 
 extern void compute_colocated (Slice *currSlice, StorablePicture **listX[6]);
 
@@ -2792,7 +2792,7 @@ extern void init_lists_b_slice_mvc(Slice *currSlice);
 extern void init_lists_i_slice_mvc(Slice *currSlice);
 
 extern void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, int **non_anchor_ref,
-                                                 int view_id, bool anchor_pic_flag, PocType currPOC, int listidx);
+                                     int8_t view_id, bool anchor_pic_flag, PocType currPOC, int listidx);
 
 extern void reorder_short_term(Slice *currSlice, int cur_list, int16_t num_ref_idx_lX_active_minus1, int picNumLX, 
 															 int *refIdxLX, int currViewID);
@@ -2963,7 +2963,7 @@ typedef enum {
   SEI_GREEN_METADATA=56,
 
   SEI_MAX_ELEMENTS  //!< number of maximum syntax elements
-} SEI_type;
+	} SEI_type;
 
 #define MAX_FN 256
 // tone mapping information

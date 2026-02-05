@@ -6,6 +6,9 @@
 
 // questa cosa puzza: (bool)currSE.value1 in vari posti...
 
+// non si capisce dove siano i leak, alcuni grossi e alcuni piccoli: uso il trucco dell'Heap... (che poi gli indirizzi manco corrispondono
+// https://stackoverflow.com/questions/127386/what-are-the-debug-memory-fill-patterns-in-visual-studio-c-and-windows/353606#353606
+
 
 #include "stdafx.h"
 #include "vidsend.h"
@@ -27,10 +30,10 @@
 void no_mem_exit(char *);
 
 // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/malloc-dbg?view=msvc-170
-#if 0
-#define H264CALLOC(a,b) HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS | HEAP_ZERO_MEMORY,(a)*(b)) //calloc(a,b)
-#define H264MALLOC(a) HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,a)		//malloc(a)
-#define H264FREE(a) HeapFree(GetProcessHeap(),0,a)		//free(a)
+#if 1
+#define H264CALLOC(a,b) HeapAlloc(CTV::hHeap /*GetProcessHeap()*/,/*HEAP_GENERATE_EXCEPTIONS | */ HEAP_ZERO_MEMORY,(a)*(b)) //calloc(a,b)
+#define H264MALLOC(a) HeapAlloc(CTV::hHeap /*GetProcessHeap()*/,/*HEAP_GENERATE_EXCEPTIONS*/ 0,a)		//malloc(a)
+#define H264FREE(a) HeapFree(CTV::hHeap /*GetProcessHeap()*/,0,a)		//free(a)
 //SSE_MEMORY_ALIGNMENT
 static inline void* sse_malloc(size_t nitems) {
   void *d;
@@ -64,10 +67,15 @@ int INSERT_MEMORY(void *n,uint16_t l) {
 	}
 //#define H264CALLOC(nitems,size) _calloc_dbg(nitems,size, _NORMAL_BLOCK, __FILE__, __LINE__)
 //#define H264CALLOC(nitems,size) (THE_MEM_PTR=calloc(nitems,size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: calloc(%u,%u): %08X",(uint16_t)__LINE__,nitems,size,THE_MEM_PTR),THE_MEM_PTR)
-#define H264CALLOC(nitems,size) (THE_MEM_PTR=calloc(nitems,size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)
+//#define H264CALLOC(nitems,size) (THE_MEM_PTR=calloc(nitems,size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)
+#define H264CALLOC(nitems,size) (THE_MEM_PTR=HeapAlloc(CTV::hHeap,0,(nitems)*(size)),INSERT_MEMORY(THE_MEM_PTR,__LINE__),\
+	memset(THE_MEM_PTR,0,nitems*size),\
+	theApp.FileSpool->print(CLogFile::flagInfo,"line %u: calloc(%u,%u): %08X",(uint16_t)__LINE__,nitems,size,THE_MEM_PTR),THE_MEM_PTR)
 //#define H264MALLOC(size) _malloc_dbg(size, _NORMAL_BLOCK, __FILE__, __LINE__)
 //#define H264MALLOC(size) (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: malloc(%u): %08X",(uint16_t)__LINE__,size,THE_MEM_PTR),THE_MEM_PTR)
-#define H264MALLOC(size) (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)
+//#define H264MALLOC(size) (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)
+#define H264MALLOC(size) (THE_MEM_PTR=HeapAlloc(CTV::hHeap,0,size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),\
+	theApp.FileSpool->print(CLogFile::flagInfo,"line %u: malloc(%u): %08X",(uint16_t)__LINE__,size,THE_MEM_PTR),THE_MEM_PTR)
 /*void *H264CALLOC(size_t nitems,size_t size) {
 	void *p=calloc(nitems,size);
   theApp.FileSpool->print(CLogFile::flagInfo,"line %u: alloc(%u,%u): %08X",__LINE__,number,size,p);
@@ -75,12 +83,16 @@ int INSERT_MEMORY(void *n,uint16_t l) {
 	}*/
 //#define H264FREE(p) _free_dbg(p,_NORMAL_BLOCK)
 //#define H264FREE(p) {	free(p); MEMORY_LIST.RemoveKey((void*)(p)); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: free: %08X",(uint16_t)__LINE__,p);	}
-#define H264FREE(p) {	free(p); MEMORY_LIST.RemoveKey((void*)(p)); }
+//#define H264FREE(p) {	free(p); MEMORY_LIST.RemoveKey((void*)(p)); }
+#define H264FREE(p) {	HeapFree(CTV::hHeap,0,p); MEMORY_LIST.RemoveKey((void*)(p)); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: free: %08X",(uint16_t)__LINE__,p); }
 //#define sse_malloc(size) (\
 // (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: sse_malloc(%u): %08X",(uint16_t)__LINE__,size,THE_MEM_PTR),THE_MEM_PTR)\
 //	)
+//#define sse_malloc(size) (\
+//  (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)\
+//	)
 #define sse_malloc(size) (\
-  (THE_MEM_PTR=malloc(size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),THE_MEM_PTR)\
+  (THE_MEM_PTR=HeapAlloc(CTV::hHeap,0,size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: sse_malloc(%u): %08X",(uint16_t)__LINE__,size,THE_MEM_PTR),THE_MEM_PTR)\
 	)
 /*!
  ************************************************************************
@@ -89,11 +101,20 @@ int INSERT_MEMORY(void *n,uint16_t l) {
  *  SSE_MEMORY_ALIGNMENT
  ************************************************************************/
 //#define sse_calloc(nitems,size) (THE_MEM_PTR=malloc(nitems*size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),memset(THE_MEM_PTR,0,nitems*size),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: calloc(%u,%u): %08X",(uint16_t)__LINE__,nitems,size,THE_MEM_PTR),THE_MEM_PTR)
-#define sse_calloc(nitems,size) (THE_MEM_PTR=malloc(nitems*size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),memset(THE_MEM_PTR,0,nitems*size),THE_MEM_PTR)
+//#define sse_calloc(nitems,size) (THE_MEM_PTR=malloc(nitems*size),INSERT_MEMORY(THE_MEM_PTR,__LINE__),memset(THE_MEM_PTR,0,nitems*size),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: calloc(%u,%u): %08X",(uint16_t)__LINE__,nitems,size,THE_MEM_PTR),THE_MEM_PTR)
+#define sse_calloc(nitems,size) (THE_MEM_PTR=HeapAlloc(CTV::hHeap,0,(nitems*size)),INSERT_MEMORY(THE_MEM_PTR,__LINE__),memset(THE_MEM_PTR,0,nitems*size),theApp.FileSpool->print(CLogFile::flagInfo,"line %u: sse_calloc: %08X",(uint16_t)__LINE__,THE_MEM_PTR),THE_MEM_PTR)
 //#define free_pointer(p) { free(p); MEMORY_LIST.RemoveKey((void*)(p)); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: freepointer: %08X",(uint16_t)__LINE__,p);	}
-#define free_pointer(p) { free(p); MEMORY_LIST.RemoveKey((void*)(p)); }
+//#define free_pointer(p) { free(p); MEMORY_LIST.RemoveKey((void*)(p)); }
+#define free_pointer(p) { HeapFree(CTV::hHeap,0,p); MEMORY_LIST.RemoveKey((void*)(p)); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: free: %08X",(uint16_t)__LINE__,p); }
 //#define sse_free(p) { free(p); MEMORY_LIST.RemoveKey((void*)((p))); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: sse_free: %08X",(uint16_t)__LINE__,p); }
-#define sse_free(p) { free(p); MEMORY_LIST.RemoveKey((void*)((p))); }
+//#define sse_free(p) { free(p); MEMORY_LIST.RemoveKey((void*)((p))); }
+#define sse_free(p) { HeapFree(CTV::hHeap,0,p); MEMORY_LIST.RemoveKey((void*)((p))); theApp.FileSpool->print(CLogFile::flagInfo,"line %u: free: %08X",(uint16_t)__LINE__,p); }
+/*!
+ ************************************************************************
+*\brief
+*   allocate and set memory aligned at SSE_MEMORY_ALIGNMENT
+ *  SSE_MEMORY_ALIGNMENT
+ ************************************************************************/
 #endif
 
 
@@ -324,7 +345,7 @@ static inline int compare_mvs(const MotionVector *mv0, const MotionVector *mv1, 
 
 
 
-extern void DeblockPicture(VideoParameters *p_Vid, StorablePicture *p) ;
+extern void DeblockPicture(VideoParameters *p_Vid, StorablePicture *p);
 void  init_Deblock(VideoParameters *p_Vid, bool mb_aff_frame_flag);
 
 
@@ -1557,19 +1578,22 @@ extern void ihadamard2x2(int block[4], int tblock[4]);
 *   Inverse 4x4 transformation, transforms cof to mb_rres
  ***********************************************************************
  */
-extern void compute_residue   (imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, PIXEL_COORD width, PIXEL_COORD height);
-extern void sample_reconstruct(imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, PIXEL_COORD width, PIXEL_COORD height, imgpel max_imgpel_value, uint8_t dq_bits);
+extern void compute_residue   (imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, 
+															 PIXEL_COORD width, PIXEL_COORD height);
+extern void sample_reconstruct(imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x,
+															 PIXEL_COORD width, PIXEL_COORD height, imgpel max_imgpel_value, uint8_t dq_bits);
 void itrans4x4(Macroblock *currMB,   //!< current macroblock
                ColorPlane pl,        //!< used color plane
                PIXEL_COORD ioff,             //!< index to 4x4 block
                PIXEL_COORD joff)             //!< index to 4x4 block
 {
   Slice *currSlice=currMB->p_Slice;
-  int    **mb_rres=currSlice->mb_rres[pl];
+  int   **mb_rres=currSlice->mb_rres[pl];
 
   inverse4x4(currSlice->cof[pl],mb_rres,joff,ioff);
 
-  sample_reconstruct(&currSlice->mb_rec[pl][joff], &currSlice->mb_pred[pl][joff], &mb_rres[joff], ioff, ioff, BLOCK_SIZE, BLOCK_SIZE, currMB->p_Vid->max_pel_value_comp[pl], DQ_BITS);
+  sample_reconstruct(&currSlice->mb_rec[pl][joff], &currSlice->mb_pred[pl][joff], &mb_rres[joff], ioff, ioff, BLOCK_SIZE, BLOCK_SIZE, 
+		currMB->p_Vid->max_pel_value_comp[pl], DQ_BITS);
 	}
 
 /*!
@@ -2141,7 +2165,7 @@ void itrans_sp(Macroblock *currMB,   //!< current macroblock
       for(i=0; i<BLOCK_SIZE; i++) {
         // recovering coefficient since they are already dequantized earlier
         icof =(cof[joff+j][ioff+i] >> qp_per) / InvLevelScale4x4[j][i];
-        //icof =((cof[joff+j][ioff+i]*quant_coef[qp_rem][j][i])>>(qp_per+15)) ;
+        //icof =((cof[joff+j][ioff+i]*quant_coef[qp_rem][j][i])>>(qp_per+15));
         // icof =rshift_rnd_sf(cof[joff+j][ioff+i]*quant_coef[qp_rem][j][i], qp_per+15);
         ilev =rshift_rnd_sf(iabs(PBlock[j][i])*quant_coef[qp_rem_sp][j][i], q_bits_sp);
         ilev =isignab(ilev, PBlock[j][i])+icof;
@@ -2917,11 +2941,11 @@ void read_mvd_CABAC_mbaff(Macroblock *currMB, SyntaxElement *se,
   int act_ctx;
   int act_sym;  
   int list_idx=se->value2 & 0x01;
-  int k =(se->value2 >> 1); // MVD component
+  int k = se->value2 >> 1; // MVD component
 
   PixelPos block_a, block_b;
 
-  get4x4NeighbourBase(currMB, i-1, j    , p_Vid->mb_size[IS_LUMA], &block_a);
+  get4x4NeighbourBase(currMB, i-1, j, p_Vid->mb_size[IS_LUMA], &block_a);
   if(block_a.available) {
     a=iabs(currSlice->mb_data[block_a.mb_addr].mvd[list_idx][block_a.y][block_a.x][k]);
     if(currSlice->mb_aff_frame_flag && (k==1)) {
@@ -8424,6 +8448,7 @@ void conceal_lost_frames(DecodedPictureBuffer *p_Dpb, Slice *pSlice) {
 
   while(CurrFrameNum != UnusedShortTermFrameNum) {
     picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,picture);
 
     picture->coded_frame=TRUE;
     picture->pic_num=UnusedShortTermFrameNum;
@@ -8775,7 +8800,7 @@ void delete_list(VideoParameters *p_Vid, struct concealment_node *ptr) {
 */
 void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff) {
   VideoParameters *p_Vid=p_Dpb->p_Vid;
-  int missingpoc=0;
+  PocType missingpoc=0;
   unsigned int i, pos=0;
   StorablePicture *conceal_from_picture=NULL;
   StorablePicture *conceal_to_picture=NULL;
@@ -8792,6 +8817,7 @@ void conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff) {
     if((p_Vid->pocs_in_dpb[i+1]-p_Vid->pocs_in_dpb[i]) > p_Vid->poc_gap) {
       conceal_to_picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, 
 				p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,conceal_to_picture);
 
       missingpoc=p_Vid->pocs_in_dpb[i]+p_Vid->poc_gap;
       // Diagnostics
@@ -8889,6 +8915,7 @@ void write_lost_ref_after_idr(DecodedPictureBuffer *p_Dpb, int pos) {
   if(!p_Vid->last_out_fs->frame) {
     p_Vid->last_out_fs->frame=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height,
       p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,p_Vid->last_out_fs->frame);
     p_Vid->last_out_fs->is_used=3;
 		}
 
@@ -9326,7 +9353,6 @@ static int FmoGenerateMbToSliceGroupMap(VideoParameters *p_Vid, Slice *pSlice) {
   // allocate memory for p_Vid->MbToSliceGroupMap
   if(p_Vid->MbToSliceGroupMap)
     H264FREE(p_Vid->MbToSliceGroupMap);
-
   if(!(p_Vid->MbToSliceGroupMap =(int*)H264MALLOC((p_Vid->PicSizeInMbs)*sizeof(int)))) {
     theApp.FileSpool->print(CLogFile::flagError,"cannot allocate %d bytes for p_Vid->MbToSliceGroupMap, exit",((p_Vid->PicSizeInMbs)*sizeof(PIXEL_COORD)));
 //    exit(-1);
@@ -10012,7 +10038,6 @@ static void ref_pic_list_reordering(Slice *currSlice) {
 
   if(currSlice->slice_type != I_SLICE && currSlice->slice_type != SI_SLICE) {
     val=currSlice->ref_pic_list_reordering_flag[LIST_0]=read_u_1("SH: ref_pic_list_reordering_flag_l0", currStream, &p_Dec->UsedBits);
-
     if(val) {
       i=0;
       do {
@@ -10236,7 +10261,7 @@ void dec_ref_pic_marking(VideoParameters *p_Vid, Bitstream *currStream, Slice *p
 
     pSlice->dec_ref_pic_marking_buffer=tmp_drpm->Next;
     H264FREE(tmp_drpm);
-  }
+		}
 
 #if MVC_EXTENSION_ENABLE
   if(pSlice->idr_flag || (!pSlice->svc_extension_flag && pSlice->NaluHeaderMVCExt.non_idr_flag))
@@ -10663,7 +10688,7 @@ static void init_picture(VideoParameters *p_Vid, Slice *currSlice, InputParamete
       else    /* Advanced Error Concealment would be called here to combat unintentional loss of pictures. */
         error("An unintentional loss of pictures occurs! Exit", 100);
 			}
-    if(p_Vid->conceal_mode == 0)
+    if(p_Vid->conceal_mode == 0)// GD 4/2/26  non cambia nulla
       fill_frame_num_gap(p_Vid, currSlice);
 		}
 
@@ -10687,7 +10712,8 @@ static void init_picture(VideoParameters *p_Vid, Slice *currSlice, InputParamete
     gettime(&p_Vid->start_time);             // start time
 
   dec_picture=p_Vid->dec_picture=alloc_storable_picture(p_Vid, currSlice->structure, p_Vid->width, p_Vid->height, 
-		p_Vid->width_cr, p_Vid->height_cr, 1);
+		p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,dec_picture);
   dec_picture->top_poc=currSlice->toppoc;
   dec_picture->bottom_poc=currSlice->bottompoc;
   dec_picture->frame_poc=currSlice->framepoc;
@@ -10837,10 +10863,12 @@ static void init_picture(VideoParameters *p_Vid, Slice *currSlice, InputParamete
   if((p_Vid->separate_colour_plane_flag)) {
     p_Vid->dec_picture_JV[0]=p_Vid->dec_picture;
     p_Vid->dec_picture_JV[1]=alloc_storable_picture(p_Vid,(PictureStructure) currSlice->structure, p_Vid->width, p_Vid->height, 
-			p_Vid->width_cr, p_Vid->height_cr, 1);
+			p_Vid->width_cr, p_Vid->height_cr,TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,p_Vid->dec_picture_JV[1]);
     copy_dec_picture_JV(p_Vid, p_Vid->dec_picture_JV[1], p_Vid->dec_picture_JV[0]);
     p_Vid->dec_picture_JV[2]=alloc_storable_picture(p_Vid,(PictureStructure) currSlice->structure, p_Vid->width, p_Vid->height, 
-			p_Vid->width_cr, p_Vid->height_cr, 1);
+			p_Vid->width_cr, p_Vid->height_cr,TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,p_Vid->dec_picture_JV[2]);
     copy_dec_picture_JV(p_Vid, p_Vid->dec_picture_JV[2], p_Vid->dec_picture_JV[0]);
 		}
 	}
@@ -10869,7 +10897,8 @@ static void MbAffPostProc(VideoParameters *p_Vid) {
   imgpel ** imgY =dec_picture->imgY;
   imgpel ***imgUV=dec_picture->imgUV;
 
-  int16_t i, x0, y0;
+  int32_t i;
+	BLOCK_COORD x0, y0;
 
   for(i=0; i<dec_picture->PicSizeInMbs; i+=2) {
     if(dec_picture->motion.mb_field[i]) {
@@ -10877,8 +10906,8 @@ static void MbAffPostProc(VideoParameters *p_Vid) {
       update_mbaff_macroblock_data(imgY+y0, temp_buffer, x0, MB_BLOCK_SIZE, MB_BLOCK_SIZE);
 
       if(dec_picture->chroma_format_idc != YUV400) {
-        x0 =(int16_t)((x0*p_Vid->mb_cr_size_x) >> 4);
-        y0 =(int16_t)((y0*p_Vid->mb_cr_size_y) >> 4);
+        x0 =(BLOCK_COORD)((x0*p_Vid->mb_cr_size_x) >> 4);
+        y0 =(BLOCK_COORD)((y0*p_Vid->mb_cr_size_y) >> 4);
 
         update_mbaff_macroblock_data(imgUV[0]+y0, temp_buffer, x0, p_Vid->mb_cr_size_x, p_Vid->mb_cr_size_y);
         update_mbaff_macroblock_data(imgUV[1]+y0, temp_buffer, x0, p_Vid->mb_cr_size_x, p_Vid->mb_cr_size_y);
@@ -10966,8 +10995,8 @@ static void fill_wp_params(Slice *currSlice) {
               else if(currSlice->active_pps->weighted_bipred_idc == 2) {
                 td=iClip3(-128, 127, currSlice->listX[k+LIST_1][j]->poc-currSlice->listX[k+LIST_0][i]->poc);
                 if(td == 0 || currSlice->listX[k+LIST_1][j]->is_long_term || currSlice->listX[k+LIST_0][i]->is_long_term) {
-                  currSlice->wbp_weight[k+0][i][j][comp]=  32;
-                  currSlice->wbp_weight[k+1][i][j][comp]=  32;
+                  currSlice->wbp_weight[k+0][i][j][comp]= 32;
+                  currSlice->wbp_weight[k+1][i][j][comp]= 32;
 									}
                 else {
                   tb=iClip3(-128,127,(k==2 ? currSlice->toppoc : currSlice->bottompoc)-currSlice->listX[k+LIST_0][i]->poc);
@@ -11169,7 +11198,7 @@ int decode_one_frame(DecoderParams *pDecoder) {
   Slice *currSlice; //=p_Vid->currentSlice;
   Slice **ppSliceList=p_Vid->ppSliceList;
   int iSliceNo;
-  
+
   //read one picture first;
   p_Vid->iSliceNumOfCurrPic=0;
   current_header=(HEADER_TYPE)0;
@@ -11193,6 +11222,7 @@ int decode_one_frame(DecoderParams *pDecoder) {
 
     UseParameterSet(currSlice);
     init_picture(p_Vid, currSlice, p_Inp);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"init_picture %u ",(uint16_t)__LINE__);
     
     p_Vid->iSliceNumOfCurrPic++;
     current_header=SOS;
@@ -11240,7 +11270,7 @@ int decode_one_frame(DecoderParams *pDecoder) {
          if(!tmpSliceList) {
            tmpSliceList = (Slice**)H264CALLOC((p_Vid->iNumOfSlicesAllocated+MAX_NUM_DECSLICES),sizeof(Slice*));
            memcpy(tmpSliceList, p_Vid->ppSliceList, p_Vid->iSliceNumOfCurrPic*sizeof(Slice*));
-           //H264FREE;
+           //free;
            H264FREE(p_Vid->ppSliceList);
            ppSliceList=p_Vid->ppSliceList=tmpSliceList;
 					 }
@@ -11249,9 +11279,9 @@ int decode_one_frame(DecoderParams *pDecoder) {
            ppSliceList=p_Vid->ppSliceList=tmpSliceList;
            memset(p_Vid->ppSliceList+p_Vid->iSliceNumOfCurrPic, 0,sizeof(Slice*)*MAX_NUM_DECSLICES);
 				   }
-         p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
-				}
-       current_header=SOS;       
+					p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
+					}
+				current_header=SOS;       
 			}
     else {
 			if(p_Vid->iSliceNumOfCurrPic<1)
@@ -11273,6 +11303,7 @@ int decode_one_frame(DecoderParams *pDecoder) {
 
   iRet=current_header;
   init_picture_decoding(p_Vid);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"init_picture %u ",(uint16_t)__LINE__);
 
 	{
   for(iSliceNo=0; iSliceNo<p_Vid->iSliceNumOfCurrPic; iSliceNo++) {
@@ -11448,7 +11479,7 @@ void calculate_frame_no(VideoParameters *p_Vid, StorablePicture *p) {
 * \param p
 *      picture to be compared
 * \param p_ref
-*      file pointer piont to reference YUV reference file
+*      file pointer point to reference YUV reference file
 ************************************************************************
 */
 void find_snr(VideoParameters *p_Vid, StorablePicture *p, int *p_ref) {
@@ -11782,8 +11813,10 @@ process_nalu:
 					p_Vid->dec_picture->slice_type=p_Vid->type;
 
 				if(is_new_picture(p_Vid->dec_picture, currSlice, p_Vid->old_slice))				{
-					if(p_Vid->iSliceNumOfCurrPic==0)
+					if(p_Vid->iSliceNumOfCurrPic==0) {
 						init_picture(p_Vid, currSlice, p_Inp);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"init_picture %u ",(uint16_t)__LINE__);
+					}
 
 					current_header=SOP;
 					//check zero_byte if it is also the first NAL unit in the access unit
@@ -11854,8 +11887,10 @@ process_nalu:
 				assign_quant_params(currSlice);        
 
 				if(is_new_picture(p_Vid->dec_picture, currSlice, p_Vid->old_slice))				{
-					if(p_Vid->iSliceNumOfCurrPic==0)
+					if(p_Vid->iSliceNumOfCurrPic==0) {
 						init_picture(p_Vid, currSlice, p_Inp);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"init_picture %u ",(uint16_t)__LINE__);
+					}
 
 					current_header=SOP;
 					//check zero_byte if it is also the first NAL unit in the access unit
@@ -12071,8 +12106,8 @@ void pad_buf(imgpel *pImgBuf, BLOCK_COORD iWidth, BLOCK_COORD iHeight, BLOCK_COO
 	}
 
 void pad_dec_picture(VideoParameters *p_Vid, StorablePicture *dec_picture) {
-  int iPadX=p_Vid->iLumaPadX;
-  int iPadY=p_Vid->iLumaPadY;
+  PIXEL_COORD iPadX=p_Vid->iLumaPadX;
+  PIXEL_COORD iPadY=p_Vid->iLumaPadY;
   PIXEL_COORD iWidth=dec_picture->size_x;
   PIXEL_COORD iHeight=dec_picture->size_y;
   int iStride=dec_picture->iLumaStride;
@@ -12156,7 +12191,7 @@ void exit_picture(VideoParameters *p_Vid, StorablePicture **dec_picture) {
       ercMarkCurrSegmentOK((*dec_picture)->size_x, p_Vid->erc_errorVar);
 
     //! call the right error concealment function depending on the frame type.
-    p_Vid->erc_mvperMB /=(*dec_picture)->PicSizeInMbs;
+    p_Vid->erc_mvperMB /= (*dec_picture)->PicSizeInMbs;
     p_Vid->erc_img=p_Vid;
 
     if((*dec_picture)->slice_type == I_SLICE || (*dec_picture)->slice_type == SI_SLICE) // I-frame
@@ -12218,6 +12253,7 @@ void exit_picture(VideoParameters *p_Vid, StorablePicture **dec_picture) {
   store_picture_in_dpb(p_Vid->p_Dpb_layer[0], *dec_picture);
 #endif
 
+			//free_storable_picture(*dec_picture);
   *dec_picture=NULL;
 
   if(p_Vid->last_has_mmco_5)
@@ -12684,9 +12720,9 @@ void decode_one_slice(Slice *currSlice) {
 	}
 
 #if MVC_EXTENSION_ENABLE
-int GetVOIdx(VideoParameters *p_Vid, int iViewId) {
-  int iVOIdx=-1;
-  int *piViewIdMap;
+int8_t GetVOIdx(VideoParameters *p_Vid, int iViewId) {
+  int8_t iVOIdx=-1;
+  int8_t *piViewIdMap;
 
   if(p_Vid->active_subset_sps) {
     piViewIdMap=p_Vid->active_subset_sps->view_id;
@@ -12722,9 +12758,9 @@ int GetVOIdx(VideoParameters *p_Vid, int iViewId) {
   return iVOIdx;
 	}
 
-int GetViewIdx(VideoParameters *p_Vid, int iVOIdx) {
+int8_t GetViewIdx(VideoParameters *p_Vid, int8_t iVOIdx) {
   int iViewIdx=-1;
-  int *piViewIdMap;
+  int8_t *piViewIdMap;
 
   if(p_Vid->active_subset_sps) {
     assert(p_Vid->active_subset_sps->num_views_minus1 >= iVOIdx && iVOIdx >= 0);
@@ -12735,16 +12771,16 @@ int GetViewIdx(VideoParameters *p_Vid, int iVOIdx) {
   return iViewIdx;
 	}
 
-int get_maxViewIdx(VideoParameters *p_Vid, int view_id, bool anchor_pic_flag, int listidx) {
-  int VOIdx;
+int get_maxViewIdx(VideoParameters *p_Vid, int8_t view_id, bool anchor_pic_flag, int listidx) {
+  int8_t VOIdx;
   int maxViewIdx=0;
 
   VOIdx=view_id; 
   if(VOIdx >= 0) {
     if(anchor_pic_flag)
-      maxViewIdx=listidx? p_Vid->active_subset_sps->num_anchor_refs_l1[VOIdx] : p_Vid->active_subset_sps->num_anchor_refs_l0[VOIdx];
+      maxViewIdx=listidx ? p_Vid->active_subset_sps->num_anchor_refs_l1[VOIdx] : p_Vid->active_subset_sps->num_anchor_refs_l0[VOIdx];
     else
-      maxViewIdx=listidx? p_Vid->active_subset_sps->num_non_anchor_refs_l1[VOIdx] : p_Vid->active_subset_sps->num_non_anchor_refs_l0[VOIdx];
+      maxViewIdx=listidx ? p_Vid->active_subset_sps->num_non_anchor_refs_l1[VOIdx] : p_Vid->active_subset_sps->num_non_anchor_refs_l0[VOIdx];
 		}
 
   return maxViewIdx;
@@ -12832,7 +12868,7 @@ static void intrapred_chroma_dc(Macroblock *currMB) {
 		}
   else {
     up_avail=up.available ? currSlice->intra_block[up.mb_addr] : 0;
-    left_avail=left.available ? currSlice->intra_block[left.mb_addr]: 0;
+    left_avail=left.available ? currSlice->intra_block[left.mb_addr] : 0;
 		}
 
   // DC prediction
@@ -12898,7 +12934,7 @@ static void intrapred_chroma_hor(Macroblock *currMB) {
   if(!p_Vid->active_pps->constrained_intra_pred_flag)
     left_avail=a.available;
   else
-    left_avail=a.available ? currMB->p_Slice->intra_block[a.mb_addr]: 0;
+    left_avail=a.available ? currMB->p_Slice->intra_block[a.mb_addr] : 0;
   // Horizontal Prediction
   if(!left_avail)
     error("unexpected HOR_PRED_8 chroma intra prediction mode",-1);
@@ -12989,8 +13025,8 @@ static void intrapred_chroma_plane(Macroblock *currMB) {
 		}
   else {
     up_avail     =up.available ? currSlice->intra_block[up.mb_addr] : 0;
-    left_avail   =left.available ? currSlice->intra_block[left.mb_addr]: 0;
-    left_up_avail=up_left.available ? currSlice->intra_block[up_left.mb_addr]: 0;
+    left_avail   =left.available ? currSlice->intra_block[left.mb_addr] : 0;
+    left_up_avail=up_left.available ? currSlice->intra_block[up_left.mb_addr] : 0;
 	  }
   // plane prediction
   if(!left_up_avail || !left_avail || !up_avail)
@@ -13263,11 +13299,10 @@ void intra_pred_chroma_mbaff(Macroblock *currMB) {
       if(!p_Vid->active_pps->constrained_intra_pred_flag)
         left_avail[0]=left_avail[1]=left[1].available;
       else {
-        for(i=0, left_avail[0]=1; i<cr_MB_y2;i++)
-          left_avail[0]  &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr]: 0;
-
-        for(i=cr_MB_y2, left_avail[1]=1; i<cr_MB_y;i++)
-          left_avail[1]  &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr]: 0;
+        for(i=0, left_avail[0]=1; i<cr_MB_y2; i++)
+          left_avail[0] &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr] : 0;
+        for(i=cr_MB_y2, left_avail[1]=1; i<cr_MB_y; i++)
+          left_avail[1] &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr] : 0;
 				}
       // Horizontal Prediction
       if(!left_avail[0] || !left_avail[1])
@@ -13327,8 +13362,8 @@ void intra_pred_chroma_mbaff(Macroblock *currMB) {
 
       BLOCK_COORD cr_MB_x=p_Vid->mb_cr_size_x;
       BLOCK_COORD cr_MB_y=p_Vid->mb_cr_size_y;
-      int cr_MB_y2 =(cr_MB_y >> 1);
-      int cr_MB_x2 =(cr_MB_x >> 1);
+      int cr_MB_y2 = cr_MB_y >> 1;
+      int cr_MB_x2 = cr_MB_x >> 1;
 
       for(i=0; i<cr_MB_y+1; i++)
         getAffNeighbour(currMB, -1, i-1, p_Vid->mb_size[IS_CHROMA], &left[i]);
@@ -13343,10 +13378,8 @@ void intra_pred_chroma_mbaff(Macroblock *currMB) {
         up_avail=up.available ? currSlice->intra_block[up.mb_addr] : FALSE;
         for(i=0, left_avail[0]=1; i<cr_MB_y2;i++)
           left_avail[0]  &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr] : FALSE;
-
         for(i=cr_MB_y2, left_avail[1]=1; i<cr_MB_y;i++)
           left_avail[1]  &= left[i+1].available ? currSlice->intra_block[left[i+1].mb_addr] : FALSE;
-
         left_up_avail=left[0].available ? currSlice->intra_block[left[0].mb_addr] : FALSE;
 				}
       // plane prediction
@@ -13492,10 +13525,10 @@ static int intra4x4_dc_pred(Macroblock *currMB, ColorPlane pl,PIXEL_COORD ioff,P
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     BLOCK_COORD pos_x=pix_a.pos_x;
-    s0 += *(*(img_pred ++)+pos_x);
-    s0 += *(*(img_pred ++)+pos_x);
-    s0 += *(*(img_pred ++)+pos_x);
-    s0 += *(*(img_pred  )+pos_x);
+    s0 += *(*img_pred++ +pos_x);
+    s0 += *(*img_pred++ +pos_x);
+    s0 += *(*img_pred++ +pos_x);
+    s0 += *(*img_pred+pos_x);
 		}
 
   if(block_available_up && block_available_left)     // no edge
@@ -13605,10 +13638,10 @@ static int intra4x4_hor_pred(Macroblock *currMB, ColorPlane pl,
     imgpel **img_pred= &imgY[pix_a.pos_y];    
     BLOCK_COORD pos_x=pix_a.pos_x;
 
-    memset((*(mb_pred++)+ioff), *(*(img_pred++)+pos_x), BLOCK_SIZE*sizeof(imgpel));
-    memset((*(mb_pred++)+ioff), *(*(img_pred++)+pos_x), BLOCK_SIZE*sizeof(imgpel));
-    memset((*(mb_pred++)+ioff), *(*(img_pred++)+pos_x), BLOCK_SIZE*sizeof(imgpel));
-    memset((*(mb_pred )+ioff), *(*(img_pred )+pos_x), BLOCK_SIZE*sizeof(imgpel));
+    memset((*mb_pred++ +ioff), *(*img_pred++ +pos_x), BLOCK_SIZE*sizeof(imgpel));
+    memset((*mb_pred++ +ioff), *(*img_pred++ +pos_x), BLOCK_SIZE*sizeof(imgpel));
+    memset((*mb_pred++ +ioff), *(*img_pred++ +pos_x), BLOCK_SIZE*sizeof(imgpel));
+    memset((*mb_pred+ioff), *(*img_pred+pos_x), BLOCK_SIZE*sizeof(imgpel));
   }
 #else
  {
@@ -13623,7 +13656,7 @@ static int intra4x4_hor_pred(Macroblock *currMB, ColorPlane pl,
       predrow=mb_pred[j];
       prediction=imgY[pos_y++][pos_x];
       /* store predicted 4x4 block */
-      predrow[ioff    ]= prediction; 
+      predrow[ioff  ]= prediction; 
       predrow[ioff+1]= prediction; 
       predrow[ioff+2]= prediction; 
       predrow[ioff+3]= prediction; 
@@ -13721,10 +13754,10 @@ static int intra4x4_diag_down_right_pred(Macroblock *currMB,    //!< current mac
     // P_A through P_D
     memcpy(&PredPel[1], pred_pel, BLOCK_SIZE*sizeof(imgpel));
 
-    P_I=*(*(img_pred++)+pix_x);
-    P_J=*(*(img_pred++)+pix_x);
-    P_K=*(*(img_pred++)+pix_x);
-    P_L=*(*(img_pred )+pix_x);
+    P_I=*(*img_pred++ +pix_x);
+    P_J=*(*img_pred++ +pix_x);
+    P_K=*(*img_pred++ +pix_x);
+    P_L=*(*img_pred+pix_x);
 
     P_X=imgY[pix_d.pos_y][pix_d.pos_x];
     
@@ -13881,9 +13914,9 @@ static int intra4x4_vert_right_pred(Macroblock *currMB,    //!< current macroblo
     memcpy(&PredPel[1], pred_pel, BLOCK_SIZE*sizeof(imgpel));
 
 
-    P_I=*(*(img_pred++)+pix_x);
-    P_J=*(*(img_pred++)+pix_x);
-    P_K=*(*(img_pred++)+pix_x);
+    P_I=*(*img_pred++ +pix_x);
+    P_J=*(*img_pred++ +pix_x);
+    P_K=*(*img_pred++ +pix_x);
 
     P_X=imgY[pix_d.pos_y][pix_d.pos_x];
     
@@ -14030,10 +14063,10 @@ static int intra4x4_hor_up_pred(Macroblock *currMB,    //!< current macroblock
     BLOCK_COORD pix_x=pix_a.pos_x;
 
     // form predictor pels
-    P_I=*(*(img_pred++)+pix_x);
-    P_J=*(*(img_pred++)+pix_x);
-    P_K=*(*(img_pred++)+pix_x);
-    P_L=*(*(img_pred )+pix_x);
+    P_I=*(*img_pred++ +pix_x);
+    P_J=*(*img_pred++ +pix_x);
+    P_K=*(*img_pred++ +pix_x);
+    P_L=*(*img_pred+pix_x);
 
     PredPixel[0] =(imgpel)((P_I+P_J+1) >> 1);
     PredPixel[1] =(imgpel)((P_I +(P_J << 1)+P_K+2) >> 2);
@@ -14079,14 +14112,14 @@ static int intra4x4_hor_down_pred(Macroblock *currMB,    //!< current macroblock
   bool block_available_left;
   bool block_available_up_left;
 
-  getNonAffNeighbour(currMB, ioff -1, joff    , p_Vid->mb_size[IS_LUMA], &pix_a);
-  getNonAffNeighbour(currMB, ioff    , joff -1, p_Vid->mb_size[IS_LUMA], &pix_b);
+  getNonAffNeighbour(currMB, ioff -1, joff   , p_Vid->mb_size[IS_LUMA], &pix_a);
+  getNonAffNeighbour(currMB, ioff   , joff -1, p_Vid->mb_size[IS_LUMA], &pix_b);
   getNonAffNeighbour(currMB, ioff -1, joff -1, p_Vid->mb_size[IS_LUMA], &pix_d);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left   =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up     =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left=pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left   =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up     =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left=pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 	  }
   else {
     block_available_left    =pix_a.available;
@@ -14111,10 +14144,10 @@ static int intra4x4_hor_down_pred(Macroblock *currMB,    //!< current macroblock
     memcpy(&PredPel[1], pred_pel, BLOCK_SIZE*sizeof(imgpel));
 
 
-    P_I=*(*(img_pred++)+pix_x);
-    P_J=*(*(img_pred++)+pix_x);
-    P_K=*(*(img_pred++)+pix_x);
-    P_L=*(*(img_pred )+pix_x);
+    P_I=*(*img_pred++ +pix_x);
+    P_J=*(*img_pred++ +pix_x);
+    P_K=*(*img_pred++ +pix_x);
+    P_L=*(*img_pred+pix_x);
 
     P_X=imgY[pix_d.pos_y][pix_d.pos_x];
 
@@ -14316,7 +14349,7 @@ static int intra4x4_vert_pred_mbaff(Macroblock *currMB,    //!< current macroblo
   getAffNeighbour(currMB, ioff, joff-1 , p_Vid->mb_size[IS_LUMA], &pix_b);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag)
-    block_available_up=pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
+    block_available_up=pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
   else
     block_available_up=pix_b.available;
 
@@ -14370,7 +14403,7 @@ static int intra4x4_hor_pred_mbaff(Macroblock *currMB, ColorPlane pl,
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<4;i++)
-      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr]: 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
 		}
   else
     block_available_left    =pix_a[0].available;
@@ -14426,9 +14459,9 @@ static int intra4x4_diag_down_right_pred_mbaff(Macroblock *currMB,    //!< curre
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<4; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr]: 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -14499,13 +14532,13 @@ static int intra4x4_diag_down_left_pred_mbaff(Macroblock *currMB,    //!< curren
   pix_c.available=pix_c.available && !((ioff==4) && ((joff==4) || (joff==12)));
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
 		}
   else {
     block_available_up      =pix_b.available;
     block_available_up_right=pix_c.available;
-	 }
+		}
 
   if(!block_available_up)
     theApp.FileSpool->print(CLogFile::flagError,"warning: Intra_4x4_Diagonal_Down_Left prediction mode not allowed at mb %d",currSlice->current_mb_nr);
@@ -14582,9 +14615,9 @@ static int intra4x4_vert_right_pred_mbaff(Macroblock *currMB,    //!< current ma
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<4; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr]: 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 	  }
   else {
     block_available_left    =pix_a[0].available;
@@ -14660,8 +14693,8 @@ static int intra4x4_vert_left_pred_mbaff(Macroblock *currMB,    //!< current mac
   pix_c.available=pix_c.available && !((ioff==4) && ((joff==4) || (joff==12)));
   
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
 		}
   else {
     block_available_up      =pix_b.available;
@@ -14741,7 +14774,7 @@ static int intra4x4_hor_up_pred_mbaff(Macroblock *currMB,    //!< current macrob
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<4; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr]: 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
 	  }
   else
     block_available_left    =pix_a[0].available;
@@ -14815,9 +14848,9 @@ static int intra4x4_hor_down_pred_mbaff(Macroblock *currMB,    //!< current macr
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<4; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -15144,10 +15177,10 @@ static inline int intra8x8_dc_pred(Macroblock *currMB,    //!< current macrobloc
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15180,14 +15213,14 @@ static inline int intra8x8_dc_pred(Macroblock *currMB,    //!< current macrobloc
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 		}
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15262,10 +15295,10 @@ static inline int intra8x8_vert_pred(Macroblock *currMB,    //!< current macrobl
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15353,9 +15386,9 @@ static inline int intra8x8_hor_pred(Macroblock *currMB,    //!< current macroblo
   getNonAffNeighbour(currMB, ioff-1, joff-1, mb_size, &pix_d);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15370,14 +15403,14 @@ static inline int intra8x8_hor_pred(Macroblock *currMB,    //!< current macroblo
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     BLOCK_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred ++)+pos_x);
-    P_R=*(*(img_pred ++)+pos_x);
-    P_S=*(*(img_pred ++)+pos_x);
-    P_T=*(*(img_pred ++)+pos_x);
-    P_U=*(*(img_pred ++)+pos_x);
-    P_V=*(*(img_pred ++)+pos_x);
-    P_W=*(*(img_pred ++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 		}
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15445,10 +15478,10 @@ static inline int intra8x8_diag_down_right_pred(Macroblock *currMB,    //!< curr
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15484,14 +15517,14 @@ static inline int intra8x8_diag_down_right_pred(Macroblock *currMB,    //!< curr
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 	  }
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15576,10 +15609,10 @@ static inline int intra8x8_diag_down_left_pred(Macroblock *currMB,    //!< curre
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15615,14 +15648,14 @@ static inline int intra8x8_diag_down_left_pred(Macroblock *currMB,    //!< curre
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 		}
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15707,10 +15740,10 @@ static inline int intra8x8_vert_right_pred(Macroblock *currMB,    //!< current m
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -15746,14 +15779,14 @@ static inline int intra8x8_vert_right_pred(Macroblock *currMB,    //!< current m
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 	  }
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15845,10 +15878,10 @@ static inline int intra8x8_vert_left_pred(Macroblock *currMB,    //!< current ma
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 	  }
   else {
     block_available_left    =pix_a.available;
@@ -15884,14 +15917,14 @@ static inline int intra8x8_vert_left_pred(Macroblock *currMB,    //!< current ma
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 	  }
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -15981,10 +16014,10 @@ static inline int intra8x8_hor_up_pred(Macroblock *currMB,    //!< current macro
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -16020,14 +16053,14 @@ static inline int intra8x8_hor_up_pred(Macroblock *currMB,    //!< current macro
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 		}
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -16115,10 +16148,10 @@ static inline int intra8x8_hor_down_pred(Macroblock *currMB,    //!< current mac
   pix_c.available=pix_c.available && !(ioff == 8 && joff == 8);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
-    block_available_left    =pix_a.available ? currSlice->intra_block [pix_a.mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+    block_available_left    =pix_a.available ? currSlice->intra_block[pix_a.mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a.available;
@@ -16154,14 +16187,14 @@ static inline int intra8x8_hor_down_pred(Macroblock *currMB,    //!< current mac
   if(block_available_left) {
     imgpel **img_pred=&imgY[pix_a.pos_y];
     PIXEL_COORD pos_x=pix_a.pos_x;
-    P_Q=*(*(img_pred++)+pos_x);
-    P_R=*(*(img_pred++)+pos_x);
-    P_S=*(*(img_pred++)+pos_x);
-    P_T=*(*(img_pred++)+pos_x);
-    P_U=*(*(img_pred++)+pos_x);
-    P_V=*(*(img_pred++)+pos_x);
-    P_W=*(*(img_pred++)+pos_x);
-    P_X=*(*(img_pred  )+pos_x);
+    P_Q=*(*img_pred++ +pos_x);
+    P_R=*(*img_pred++ +pos_x);
+    P_S=*(*img_pred++ +pos_x);
+    P_T=*(*img_pred++ +pos_x);
+    P_U=*(*img_pred++ +pos_x);
+    P_V=*(*img_pred++ +pos_x);
+    P_W=*(*img_pred++ +pos_x);
+    P_X=*(*img_pred+pos_x);
 		}
   else
     P_Q=P_R=P_S=P_T=P_U=P_V=P_W=P_X =(imgpel)p_Vid->dc_pred_value_comp[pl];
@@ -16342,10 +16375,10 @@ static inline int intra8x8_dc_pred_mbaff(Macroblock *currMB,    //!< current mac
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr]: 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -16458,10 +16491,10 @@ static inline int intra8x8_vert_pred_mbaff(Macroblock *currMB,    //!< current m
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -16552,9 +16585,9 @@ static inline int intra8x8_hor_pred_mbaff(Macroblock *currMB,    //!< current ma
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -16645,10 +16678,10 @@ static inline int intra8x8_diag_down_right_pred_mbaff(Macroblock *currMB,    //!
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -16776,7 +16809,7 @@ static inline int intra8x8_diag_down_left_pred_mbaff(Macroblock *currMB,    //!<
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
     block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
     block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
     block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
@@ -16907,10 +16940,10 @@ static inline int intra8x8_vert_right_pred_mbaff(Macroblock *currMB,    //!< cur
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -17045,10 +17078,10 @@ static inline int intra8x8_vert_left_pred_mbaff(Macroblock *currMB,    //!< curr
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -17183,10 +17216,10 @@ static inline int intra8x8_hor_up_pred_mbaff(Macroblock *currMB,    //!< current
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -17320,10 +17353,10 @@ static inline int intra8x8_hor_down_pred_mbaff(Macroblock *currMB,    //!< curre
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
     for(i=0, block_available_left=1; i<8; i++)
-      block_available_left  &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
-    block_available_up      =pix_b.available ? currSlice->intra_block [pix_b.mb_addr] : 0;
-    block_available_up_right=pix_c.available ? currSlice->intra_block [pix_c.mb_addr] : 0;
-    block_available_up_left =pix_d.available ? currSlice->intra_block [pix_d.mb_addr] : 0;
+      block_available_left &= pix_a[i].available ? currSlice->intra_block[pix_a[i].mb_addr] : 0;
+    block_available_up      =pix_b.available ? currSlice->intra_block[pix_b.mb_addr] : 0;
+    block_available_up_right=pix_c.available ? currSlice->intra_block[pix_c.mb_addr] : 0;
+    block_available_up_left =pix_d.available ? currSlice->intra_block[pix_d.mb_addr] : 0;
 		}
   else {
     block_available_left    =pix_a[0].available;
@@ -17566,7 +17599,7 @@ static int intra16x16_dc_pred(Macroblock *currMB, ColorPlane pl) {
 	  }
   else {
     up_avail   =b.available ? currSlice->intra_block[b.mb_addr] : 0;
-    left_avail =a.available ? currSlice->intra_block[a.mb_addr]: 0;
+    left_avail =a.available ? currSlice->intra_block[a.mb_addr] : 0;
 		}
 
   // Sum top predictors
@@ -17679,7 +17712,7 @@ static int intra16x16_hor_pred(Macroblock *currMB, ColorPlane pl) {
   if(!p_Vid->active_pps->constrained_intra_pred_flag)
     left_avail   =a.available;
   else
-    left_avail =a.available ? currSlice->intra_block[a.mb_addr]: 0;
+    left_avail =a.available ? currSlice->intra_block[a.mb_addr] : 0;
 
   if(!left_avail)
     error("invalid 16x16 intra pred Mode HOR_PRED_16",500);
@@ -18203,10 +18236,11 @@ static void reset_dpb(VideoParameters *p_Vid, DecodedPictureBuffer *p_Dpb) {
  ***********************************************************************
  */
 static void alloc_video_params(VideoParameters **p_Vid) {
-  int i;
+  int8_t i;
 
   if(!(*p_Vid  =(VideoParameters*)H264CALLOC(1,sizeof(VideoParameters)))) 
     no_mem_exit("alloc_video_params: p_Vid");
+//		theApp.FileSpool->print(CLogFile::flagInfo,"alloc_video_params %8X",*p_Vid);
 
   if(!((*p_Vid)->old_slice =(OldSliceParams*)H264CALLOC(1,sizeof(OldSliceParams)))) 
     no_mem_exit("alloc_video_params: p_Vid->old_slice");
@@ -18333,7 +18367,6 @@ static void free_img(VideoParameters *p_Vid) {
       p_Vid->pNextSlice=NULL;
 			}
     if(p_Vid->ppSliceList) {
-      int i;
       for(i=0; i<p_Vid->iNumOfSlicesAllocated; i++) {
         if(p_Vid->ppSliceList[i])
           free_slice(p_Vid->ppSliceList[i]);
@@ -18344,7 +18377,7 @@ static void free_img(VideoParameters *p_Vid) {
       FreeNALU(p_Vid->nalu);
       p_Vid->nalu=NULL;
 			}
-    //H264FREE memory;
+    //free memory;
     FreeDecPicList(p_Vid->pDecOuputPic);
     if(p_Vid->pNextPPS) {
       FreePPS(p_Vid->pNextPPS);
@@ -18357,6 +18390,17 @@ static void free_img(VideoParameters *p_Vid) {
     H264FREE(p_Vid->dec_stats);
 #endif
 
+    /*if(p_Vid->dec_picture) {			// GD 4/2/26  per leak, forse dipende da un mancato flush se errore...
+			free_storable_picture(p_Vid->dec_picture);
+//      H264FREE(p_Vid->dec_picture);
+      p_Vid->dec_picture=NULL;
+			}*/
+			free_storable_picture(p_Vid->dec_picture);
+			free_storable_picture(p_Vid->dec_picture_JV[0]);
+			free_storable_picture(p_Vid->dec_picture_JV[1]);
+
+
+//		theApp.FileSpool->print(CLogFile::flagInfo,"free_video_params %8X",p_Vid);
     H264FREE(p_Vid);
     p_Vid=NULL;
 		}
@@ -18714,9 +18758,9 @@ static void Report(VideoParameters *p_Vid) {
 *   pointer to DataPartition Structure, zero-initialized
  ************************************************************************
  */
-DataPartition *AllocPartition(int n) {
+DataPartition *AllocPartition(uint8_t n) {
   DataPartition *partArr, *dataPart;
-  int i;
+  uint8_t i;
 
   partArr =(DataPartition*)H264CALLOC(n,sizeof(DataPartition));
   if(!partArr) {
@@ -18758,8 +18802,8 @@ DataPartition *AllocPartition(int n) {
 *   n must be the same as for the corresponding call of AllocPartition
  ************************************************************************
  */
-void FreePartition(DataPartition *dp, int n) {
-  int i;
+void FreePartition(DataPartition *dp, uint8_t n) {
+  uint8_t i;
 
   assert(dp != NULL);
   assert(dp->bitstream != NULL);
@@ -19098,7 +19142,7 @@ void ClearDecPicList(VideoParameters *p_Vid) {
 		}
 	}
 
-DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, uint8_t view_id) {
+DecodedPicList *get_one_avail_dec_pic_from_list(DecodedPicList *pDecPicList, bool b3D, int8_t view_id) {
   DecodedPicList *pPic=pDecPicList, *pPrior=NULL;
 
   if(b3D) {
@@ -19804,13 +19848,13 @@ void get_strength_ver_MBAff(uint8_t *Strength, Macroblock *MbQ, int edge, uint8_
 *   returns a buffer of 16 Strength values for one stripe in a mb(for MBAFF)
  *********************************************************************************************
  */
-void get_strength_hor_MBAff(uint8_t *Strength, Macroblock *MbQ, int edge, uint8_t mvlimit, StorablePicture *p) {
+void get_strength_hor_MBAff(uint8_t *Strength, Macroblock *MbQ, uint8_t edge, uint8_t mvlimit, StorablePicture *p) {
   int16_t blkP, blkQ, idx;
   int16_t blk_x, blk_x2, blk_y, blk_y2 ;
 
   int    StrValue, i;
   int    xQ, yQ = edge<MB_BLOCK_SIZE ? edge : 1;
-  int16_t mb_x, mb_y;
+  BLOCK_COORD mb_x, mb_y;
 
   Macroblock *MbP;
 
@@ -19987,7 +20031,7 @@ static void edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
                 SrcPtrP[ 0 ] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
               }
               else
-                SrcPtrP[ 0 ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2) ;
+                SrcPtrP[ 0 ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
 
               if(aq) {
                 imgpel R3 =SrcPtrQ[ 3];
@@ -20005,19 +20049,19 @@ static void edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
               int ap  =(iabs(L0-L2)<Beta);
 
               int C0 =ClipTab[ Strng ]*bitdepth_scale;
-              int tc0  =(C0+ap+aq) ;
-              int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3) ;
+              int tc0 = C0+ap+aq;
+              int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
 
               if(ap && (C0))
-                *(SrcPtrP-1) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1) ;
+                *(SrcPtrP-1) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1);
 
               if(dif) {
-                *SrcPtrP  =(imgpel)iClip1(max_imgpel_value, L0+dif) ;
-                *SrcPtrQ  =(imgpel)iClip1(max_imgpel_value, R0-dif) ;
+                *SrcPtrP  =(imgpel)iClip1(max_imgpel_value, L0+dif);
+                *SrcPtrQ  =(imgpel)iClip1(max_imgpel_value, R0-dif);
               }
 
               if(aq  && (C0))
-                *(SrcPtrQ+1) += iClip3(-C0,  C0,(R2+RL0 -(R1 << 1)) >> 1) ;
+                *(SrcPtrQ+1) += iClip3(-C0,  C0,(R2+RL0 -(R1 << 1)) >> 1);
 							}            
 						}
 					}
@@ -20034,7 +20078,7 @@ static void edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
  */
 static void edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Strength, Macroblock *MbQ, 
               uint8_t edge, StorablePicture *p){
-  uint16_t width=p->iLumaStride; //p->size_x;
+  PIXEL_COORD width=p->iLumaStride; //p->size_x;
   int      pel, Strng;
   int      PelNum=pl? pelnum_cr[1][p->chroma_format_idc] : MB_BLOCK_SIZE;
   int8_t   yQ = edge<MB_BLOCK_SIZE ? edge : 1;
@@ -20092,7 +20136,7 @@ static void edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
                   SrcPtrP[    0    ] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
 			            }
                 else
-                  SrcPtrP[     0     ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2) ;
+                  SrcPtrP[     0     ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
 
                 if(aq) {
                   imgpel R3=SrcPtrQ[ incQ*3];
@@ -20110,19 +20154,19 @@ static void edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t *Stren
                 int ap  =(iabs(L0-L2)<Beta);
 
                 int C0 =ClipTab[ Strng ]*bitdepth_scale;
-                int tc0  =(C0+ap+aq) ;
-                int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3) ;
+                int tc0 = C0+ap+aq;
+                int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
 
                 if(ap && C0)
-                  *(SrcPtrP-incP) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1) ;
+                  *(SrcPtrP-incP) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1);
 
                 if(dif) {
-                  *SrcPtrP  =(imgpel)iClip1(max_imgpel_value, L0+dif) ;
-                  *SrcPtrQ  =(imgpel)iClip1(max_imgpel_value, R0-dif) ;
+                  *SrcPtrP  =(imgpel)iClip1(max_imgpel_value, L0+dif);
+                  *SrcPtrQ  =(imgpel)iClip1(max_imgpel_value, R0-dif);
 				          }
 
-                if(aq  && (C0))
-                  *(SrcPtrQ+incQ) += iClip3(-C0,  C0,(R2+RL0 -(R1 << 1)) >> 1) ;
+                if(aq && C0)
+                  *(SrcPtrQ+incQ) += iClip3(-C0,  C0,(R2+RL0 -(R1 << 1)) >> 1);
 								}            
 							}
 						}        
@@ -20501,7 +20545,7 @@ void perform_db_mbaff(VideoParameters *p_Vid, StorablePicture *p, int MbQAddr){
         if((*((INT64T *) Strength)) || ((*(((INT64T *) Strength)+1)))) // only if one of the 16 Strength bytes is != 0
  {
           if(filterNon8x8LumaEdgesFlag[edge]) {
-            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
             if(currSlice->chroma444_not_separate) {
               p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, edge << 2, p);
               p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, edge << 2, p);
@@ -20526,17 +20570,17 @@ void perform_db_mbaff(VideoParameters *p_Vid, StorablePicture *p, int MbQAddr){
 					 {
             if(filterNon8x8LumaEdgesFlag[edge]) {
 
-              p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, MB_BLOCK_SIZE, p) ;
+              p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, MB_BLOCK_SIZE, p);
               if(currSlice->chroma444_not_separate) {
-                p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, p) ;
-                p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, p) ;
+                p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, p);
+                p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, p);
               }
             }
             if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
               edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
               if(imgUV && (edge_cr >= 0)) {
-                p_Vid->EdgeLoopChromaHor(imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, 0, p) ;
-                p_Vid->EdgeLoopChromaHor(imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, 1, p) ;
+                p_Vid->EdgeLoopChromaHor(imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, 0, p);
+                p_Vid->EdgeLoopChromaHor(imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, 1, p);
 								}
 							}
 						}
@@ -20898,7 +20942,7 @@ static void luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1, int Al
           int aq  =(iabs(*SrcPtrQ-R2)<Beta);
           int ap  =(iabs(*SrcPtrP-L2)<Beta);
 
-          int tc0  =(ap+aq) ;
+          int tc0 = ap+aq;
           int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
 
           if(dif) {
@@ -20921,13 +20965,13 @@ static void luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1, int Al
 
         if((iabs(*SrcPtrQ-*SrcPtrQ1)<Beta)  && (iabs(*SrcPtrP-*SrcPtrP1)<Beta)) {                          
           int RL0 =(*SrcPtrP+*SrcPtrQ+1) >> 1;
-          imgpel  R2=*(SrcPtrQ1+1);
-          imgpel  L2=*(SrcPtrP1-1);
+          imgpel R2=*(SrcPtrQ1+1);
+          imgpel L2=*(SrcPtrP1-1);
 
-          int aq  =(iabs(*SrcPtrQ-R2)<Beta);
-          int ap  =(iabs(*SrcPtrP-L2)<Beta);
+          int aq =(iabs(*SrcPtrQ-R2)<Beta);
+          int ap =(iabs(*SrcPtrP-L2)<Beta);
 
-          int tc0  =(C0+ap+aq) ;
+          int tc0 = C0+ap+aq;
           int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
 
           if(ap)
@@ -21068,7 +21112,7 @@ static void luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COORD widt
           aq  =(iabs(*imgQ-R2)<Beta);
           ap  =(iabs(*imgP-L2)<Beta);
 
-          tc0  =(ap+aq) ;
+          tc0 = ap+aq;
           dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
 
           if(dif) {
@@ -21086,18 +21130,18 @@ static void luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COORD widt
       edge_diff=*imgQ-*imgP;
 
       if(iabs(edge_diff)<Alpha) {
-        imgpel  *SrcPtrQ1=imgQ+width;
-        imgpel  *SrcPtrP1=imgP-width;
+        imgpel *SrcPtrQ1=imgQ+width;
+        imgpel *SrcPtrP1=imgP-width;
 
         if((iabs(*imgQ-*SrcPtrQ1)<Beta)  && (iabs(*imgP-*SrcPtrP1)<Beta)) {                          
           int RL0 =(*imgP+*imgQ+1) >> 1;
           imgpel  R2=*(SrcPtrQ1+width);
           imgpel  L2=*(SrcPtrP1-width);
 
-          aq  =(iabs(*imgQ-R2)<Beta);
-          ap  =(iabs(*imgP-L2)<Beta);
+          aq = iabs(*imgQ-R2)<Beta;
+          ap = iabs(*imgP-L2)<Beta;
 
-          tc0  =(C0+ap+aq) ;
+          tc0 = C0+ap+aq;
           dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
 
           if(ap)
@@ -21384,7 +21428,7 @@ static void perform_db_dep_normal(Macroblock   *MbQ, StorablePicture *p) {
 
         if(Strength[0]!=0 || Strength[1]!=0 || Strength[2]!=0 || Strength[3]!=0) // only if one of the 16 Strength bytes is != 0
 		{
-          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
           edge_loop_luma_hor(PLANE_U, imgUV[0], Strength, MbQ, edge << 2, p);
           edge_loop_luma_hor(PLANE_V, imgUV[1], Strength, MbQ, edge << 2, p);
 					}
@@ -21437,7 +21481,7 @@ static void perform_db_dep_normal(Macroblock   *MbQ, StorablePicture *p) {
 
         if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
 				{
-          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;          
+          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);          
           edge_loop_luma_hor(PLANE_U, imgUV[0], Strength, MbQ, edge << 2, p);
           edge_loop_luma_hor(PLANE_V, imgUV[1], Strength, MbQ, edge << 2, p);              
 					}
@@ -21503,7 +21547,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
         if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
  {
-          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
 
           if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
             edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
@@ -21541,7 +21585,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
         if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
  {
-          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, 0, p) ;
+          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, 0, p);
 
           if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
             if(imgUV) {
@@ -21579,7 +21623,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
           if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
 				 {
-            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
 
             if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
               edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
@@ -21621,7 +21665,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
         if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
  {
-          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, 0, p) ;
+          edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, 0, p);
 
           if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
             if(imgUV) {
@@ -21663,7 +21707,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
           if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
 					{
-            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
 
             if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
               edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
@@ -21705,7 +21749,7 @@ static void perform_db_ind_normal(Macroblock *MbQ, StorablePicture *p) {
 
           if(Strength[0] != 0 || Strength[1] != 0 || Strength[2] != 0 || Strength[3] != 0) // only if one of the first 4 Strength bytes is != 0
 					{
-            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            edge_loop_luma_hor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
 
             if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
               edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
@@ -21872,7 +21916,7 @@ void deblock_normal(VideoParameters *p_Vid, StorablePicture *p) {
   for(i=0; i<p->PicSizeInMbs; i++)
     get_db_strength_normal(p_Vid, p, i, &j);
   for(i=0; i<p->PicSizeInMbs; i++)
-    perform_db_normal(p_Vid, p, i) ;
+    perform_db_normal(p_Vid, p, i);
 	}
 
 
@@ -21899,7 +21943,7 @@ void DeblockPicture(VideoParameters *p_Vid, StorablePicture *p) {
 
   if(p->mb_aff_frame_flag) {
     for(i=0; i<p->PicSizeInMbs; i++)
-      DeblockMb(p_Vid, p, i) ;
+      DeblockMb(p_Vid, p, i);
 		}
   else {
    // deblock_normal(p_Vid, p);
@@ -21939,7 +21983,7 @@ void DeblockPicture(VideoParameters *p_Vid, StorablePicture *p) {
     #pragma omp parallel for
 #endif
   for(j=0; j<p->PicSizeInMbs; j++)
-    get_db_strength(p_Vid, p, j) ;
+    get_db_strength(p_Vid, p, j);
  
   for(i=0; i<k; i++) {
     int nn;    
@@ -22136,7 +22180,7 @@ static void DeblockMb(VideoParameters *p_Vid, StorablePicture *p, int MbQAddr) {
         Strength[12] != 0 || Strength[13] != 0 || Strength[14] != 0 || Strength[15] !=0) // only if one of the 16 Strength bytes is != 0
  {
           if(filterNon8x8LumaEdgesFlag[edge]) {
-            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
             if(currSlice->chroma444_not_separate) {
               p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, edge << 2, p);
               p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, edge << 2, p);
@@ -22162,17 +22206,17 @@ static void DeblockMb(VideoParameters *p_Vid, StorablePicture *p, int MbQAddr) {
  {
             if(filterNon8x8LumaEdgesFlag[edge]) {
 
-              p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, MB_BLOCK_SIZE, p) ;
+              p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, MB_BLOCK_SIZE, p);
               if(currSlice->chroma444_not_separate) {
-                p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, p) ;
-                p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, p) ;
+                p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, p);
+                p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, p);
 								}
 							}
             if(active_sps->chroma_format_idc==YUV420 || active_sps->chroma_format_idc==YUV422) {
               edge_cr=chroma_edge[1][edge][p->chroma_format_idc];
               if(imgUV && (edge_cr >= 0)) {
-                p_Vid->EdgeLoopChromaHor(imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, 0, p) ;
-                p_Vid->EdgeLoopChromaHor(imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, 1, p) ;
+                p_Vid->EdgeLoopChromaHor(imgUV[0], Strength, MbQ, MB_BLOCK_SIZE, 0, p);
+                p_Vid->EdgeLoopChromaHor(imgUV[1], Strength, MbQ, MB_BLOCK_SIZE, 1, p);
 								}
 							}
 						}
@@ -22389,7 +22433,7 @@ static void perform_db(VideoParameters *p_Vid, StorablePicture *p, int MbQAddr) 
 					Strength[12] != 0 || Strength[13] != 0 || Strength[14] != 0 || Strength[15] !=0) // only if one of the 16 Strength bytes is != 0
  {
           if(filterNon8x8LumaEdgesFlag[edge]) {
-            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p) ;
+            p_Vid->EdgeLoopLumaHor(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
             if(currSlice->chroma444_not_separate) {
               p_Vid->EdgeLoopLumaHor(PLANE_U, imgUV[0], Strength, MbQ, edge << 2, p);
               p_Vid->EdgeLoopLumaHor(PLANE_V, imgUV[1], Strength, MbQ, edge << 2, p);
@@ -22483,7 +22527,7 @@ extern void set_read_comp_coeff_cabac        (Macroblock *currMB);
  ************************************************************************
  */
 static inline int BType2CtxRef(int btype) {
-  return(btype >= 4);
+  return btype >= 4;
 	}
 
 /*!
@@ -22581,7 +22625,7 @@ void update_qp(Macroblock *currMB, int8_t qp) {
   currMB->qp=qp;
   currMB->qp_scaled[0]=qp+p_Vid->bitdepth_luma_qp_scale;
   set_chroma_qp(currMB);
-  currMB->is_lossless = ((currMB->qp_scaled[0] == 0) && (!p_Vid->lossless_qpprime_flag));
+  currMB->is_lossless = ((currMB->qp_scaled[0] == 0) && !p_Vid->lossless_qpprime_flag);
   set_read_comp_coeff_cavlc(currMB);
   set_read_comp_coeff_cabac(currMB);
 	}
@@ -22631,7 +22675,7 @@ static void readMBRefPictureIdx(SyntaxElement *currSE, DataPartition *dP, Macrob
 				currMB->subblock_x=0;
 				currMB->subblock_y=0;
 				refframe=currMB->readRefPictureIdx(currMB, currSE, dP, 1, list);
-				for(j=0; j< step_v0; j++) {
+				for(j=0; j<step_v0; j++) {
 					int8_t *ref_idx=&mv_info[j][currMB->block_x].ref_idx[list];
 					// for(i=currMB->block_x; i<currMB->block_x+step_h0; i++)
 					for(i=0; i<step_h0; i++) {
@@ -22871,7 +22915,7 @@ void invScaleCoeff(Macroblock *currMB, int level, int run, int8_t qp_per, int i,
     i0=pos_scan4x4[coef_ctr][0];
     j0=pos_scan4x4[coef_ctr][1];
 
-    currMB->s_cbp[0].blk |= i64_power2((j << 2)+i) ;
+    currMB->s_cbp[0].blk |= i64_power2((j << 2)+i);
     currMB->p_Slice->cof[0][(j<<2)+j0][(i<<2)+i0]= rshift_rnd_sf((level*InvLevelScale4x4[j0][i0]) << qp_per, 4);
 		}
 	}
@@ -23697,7 +23741,7 @@ static void init_cur_imgy(VideoParameters *p_Vid,Slice *currSlice,int pl) {
  {
         for(i=0; i<currSlice->listXsize[j] ; i++)  {
           StorablePicture *curr_ref=currSlice->listX[j][i];
-          if(curr_ref)  {
+          if(curr_ref) {
             curr_ref->no_ref=noref && (curr_ref == vidref);
             curr_ref->cur_imgY=curr_ref->imgY;
           }
@@ -23709,7 +23753,7 @@ static void init_cur_imgy(VideoParameters *p_Vid,Slice *currSlice,int pl) {
  {
         for(i=0; i<currSlice->listXsize[j]; i++)  {
           StorablePicture *curr_ref=currSlice->listX[j][i];
-          if(curr_ref)  {
+          if(curr_ref) {
             curr_ref->no_ref=noref && (curr_ref == vidref);
             curr_ref->cur_imgY=curr_ref->imgUV[pl-1]; 
 						}
@@ -23788,7 +23832,7 @@ void change_plane_JV(VideoParameters *p_Vid, int nplane, Slice *pSlice) {
  ************************************************************************
  */
 void make_frame_picture_JV(VideoParameters *p_Vid) {
-  int uv, line;
+  int16_t uv, line;
   int nsize;
 
   p_Vid->dec_picture=p_Vid->dec_picture_JV[0];
@@ -23854,13 +23898,13 @@ void CheckAvailabilityOfNeighbors(Macroblock *currMB) {
     currMB->mbAddrC=2 *(cur_mb_pair-dec_picture->PicWidthInMbs+1);
     currMB->mbAddrD=2 *(cur_mb_pair-dec_picture->PicWidthInMbs-1);
 
-    currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair    ].x)!=0));
+    currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
     currMB->mbAvailB =(bool)(mb_is_available(currMB->mbAddrB, currMB));
-    currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x)!=0));
-    currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair    ].x)!=0));
+    currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x) != 0));
+    currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
 		}
   else {
-    BlockPos *p_pic_pos=&PicPos[mb_nr    ];
+    BlockPos *p_pic_pos=&PicPos[mb_nr];
     currMB->mbAddrA=mb_nr-1;
     currMB->mbAddrD=currMB->mbAddrA-dec_picture->PicWidthInMbs;
     currMB->mbAddrB=currMB->mbAddrD+1;
@@ -23895,9 +23939,9 @@ void CheckAvailabilityOfNeighborsNormal(Macroblock *currMB) {
   currMB->mbAddrB=currMB->mbAddrD+1;
   currMB->mbAddrC=currMB->mbAddrB+1;
 
-  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((p_pic_pos->x)!=0));
-  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((p_pic_pos->x)!=0));
-  currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && (((p_pic_pos+1)->x)!=0));
+  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((p_pic_pos->x) != 0));
+  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((p_pic_pos->x) != 0));
+  currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && (((p_pic_pos+1)->x) != 0));
   currMB->mbAvailB =(bool)(mb_is_available(currMB->mbAddrB, currMB));        
 
 
@@ -23924,10 +23968,10 @@ void CheckAvailabilityOfNeighborsMBAFF(Macroblock *currMB) {
   currMB->mbAddrC=2 *(cur_mb_pair-dec_picture->PicWidthInMbs+1);
   currMB->mbAddrD=2 *(cur_mb_pair-dec_picture->PicWidthInMbs-1);
 
-  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair    ].x)!=0));
+  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
   currMB->mbAvailB =(bool)(mb_is_available(currMB->mbAddrB, currMB));
-  currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x)!=0));
-  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair    ].x)!=0));
+  currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x) != 0));
+  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
 
   currMB->mb_left = currMB->mbAvailA ? &currSlice->mb_data[currMB->mbAddrA] : NULL;
   currMB->mb_up   = currMB->mbAvailB ? &currSlice->mb_data[currMB->mbAddrB] : NULL;
@@ -24633,7 +24677,7 @@ int mb_pred_b_d8x8temporal(Macroblock *currMB, ColorPlane curr_plane, imgpel **c
   for(block8x8=0; block8x8<4; block8x8++) {      
     int8_t pred_dir=currMB->b8pdir[block8x8];
 
-    int k_start =(block8x8 << 2);
+    int k_start = block8x8 << 2;
     int k_end=k_start+1;
 
     for(k=k_start; k<k_start+BLOCK_MULTIPLE; k++) {
@@ -24845,13 +24889,13 @@ int mb_pred_b_d4x4temporal(Macroblock *currMB, ColorPlane curr_plane, imgpel **c
           if(mv_scale == 9999 || currSlice->listX[LIST_0+list_offset][mapped_idx]->is_long_term) {
             mv_info->mv[LIST_0]=colocated->mv[refList];
             mv_info->mv[LIST_1]=zero_mv;
-          }
+						}
           else {
             mv_info->mv[LIST_0].mv_x =(int16_t)((mv_scale*colocated->mv[refList].mv_x+128) >> 8);
             mv_info->mv[LIST_0].mv_y =(int16_t)((mv_scale*colocated->mv[refList].mv_y+128) >> 8);
             mv_info->mv[LIST_1].mv_x =(int16_t)(mv_info->mv[LIST_0].mv_x-colocated->mv[refList].mv_x);
             mv_info->mv[LIST_1].mv_y =(int16_t)(mv_info->mv[LIST_0].mv_y-colocated->mv[refList].mv_y);
-          }
+						}
 
           mv_info->ref_idx[LIST_0] =(int8_t)mapped_idx; //colocated->ref_idx[refList];
           mv_info->ref_idx[LIST_1]=0;
@@ -24948,7 +24992,7 @@ int mb_pred_b_d8x8spatial(Macroblock *currMB, ColorPlane curr_plane, imgpel **cu
           mv_info->mv[LIST_1]=zero_mv;
           mv_info->ref_idx[LIST_0]=-1;
           mv_info->ref_idx[LIST_1]=0;
-        }
+	        }
         else {
           mv_info->ref_pic[LIST_0]=NULL;
           mv_info->ref_pic[LIST_1]=list1[(int16_t)l1_rFrame];
@@ -24970,7 +25014,6 @@ int mb_pred_b_d8x8spatial(Macroblock *currMB, ColorPlane curr_plane, imgpel **cu
           mv_info->mv[LIST_0]=pmvl0;
           mv_info->ref_idx[LIST_0]=l0_rFrame;
 					}
-
         if (l1_rFrame == 0 && ((is_not_moving))) {
           mv_info->ref_pic[LIST_1]=list1[0];
           mv_info->mv[LIST_1]=zero_mv;
@@ -27557,7 +27600,9 @@ void init_dpb(VideoParameters *p_Vid, DecodedPictureBuffer *p_Dpb, int type) {
   */
   /* allocate a dummy storable picture */
   if(!p_Vid->no_reference_picture) {
-    p_Vid->no_reference_picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, TRUE);
+    p_Vid->no_reference_picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, 
+			p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,p_Vid->no_reference_picture);
     p_Vid->no_reference_picture->top_field   =p_Vid->no_reference_picture;
     p_Vid->no_reference_picture->bottom_field=p_Vid->no_reference_picture;
     p_Vid->no_reference_picture->frame       =p_Vid->no_reference_picture;
@@ -27726,7 +27771,7 @@ FrameStore *alloc_frame_store(void) {
 
 void alloc_pic_motion(PicMotionParamsOld *motion, PIXEL_COORD size_y, PIXEL_COORD size_x) {
 
-  motion->mb_field=(bool*)H264CALLOC(size_y*size_x,sizeof(bool));
+  motion->mb_field=(bool*)H264CALLOC(((uint32_t)size_y)*size_x,sizeof(bool));
   if(!motion->mb_field)
     no_mem_exit("alloc_storable_picture: motion->mb_field");
 	}
@@ -27795,7 +27840,7 @@ StorablePicture *alloc_storable_picture(VideoParameters *p_Vid, PictureStructure
 
   if((p_Vid->separate_colour_plane_flag)) {
     for(nplane=0; nplane<MAX_PLANE; nplane++) {
-      get_mem2Dmp      (&s->JVmv_info[nplane], (size_y >> BLOCK_SHIFT), (size_x >> BLOCK_SHIFT));
+      get_mem2Dmp     (&s->JVmv_info[nplane], (size_y >> BLOCK_SHIFT), (size_x >> BLOCK_SHIFT));
       alloc_pic_motion(&s->JVmotion[nplane] , (size_y >> BLOCK_SHIFT), (size_x >> BLOCK_SHIFT));
 			}
 		}
@@ -27862,7 +27907,7 @@ StorablePicture *alloc_storable_picture(VideoParameters *p_Vid, PictureStructure
  *
  ************************************************************************
  */
-void free_frame_store(FrameStore* f) {
+void free_frame_store(FrameStore *f) {
 
   if(f) {
     if(f->frame) {
@@ -27903,14 +27948,16 @@ void free_pic_motion(PicMotionParamsOld *motion) {
 void free_storable_picture(StorablePicture* p) {
   int nplane;
 
+
   if(p) {
+//			theApp.FileSpool->print(CLogFile::flagError,"free_storable_picture %08X",p);
     if(p->mv_info) {
       free_mem2Dmp(p->mv_info);
       p->mv_info=NULL;
 			}
     free_pic_motion(&p->motion);
 
-    if(1   || p->separate_colour_plane_flag) {		// GD 2/2/26
+    if(/*1   || */ p->separate_colour_plane_flag) {		// GD 2/2/26
       for(nplane=0; nplane<MAX_PLANE; nplane++) {
         if(p->JVmv_info[nplane]) {
           free_mem2Dmp(p->JVmv_info[nplane]);
@@ -27980,10 +28027,8 @@ void unmark_for_reference(FrameStore* fs) {
 
   if(fs->frame)
     free_pic_motion(&fs->frame->motion);
-
   if(fs->top_field)
     free_pic_motion(&fs->top_field->motion);
-
   if(fs->bottom_field)
     free_pic_motion(&fs->bottom_field->motion);
 	}
@@ -28327,7 +28372,7 @@ extern void mm_assign_long_term_frame_idx(DecodedPictureBuffer *p_Dpb, StorableP
 extern void mm_update_max_long_term_frame_idx(DecodedPictureBuffer *p_Dpb, int max_long_term_frame_idx_plus1);
 extern void mm_unmark_all_short_term_for_reference(DecodedPictureBuffer *p_Dpb);
 extern void mm_unmark_all_long_term_for_reference(DecodedPictureBuffer *p_Dpb);
-extern bool is_used_for_reference(FrameStore* fs);
+extern bool is_used_for_reference(FrameStore *fs);
 extern void get_smallest_poc(DecodedPictureBuffer *p_Dpb, PocType *poc, int *pos);
 extern int remove_unused_frame_from_dpb(DecodedPictureBuffer *p_Dpb);
 
@@ -28472,10 +28517,10 @@ void init_lists_b_slice(Slice *currSlice) {
 
   if((currSlice->listXsize[0] == currSlice->listXsize[1]) && (currSlice->listXsize[0]>1)) {
     // check if lists are identical, if yes swap first two elements of currSlice->listX[1]
-    int diff=0;
+    bool diff=FALSE;
     for(j=0; j< currSlice->listXsize[0]; j++) {
       if(currSlice->listX[0][j] != currSlice->listX[1][j]) {
-        diff=1;
+        diff=TRUE;
         break;
 				}
 			}
@@ -28491,9 +28536,9 @@ void init_lists_b_slice(Slice *currSlice) {
   currSlice->listXsize[1]=(int8_t)imin(currSlice->listXsize[1], currSlice->num_ref_idx_active[LIST_1]);
 
   // set the unused list entries to NULL
-  for(i=currSlice->listXsize[0]; i< (MAX_LIST_SIZE) ; i++)
+  for(i=currSlice->listXsize[0]; i< (MAX_LIST_SIZE); i++)
     currSlice->listX[0][i]=p_Vid->no_reference_picture;
-  for(i=currSlice->listXsize[1]; i< (MAX_LIST_SIZE) ; i++)
+  for(i=currSlice->listXsize[1]; i< (MAX_LIST_SIZE); i++)
     currSlice->listX[1][i]=p_Vid->no_reference_picture;
 
 #if PRINTREFLIST
@@ -28521,10 +28566,10 @@ void init_lists_b_slice(Slice *currSlice) {
  ************************************************************************
 *\brief
 *   Initialize listX[2..5] from lists 0 and 1
-*   listX[2]: list0 for current_field==top
-*   listX[3]: list1 for current_field==top
-*   listX[4]: list0 for current_field==bottom
-*   listX[5]: list1 for current_field==bottom
+*   listX[2] : list0 for current_field==top
+*   listX[3] : list1 for current_field==top
+*   listX[4] : list0 for current_field==bottom
+*   listX[5] : list1 for current_field==bottom
  *
  ************************************************************************
  */
@@ -28609,7 +28654,7 @@ static void reorder_short_term(Slice *currSlice, int cur_list, int16_t num_ref_i
 
   for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
     if(RefPicListX[ cIdx ])
-      if((RefPicListX[ cIdx ]->is_long_term) ||  (RefPicListX[ cIdx ]->pic_num != picNumLX))
+      if((RefPicListX[ cIdx ]->is_long_term) || (RefPicListX[ cIdx ]->pic_num != picNumLX))
         RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
 		}
 	}
@@ -28674,7 +28719,7 @@ void reorder_ref_pic_list(Slice *currSlice, int cur_list) {
 
   picNumLXPred=currPicNum;
 
-  for(i=0; modification_of_pic_nums_idc[i]!=3; i++) {
+  for(i=0; modification_of_pic_nums_idc[i] != 3; i++) {
     if(modification_of_pic_nums_idc[i]>3)
       error("Invalid modification_of_pic_nums_idc command", 500);
 
@@ -28869,7 +28914,7 @@ static void adaptive_memory_management(DecodedPictureBuffer *p_Dpb, StorablePict
 				//p_Vid->toppoc=p->top_poc;
 				//p_Vid->bottompoc=p->bottom_poc;
 
-				p->poc=imin (p->top_poc, p->bottom_poc);
+				p->poc=imin(p->top_poc, p->bottom_poc);
 				//p_Vid->framepoc=p->poc;
 				break;
 	    }
@@ -28914,7 +28959,7 @@ void store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) {
   // diagnostics
   //printf ("Storing (%s) non-ref pic with frame_num #%d\n", (p->type == FRAME)?"FRAME":(p->type == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num);
   // if frame, check for new store,
-  assert (p!=NULL);
+  assert(p!=NULL);
 
   p_Vid->last_has_mmco_5=FALSE;
   p_Vid->last_pic_bottom_field=(p->structure == BOTTOM_FIELD);
@@ -28957,9 +29002,10 @@ void store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) {
 
   // picture error concealment
   if(p_Vid->conceal_mode != 0) {
-    for(i=0;i<p_Dpb->size;i++)
+    for(i=0;i<p_Dpb->size;i++) {
       if(p_Dpb->fs[i]->is_reference)
         p_Dpb->fs[i]->concealment_reference;
+			}
 		}
 
   // first try to remove unused frames
@@ -29031,7 +29077,7 @@ void store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) {
 /*!
  ************************************************************************
 *\brief
-*   Insert the picture into the DPB. A H264FREE DPB position is necessary
+*   Insert the picture into the DPB. A free DPB position is necessary
 *   for frames, .
  *
 *\param p_Vid
@@ -29043,12 +29089,12 @@ void store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) {
  *
  ************************************************************************
  */
-static void insert_picture_in_dpb(VideoParameters *p_Vid, FrameStore* fs, StorablePicture* p) {
+static void insert_picture_in_dpb(VideoParameters *p_Vid, FrameStore *fs, StorablePicture *p) {
   InputParameters *p_Inp=p_Vid->p_Inp;
 
 //  printf ("insert (%s) pic with frame_num #%d, poc %d\n", (p->structure == FRAME)?"FRAME":(p->structure == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num, p->poc);
-  assert (p!=NULL);
-  assert (fs!=NULL);
+  assert(p!=NULL);
+  assert(fs!=NULL);
 
   switch(p->structure) {
 		case FRAME:
@@ -29137,9 +29183,9 @@ static void insert_picture_in_dpb(VideoParameters *p_Vid, FrameStore* fs, Storab
 *   remove one frame from DPB
  ************************************************************************
  */
-void remove_frame_from_dpb(DecodedPictureBuffer *p_Dpb, int pos){
-  FrameStore* fs=p_Dpb->fs[pos];
-  FrameStore* tmp;
+void remove_frame_from_dpb(DecodedPictureBuffer *p_Dpb, int pos) {
+  FrameStore *fs=p_Dpb->fs[pos];
+  FrameStore *tmp;
   unsigned i;
 
   //printf ("remove frame with frame_num #%d\n", fs->frame_num);
@@ -29235,7 +29281,7 @@ static int output_one_frame_from_dpb(DecodedPictureBuffer *p_Dpb) {
 		}
 
   p_Dpb->last_output_poc=poc;
-  // H264FREE frame store and move empty store to end of buffer
+  // free frame store and move empty store to end of buffer
   if(!is_used_for_reference(p_Dpb->fs[pos]))
     remove_frame_from_dpb(p_Dpb, pos);
   return 1;
@@ -29365,8 +29411,12 @@ void dpb_split_field(VideoParameters *p_Vid, FrameStore *fs) {
   fs->poc=frame->poc;
 
   if(!frame->frame_mbs_only_flag) {
-    fs_top=fs->top_field   =alloc_storable_picture(p_Vid, TOP_FIELD,    frame->size_x, frame->size_y, frame->size_x_cr, frame->size_y_cr, 1);
-    fs_btm=fs->bottom_field=alloc_storable_picture(p_Vid, BOTTOM_FIELD, frame->size_x, frame->size_y, frame->size_x_cr, frame->size_y_cr, 1);
+    fs_top=fs->top_field   =alloc_storable_picture(p_Vid, TOP_FIELD,    
+			frame->size_x, frame->size_y, frame->size_x_cr, frame->size_y_cr,TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,fs_top);
+    fs_btm=fs->bottom_field=alloc_storable_picture(p_Vid, BOTTOM_FIELD, 
+			frame->size_x, frame->size_y, frame->size_x_cr, frame->size_y_cr,TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,fs_btm);
 
     for(i=0; i<(frame->size_y >> 1); i++)
       memcpy(fs_top->imgY[i], frame->imgY[i*2], frame->size_x*sizeof(imgpel));
@@ -29444,7 +29494,7 @@ void dpb_split_field(VideoParameters *p_Vid, FrameStore *fs) {
         jj=(j >> 2)*8+(j & 0x03);
         jj4=jj+4;
         jdiv= j >> 1;
-        for(i=0 ; i<(frame->size_x>> 2); i++) {
+        for(i=0 ; i<(frame->size_x >> 2); i++) {
           idiv= i >> 2;
 
           currentmb=twosz16*(jdiv >> 1)+ (idiv)*2+(jdiv & 0x01);
@@ -29537,8 +29587,11 @@ void dpb_split_field(VideoParameters *p_Vid, FrameStore *fs) {
 void dpb_combine_field_yuv(VideoParameters *p_Vid, FrameStore *fs) {
   int i,j;
 
-  if(!fs->frame)
-    fs->frame=alloc_storable_picture(p_Vid, FRAME, fs->top_field->size_x, fs->top_field->size_y*2, fs->top_field->size_x_cr, fs->top_field->size_y_cr*2, 1);
+  if(!fs->frame) {
+    fs->frame=alloc_storable_picture(p_Vid, FRAME, fs->top_field->size_x, fs->top_field->size_y*2, 
+			fs->top_field->size_x_cr, fs->top_field->size_y_cr*2, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,fs->frame);
+		}
 
   for(i=0; i<fs->top_field->size_y; i++) {
     memcpy(fs->frame->imgY[i*2],     fs->top_field->imgY[i] , fs->top_field->size_x*sizeof(imgpel));     // top field
@@ -29551,15 +29604,15 @@ void dpb_combine_field_yuv(VideoParameters *p_Vid, FrameStore *fs) {
       memcpy(fs->frame->imgUV[j][i*2+1], fs->bottom_field->imgUV[j][i], fs->bottom_field->size_x_cr*sizeof(imgpel));
 			}
 		}
-  fs->poc=fs->frame->poc =fs->frame->frame_poc=imin (fs->top_field->poc, fs->bottom_field->poc);
+  fs->poc=fs->frame->poc =fs->frame->frame_poc=imin(fs->top_field->poc, fs->bottom_field->poc);
 
   fs->bottom_field->frame_poc=fs->top_field->frame_poc=fs->frame->poc;
 
   fs->bottom_field->top_poc=fs->frame->top_poc=fs->top_field->poc;
   fs->top_field->bottom_poc=fs->frame->bottom_poc=fs->bottom_field->poc;
 
-  fs->frame->used_for_reference=(fs->top_field->used_for_reference && fs->bottom_field->used_for_reference);
-  fs->frame->is_long_term=(fs->top_field->is_long_term && fs->bottom_field->is_long_term);
+  fs->frame->used_for_reference= fs->top_field->used_for_reference && fs->bottom_field->used_for_reference;
+  fs->frame->is_long_term= fs->top_field->is_long_term && fs->bottom_field->is_long_term;
 
   if(fs->frame->is_long_term)
     fs->frame->long_term_frame_idx=fs->long_term_frame_idx;
@@ -29608,7 +29661,7 @@ void dpb_combine_field(VideoParameters *p_Vid, FrameStore *fs) {
    //! Use inference flag to remap mvs/references
 
   //! Generate Frame parameters from field information.
-  for(j=0 ; j<(fs->top_field->size_y >> 2) ; j++) {
+  for(j=0 ; j<(fs->top_field->size_y >> 2); j++) {
     jj=j << 1;
     jj4=jj+1;
     for(i=0; i< (fs->top_field->size_x >> 2); i++) {
@@ -29621,9 +29674,9 @@ void dpb_combine_field(VideoParameters *p_Vid, FrameStore *fs) {
       /* bug: top field list doesnot exist.*/
       l=fs->top_field->mv_info[j][i].slice_no;
       k=fs->top_field->mv_info[j][i].ref_idx[LIST_0];
-      fs->frame->mv_info[jj][i].ref_pic[LIST_0]=k>=0? fs->top_field->listX[l][LIST_0][k]: NULL;  
+      fs->frame->mv_info[jj][i].ref_pic[LIST_0]=k>=0? fs->top_field->listX[l][LIST_0][k] : NULL;  
       k=fs->top_field->mv_info[j][i].ref_idx[LIST_1];
-      fs->frame->mv_info[jj][i].ref_pic[LIST_1]=k>=0? fs->top_field->listX[l][LIST_1][k]: NULL;
+      fs->frame->mv_info[jj][i].ref_pic[LIST_1]=k>=0? fs->top_field->listX[l][LIST_1][k] : NULL;
 
       //! association with id already known for fields.
       fs->frame->mv_info[jj4][i].mv[LIST_0]=fs->bottom_field->mv_info[j][i].mv[LIST_0];
@@ -29634,9 +29687,9 @@ void dpb_combine_field(VideoParameters *p_Vid, FrameStore *fs) {
       l=fs->bottom_field->mv_info[j][i].slice_no;
 
       k=fs->bottom_field->mv_info[j][i].ref_idx[LIST_0];
-      fs->frame->mv_info[jj4][i].ref_pic[LIST_0]=k>=0? fs->bottom_field->listX[l][LIST_0][k]: NULL;
+      fs->frame->mv_info[jj4][i].ref_pic[LIST_0]=k>=0? fs->bottom_field->listX[l][LIST_0][k] : NULL;
       k=fs->bottom_field->mv_info[j][i].ref_idx[LIST_1];
-      fs->frame->mv_info[jj4][i].ref_pic[LIST_1]=k>=0? fs->bottom_field->listX[l][LIST_1][k]: NULL;
+      fs->frame->mv_info[jj4][i].ref_pic[LIST_1]=k>=0? fs->bottom_field->listX[l][LIST_1][k] : NULL;
 			}
 		}
 	}
@@ -29764,7 +29817,8 @@ void fill_frame_num_gap(VideoParameters *p_Vid, Slice *currSlice) {
   CurrFrameNum=currSlice->frame_num; //p_Vid->frame_num;
 
   while(CurrFrameNum != UnusedShortTermFrameNum) {
-    picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, 1);
+    picture=alloc_storable_picture(p_Vid, FRAME, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,picture);
     picture->coded_frame=TRUE;
     picture->pic_num=UnusedShortTermFrameNum;
     picture->frame_num=UnusedShortTermFrameNum;
@@ -29821,10 +29875,9 @@ void compute_colocated (Slice *currSlice, StorablePicture **listX[6]) {
           iTRb=iClip3(-128, 127, p_Vid->dec_picture->bottom_poc-listX[LIST_0+j][i]->poc);
 
         iTRp=iClip3(-128, 127,  listX[LIST_1+j][0]->poc-listX[LIST_0+j][i]->poc);
-
         if(iTRp!=0) {
           prescale=(16384+iabs(iTRp / 2)) / iTRp;
-          currSlice->mvscale[j][i]=iClip3(-1024, 1023, (iTRb*prescale+32) >> 6) ;
+          currSlice->mvscale[j][i]=iClip3(-1024, 1023, (iTRb*prescale+32) >> 6);
 					}
         else
           currSlice->mvscale[j][i]=9999;
@@ -29849,7 +29902,7 @@ int GetMaxDecFrameBuffering(VideoParameters *p_Vid){
       if(curr_subset_sps->sps.vui_parameters_present_flag && curr_subset_sps->sps.vui_seq_parameters.bitstream_restriction_flag) {
         if((int)curr_subset_sps->sps.vui_seq_parameters.max_dec_frame_buffering > j)
           error("max_dec_frame_buffering larger than MaxDpbSize", 500);
-        j=imax (1, curr_subset_sps->sps.vui_seq_parameters.max_dec_frame_buffering);
+        j=imax(1, curr_subset_sps->sps.vui_seq_parameters.max_dec_frame_buffering);
 				}
 
       if(j>iMax_2)
@@ -29862,7 +29915,7 @@ int GetMaxDecFrameBuffering(VideoParameters *p_Vid){
       if(curr_sps->vui_parameters_present_flag && curr_sps->vui_seq_parameters.bitstream_restriction_flag) {
         if((int)curr_sps->vui_seq_parameters.max_dec_frame_buffering > j)
           error("max_dec_frame_buffering larger than MaxDpbSize", 500);
-        j=imax (1, curr_sps->vui_seq_parameters.max_dec_frame_buffering);
+        j=imax(1, curr_sps->vui_seq_parameters.max_dec_frame_buffering);
 				}
 
       if(j>iMax_1)
@@ -29875,7 +29928,7 @@ int GetMaxDecFrameBuffering(VideoParameters *p_Vid){
   if(iMax_1>0 && iMax_2>0)
     iMax=iMax_1+iMax_2;
   else
-    iMax=(iMax_1 >0? iMax_1*2 : iMax_2*2);
+    iMax=(iMax_1>0 ? iMax_1*2 : iMax_2*2);
   return iMax;
 	}
 
@@ -29894,10 +29947,10 @@ void append_interview_list(DecodedPictureBuffer *p_Dpb,
                            PictureStructure currPicStructure, //0: frame; 1:top field; 2: bottom field;
                            int list_idx, 
                            FrameStore **list, int *listXsize, 
-                           int currPOC, 
-                           int curr_view_id, int anchor_pic_flag) {
+                           PocType currPOC, 
+                           int8_t curr_view_id, bool anchor_pic_flag) {
   VideoParameters *p_Vid=p_Dpb->p_Vid;
-  int iVOIdx=curr_view_id;
+  int8_t iVOIdx=curr_view_id;
   int pic_avail;
   PocType poc=0;
   int8_t fld_idx;
@@ -29909,12 +29962,12 @@ void append_interview_list(DecodedPictureBuffer *p_Dpb,
     theApp.FileSpool->print(CLogFile::flagError,"Error: iVOIdx: %d is not less than 0", iVOIdx);
 
   if(anchor_pic_flag) {
-    num_ref_views=list_idx? p_Vid->active_subset_sps->num_anchor_refs_l1[iVOIdx] : p_Vid->active_subset_sps->num_anchor_refs_l0[iVOIdx];
-    ref_view_id  =list_idx? p_Vid->active_subset_sps->anchor_ref_l1[iVOIdx]:p_Vid->active_subset_sps->anchor_ref_l0[iVOIdx];
+    num_ref_views=list_idx ? p_Vid->active_subset_sps->num_anchor_refs_l1[iVOIdx] : p_Vid->active_subset_sps->num_anchor_refs_l0[iVOIdx];
+    ref_view_id  =list_idx ? p_Vid->active_subset_sps->anchor_ref_l1[iVOIdx] :p_Vid->active_subset_sps->anchor_ref_l0[iVOIdx];
 		}
   else {
-    num_ref_views=list_idx? p_Vid->active_subset_sps->num_non_anchor_refs_l1[iVOIdx] : p_Vid->active_subset_sps->num_non_anchor_refs_l0[iVOIdx];
-    ref_view_id=list_idx? p_Vid->active_subset_sps->non_anchor_ref_l1[iVOIdx]:p_Vid->active_subset_sps->non_anchor_ref_l0[iVOIdx];
+    num_ref_views=list_idx ? p_Vid->active_subset_sps->num_non_anchor_refs_l1[iVOIdx] : p_Vid->active_subset_sps->num_non_anchor_refs_l0[iVOIdx];
+    ref_view_id=list_idx ? p_Vid->active_subset_sps->non_anchor_ref_l1[iVOIdx] :p_Vid->active_subset_sps->non_anchor_ref_l0[iVOIdx];
 		}
 
   //  if(num_ref_views <= 0)
@@ -29992,7 +30045,7 @@ void process_picture_in_dpb_s(VideoParameters *p_Vid, StorablePicture *p_pic) {
 int init_img_data(VideoParameters *p_Vid, ImageData *p_ImgData, seq_parameter_set_rbsp_t *sps) {
   InputParameters *p_Inp=p_Vid->p_Inp;
   int memory_size=0;
-  int nplane;
+  int8_t nplane;
   
   // allocate memory for reference frame buffers: p_ImgData->frm_data
   p_ImgData->format          =p_Inp->output;
@@ -30002,7 +30055,7 @@ int init_img_data(VideoParameters *p_Vid, ImageData *p_ImgData, seq_parameter_se
   p_ImgData->format.height[0]=p_Vid->height;  
   p_ImgData->format.height[1]=p_Vid->height_cr;
   p_ImgData->format.height[2]=p_Vid->height_cr;
-  p_ImgData->format.yuv_format         =(ColorFormat) sps->chroma_format_idc;
+  p_ImgData->format.yuv_format         =(ColorFormat)sps->chroma_format_idc;
   p_ImgData->format.auto_crop_bottom   =p_Inp->output.auto_crop_bottom;
   p_ImgData->format.auto_crop_right    =p_Inp->output.auto_crop_right;
   p_ImgData->format.auto_crop_bottom_cr=p_Inp->output.auto_crop_bottom_cr;
@@ -30146,12 +30199,15 @@ void store_proc_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) 
   if(p_Dpb->used_size_il>0 && fs->is_used==3) {
     //checking;
 #ifdef _DEBUG
-    if(p->structure==FRAME)
+    if(p->structure==FRAME) {
       assert(fs->frame->frame_poc != p->poc);
-    else if(p->structure==TOP_FIELD)
+			}
+    else if(p->structure==TOP_FIELD) {
       assert(fs->top_field->top_poc != p->poc);
-    else if(p->structure==BOTTOM_FIELD)
+			}
+    else if(p->structure==BOTTOM_FIELD) {
       assert(fs->bottom_field->bottom_poc != p->poc);
+			}
 #endif
     if(fs->frame) {
       free_storable_picture(fs->frame);
@@ -30168,17 +30224,20 @@ void store_proc_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePicture* p) 
     fs->is_used=0;
     fs->is_reference=0;
     p_Dpb->used_size_il--;   
-  }
+		}
 
 #ifdef _DEBUG  
   if(fs->is_used>0) {
     //checking;
-    if(p->structure==FRAME)
+    if(p->structure==FRAME) {
       assert(fs->frame == NULL);
-    else if(p->structure==TOP_FIELD)
+			}
+    else if(p->structure==TOP_FIELD) {
       assert(fs->top_field == NULL);
-    else if(p->structure==BOTTOM_FIELD)
+			}
+    else if(p->structure==BOTTOM_FIELD) {
       assert(fs->bottom_field == NULL);
+			}
 		}
 #endif
 
@@ -30200,7 +30259,9 @@ StorablePicture *clone_storable_picture(VideoParameters *p_Vid, StorablePicture 
   int ostride[2];
   imgpel ***img_in=NULL;
 
-  StorablePicture *p_stored_pic=alloc_storable_picture(p_Vid, (PictureStructure) p_Vid->structure, p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, 0);
+  StorablePicture *p_stored_pic=alloc_storable_picture(p_Vid, (PictureStructure) p_Vid->structure, 
+		p_Vid->width, p_Vid->height, p_Vid->width_cr, p_Vid->height_cr, FALSE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,picture);
 
   p_stored_pic->pic_num=p_pic->pic_num;
   p_stored_pic->frame_num=p_pic->frame_num;
@@ -30463,7 +30524,7 @@ void init_lists_i_slice_mvc(Slice *currSlice) {
 
 extern void   append_interview_list(DecodedPictureBuffer *p_Dpb, 
                                     PictureStructure currPicStructure, int list_idx, 
-                                    FrameStore **list, int *listXsize, int currPOC, 
+                                    FrameStore **list, int *listXsize, PocType currPOC, 
                                     int curr_view_id, bool anchor_pic_flag);
 /*!
 ************************************************************************
@@ -30484,7 +30545,7 @@ void init_lists_p_slice_mvc(Slice *currSlice) {
   FrameStore **fs_list0;
   FrameStore **fs_listlt;
 
-  int currPOC=currSlice->ThisPOC;
+  PocType currPOC=currSlice->ThisPOC;
   bool anchor_pic_flag=currSlice->anchor_pic_flag;
 
   currSlice->listinterviewidx0=0;
@@ -30549,20 +30610,23 @@ void init_lists_p_slice_mvc(Slice *currSlice) {
 
 #if !SIMULCAST_ENABLE
   if(!currSlice->svc_extension_flag) {        
-    int curr_view_id=currSlice->layer_id;
+    uint8_t curr_view_id=currSlice->layer_id;
     currSlice->fs_listinterview0=(FrameStore **)H264CALLOC(p_Dpb->size,sizeof(FrameStore*));
     if(!currSlice->fs_listinterview0)
       no_mem_exit("init_lists: fs_listinterview0");
     list0idx=currSlice->listXsize[0];
     if(currSlice->structure == FRAME) {
-      append_interview_list(p_Vid->p_Dpb_layer[1], (PictureStructure)0, 0, currSlice->fs_listinterview0, &currSlice->listinterviewidx0, currPOC, curr_view_id, anchor_pic_flag);
+      append_interview_list(p_Vid->p_Dpb_layer[1], (PictureStructure)0, 0, currSlice->fs_listinterview0, &currSlice->listinterviewidx0, 
+				currPOC, curr_view_id, anchor_pic_flag);
       for(i=0; i<(unsigned int)currSlice->listinterviewidx0; i++)
         currSlice->listX[0][list0idx++]=currSlice->fs_listinterview0[i]->frame;
       currSlice->listXsize[0]=(int8_t)list0idx;
 			}
     else {
-      append_interview_list(p_Vid->p_Dpb_layer[1], (PictureStructure)currSlice->structure, 0, currSlice->fs_listinterview0, &currSlice->listinterviewidx0, currPOC, curr_view_id, anchor_pic_flag);
-      gen_pic_list_from_frame_interview_list(currSlice->structure, currSlice->fs_listinterview0, currSlice->listinterviewidx0, currSlice->listX[0], &currSlice->listXsize[0]);
+      append_interview_list(p_Vid->p_Dpb_layer[1], (PictureStructure)currSlice->structure, 0, currSlice->fs_listinterview0, 
+				&currSlice->listinterviewidx0, currPOC, curr_view_id, anchor_pic_flag);
+      gen_pic_list_from_frame_interview_list(currSlice->structure, currSlice->fs_listinterview0, currSlice->listinterviewidx0, 
+				currSlice->listX[0], &currSlice->listXsize[0]);
     }
   }
 #endif
@@ -30611,7 +30675,7 @@ void init_lists_b_slice_mvc(Slice *currSlice) {
   FrameStore **fs_list1;
   FrameStore **fs_listlt;
 
-  int currPOC=currSlice->ThisPOC;
+  PocType currPOC=currSlice->ThisPOC;
   bool anchor_pic_flag=currSlice->anchor_pic_flag;
 
   currSlice->listinterviewidx0=0;
@@ -30817,7 +30881,8 @@ void init_lists_b_slice_mvc(Slice *currSlice) {
  *
  ************************************************************************
  */
-static void reorder_interview(VideoParameters *p_Vid, Slice *currSlice, StorablePicture **RefPicListX, int16_t num_ref_idx_lX_active_minus1, int *refIdxLX, int targetViewID, int currPOC, int listidx) {
+static void reorder_interview(VideoParameters *p_Vid, Slice *currSlice, StorablePicture **RefPicListX, int16_t num_ref_idx_lX_active_minus1, 
+															int *refIdxLX, int targetViewID, PocType currPOC, int listidx) {
   int cIdx, nIdx;
   StorablePicture *picLX;
 
@@ -30845,7 +30910,8 @@ static void reorder_interview(VideoParameters *p_Vid, Slice *currSlice, Storable
  *
  ************************************************************************
  */
-void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, int **non_anchor_ref, int view_id, bool anchor_pic_flag, int currPOC, int listidx) {
+void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, int **non_anchor_ref, 
+															int8_t view_id, bool anchor_pic_flag, PocType currPOC, int listidx) {
   VideoParameters *p_Vid=currSlice->p_Vid;
   int *modification_of_pic_nums_idc=currSlice->modification_of_pic_nums_idc[cur_list];
   int *abs_diff_pic_num_minus1=currSlice->abs_diff_pic_num_minus1[cur_list];
@@ -30858,7 +30924,7 @@ void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, 
   int picViewIdxLX, targetViewID;
   int refIdxLX=0;
   int maxViewIdx =0;
-  int curr_VOIdx=-1;
+  int8_t curr_VOIdx=-1;
   int picViewIdxLXPred=-1;
 
   if(currSlice->structure==FRAME) {
@@ -30932,14 +30998,13 @@ void reorder_ref_pic_list_mvc(Slice *currSlice, int cur_list, int **anchor_ref, 
   currSlice->listXsize[cur_list]=(int8_t)(num_ref_idx_lX_active_minus1+1);
 	}
 
-void reorder_lists_mvc(Slice*currSlice, int currPOC) {
+void reorder_lists_mvc(Slice*currSlice, PocType currPOC) {
   VideoParameters *p_Vid=currSlice->p_Vid;
 
   if((currSlice->slice_type != I_SLICE) && (currSlice->slice_type != SI_SLICE)) {
     if(currSlice->ref_pic_list_reordering_flag[LIST_0]) {
       reorder_ref_pic_list_mvc(currSlice, LIST_0,
-        p_Vid->active_subset_sps->anchor_ref_l0,
-        p_Vid->active_subset_sps->non_anchor_ref_l0,
+        p_Vid->active_subset_sps->anchor_ref_l0,p_Vid->active_subset_sps->non_anchor_ref_l0,
         currSlice->view_id, currSlice->anchor_pic_flag, currPOC, 0);
 		  }
     if(p_Vid->no_reference_picture == currSlice->listX[0][currSlice->num_ref_idx_active[LIST_0]-1]) {
@@ -30954,8 +31019,7 @@ void reorder_lists_mvc(Slice*currSlice, int currPOC) {
   if(currSlice->slice_type == B_SLICE) {
     if(currSlice->ref_pic_list_reordering_flag[LIST_1]) {
       reorder_ref_pic_list_mvc(currSlice, LIST_1,
-        p_Vid->active_subset_sps->anchor_ref_l1,
-        p_Vid->active_subset_sps->non_anchor_ref_l1,
+        p_Vid->active_subset_sps->anchor_ref_l1, p_Vid->active_subset_sps->non_anchor_ref_l1,
         currSlice->view_id, currSlice->anchor_pic_flag, currPOC, 1);
 			}
     if(p_Vid->no_reference_picture == currSlice->listX[1][currSlice->num_ref_idx_active[LIST_1]-1]) {
@@ -31015,7 +31079,7 @@ static void update_direct_mv_info_temporal(Macroblock *currMB) {
   VideoParameters *p_Vid=currMB->p_Vid;
   Slice *currSlice=currMB->p_Slice;
   int j,k;
-  int8_t partmode = (currMB->mb_type == P8x8) ? 4 : currMB->mb_type;
+  int8_t partmode = currMB->mb_type == P8x8 ? 4 : currMB->mb_type;
   uint8_t step_h0 =BLOCK_STEP[partmode][0];
   uint8_t step_v0 =BLOCK_STEP[partmode][1];
 
@@ -31059,10 +31123,10 @@ static void update_direct_mv_info_temporal(Macroblock *currMB) {
             else if(!p_Vid->active_sps->frame_mbs_only_flag && !currSlice->field_pic_flag && currSlice->listX[LIST_1][0]->iCodingType != FRAME_CODING) {
               if(iabs(dec_picture->poc-list1[0]->bottom_field->poc)> iabs(dec_picture->poc -list1[0]->top_field->poc))
                 colocated=p_Vid->active_sps->direct_8x8_inference_flag ? 
-                  &list1[0]->top_field->mv_info[RSD(currMB->block_y_aff+j0)>>1][RSD(i0)] : &list1[0]->top_field->mv_info[(currMB->block_y_aff+j0)>>1][i0];
+                  &list1[0]->top_field->mv_info[RSD(currMB->block_y_aff+j0) >> 1][RSD(i0)] : &list1[0]->top_field->mv_info[(currMB->block_y_aff+j0)>>1][i0];
               else
                 colocated=p_Vid->active_sps->direct_8x8_inference_flag ? 
-                  &list1[0]->bottom_field->mv_info[RSD(currMB->block_y_aff+j0)>>1][RSD(i0)] : &list1[0]->bottom_field->mv_info[(currMB->block_y_aff+j0)>>1][i0];
+                  &list1[0]->bottom_field->mv_info[RSD(currMB->block_y_aff+j0) >> 1][RSD(i0)] : &list1[0]->bottom_field->mv_info[(currMB->block_y_aff+j0)>>1][i0];
 		          }
             else if(!p_Vid->active_sps->frame_mbs_only_flag && currSlice->field_pic_flag && currSlice->structure!=list1[0]->structure && list1[0]->coded_frame) {
               if(currSlice->structure == TOP_FIELD)
@@ -31136,10 +31200,10 @@ static void update_direct_mv_info_temporal(Macroblock *currMB) {
                         (currSlice->listX[LIST_1][0]->iCodingType==FIELD_CODING)))
                         if(iabs(dec_picture->poc-currSlice->listX[LIST_1+4][0]->poc) > iabs(dec_picture->poc -currSlice->listX[LIST_1+2][0]->poc))
                           colocated=p_Vid->active_sps->direct_8x8_inference_flag ? 
-                            &currSlice->listX[LIST_1+2][0]->mv_info[RSD(j6)>>1][RSD(i4)] : &currSlice->listX[LIST_1+2][0]->mv_info[j6>>1][i4];
+                            &currSlice->listX[LIST_1+2][0]->mv_info[RSD(j6) >> 1][RSD(i4)] : &currSlice->listX[LIST_1+2][0]->mv_info[j6 >> 1][i4];
                         else
                           colocated=p_Vid->active_sps->direct_8x8_inference_flag ? 
-                            &currSlice->listX[LIST_1+4][0]->mv_info[RSD(j6)>>1][RSD(i4)] : &currSlice->listX[LIST_1+4][0]->mv_info[j6>>1][i4];
+                            &currSlice->listX[LIST_1+4][0]->mv_info[RSD(j6) >> 1][RSD(i4)] : &currSlice->listX[LIST_1+4][0]->mv_info[j6 >> 1][i4];
 											}
                     else if(/*!currSlice->mb_aff_frame_flag &&*/ !p_Vid->active_sps->frame_mbs_only_flag && !currSlice->field_pic_flag && currSlice->listX[LIST_1][0]->iCodingType!=FRAME_CODING) {
                       if(iabs(dec_picture->poc-list1[0]->bottom_field->poc) > iabs(dec_picture->poc -list1[0]->top_field->poc))
@@ -31168,8 +31232,8 @@ static void update_direct_mv_info_temporal(Macroblock *currMB) {
 
                     mv_scale=currSlice->mvscale[LIST_0+list_offset][mapped_idx];
 
-                    mv_info->ref_idx [LIST_0]=(int8_t)mapped_idx;
-                    mv_info->ref_idx [LIST_1]=0;
+                    mv_info->ref_idx[LIST_0]=(int8_t)mapped_idx;
+                    mv_info->ref_idx[LIST_1]=0;
 
                     mv_info->ref_pic[LIST_0]=list0[mapped_idx];
                     mv_info->ref_pic[LIST_1]=list1[0];
@@ -31320,7 +31384,7 @@ static void update_direct_mv_info_spatial_8x8(Macroblock *currMB) {
 
         if(is_not_moving && (l0_rFrame == 0 || l1_rFrame == 0)) {            
           if(l1_rFrame == -1) {
-            if  (l0_rFrame == 0) {
+            if(l0_rFrame == 0) {
               mv_info->ref_pic[LIST_0]=list0[0];
               mv_info->ref_pic[LIST_1]=list1[0];
               mv_info->mv[LIST_0]=zero_mv;
@@ -31443,8 +31507,8 @@ static void update_direct_mv_info_spatial_4x4(Macroblock *currMB) {
       if(currMB->b8mode[k] == 0) {
 
         i=2*(k & 0x01);
-        for(j=2*(k >> 1); j<2*(k >> 1)+2;j++) {
-          j4=currMB->block_y    +j;
+        for(j=2*(k >> 1); j<2*(k >> 1)+2; j++) {
+          j4=currMB->block_y+j;
 
           for(i4=currMB->block_x+i; i4<currMB->block_x+i+2; ++i4) {
             PicMotionParams *mv_info=&dec_picture->mv_info[j4][i4];
@@ -31499,11 +31563,10 @@ static void update_direct_mv_info_spatial_4x4(Macroblock *currMB) {
                   mv_info->mv[LIST_0]=pmvl0;
                   mv_info->ref_idx[LIST_0]=l0_rFrame;
 	                }
-
-                if  (l1_rFrame == 0 && ((is_not_moving))) {
+                if(l1_rFrame == 0 && ((is_not_moving))) {
                   mv_info->ref_pic[LIST_1]=list1[0];
                   mv_info->mv[LIST_1]=zero_mv;
-                  mv_info->ref_idx[LIST_1]   =0;
+                  mv_info->ref_idx[LIST_1]=0;
 									}
                 else {
                   mv_info->ref_pic[LIST_1]=list1[(int16_t)l1_rFrame];
@@ -32592,7 +32655,7 @@ void intra_cr_decoding(Macroblock *currMB, int8_t yuv) {
     curUV=dec_picture->imgUV[uv];
     if(currMB->is_lossless) {
       if(currMB->c_ipred_mode == VERT_PRED_8 || currMB->c_ipred_mode == HOR_PRED_8)
-        Inv_Residual_trans_Chroma(currMB, uv) ;
+        Inv_Residual_trans_Chroma(currMB, uv);
       else {
         for(j=0; j<p_Vid->mb_cr_size_y; j++)
           for(i=0; i<p_Vid->mb_cr_size_x; i++)
@@ -32849,8 +32912,8 @@ static void perform_mc_single(Macroblock *currMB, ColorPlane pl, StorablePicture
   BLOCK_COORD j4 =currMB->block_y+j;
   ColorFormat chroma_format_idc=dec_picture->chroma_format_idc;
   //===== Single List Prediction =====
-  PIXEL_COORD ioff=(i << 2);
-  PIXEL_COORD joff=(j << 2);         
+  PIXEL_COORD ioff=i << 2;
+  PIXEL_COORD joff=j << 2;         
   PicMotionParams *mv_info=&dec_picture->mv_info[j4][i4];
   MotionVector *mv_array=&mv_info->mv[pred_dir];
   int16_t ref_idx= mv_info->ref_idx[pred_dir];  
@@ -33489,7 +33552,7 @@ static void img2buf_normal(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXE
     size=sizeof(imgpel);
     // clear buffer
     for(j=0; j<theight; j++)
-      memset(buf+j*iOutStride, 0, (twidth*symbol_size_in_bytes));
+      memset(buf+j*iOutStride, 0, twidth*symbol_size_in_bytes);
 		}
   else 
     size=symbol_size_in_bytes;
@@ -33518,7 +33581,7 @@ static void img2buf_normal(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXE
         cur_pixel=imgX[j];
         pDst=buf +j*iOutStride;
         for(i=0; i<size_x; i++)
-          *pDst++=(uint8_t)*(cur_pixel++);
+          *pDst++=(uint8_t)*cur_pixel++;
       }
     }
 #endif
@@ -33551,12 +33614,11 @@ static void img2buf_normal(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXE
  */
 static void img2buf_byte(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, uint8_t symbol_size_in_bytes, 
 												PIXEL_COORD crop_left, PIXEL_COORD crop_right, PIXEL_COORD crop_top, PIXEL_COORD crop_bottom, PIXEL_COORD iOutStride) {
-  int twidth =size_x-crop_left-crop_right;
-  int theight=size_y-crop_top-crop_bottom;
+  PIXEL_COORD twidth =size_x-crop_left-crop_right;
+  PIXEL_COORD theight=size_y-crop_top-crop_bottom;
   imgpel **img=&imgX[crop_top];
-  PIXEL_COORD i;
 
-  for(i=0; i<theight; i++) {
+  while(theight--) {
     memcpy(buf, *img++ +crop_left, twidth);
     buf += iOutStride;
 		}
@@ -33777,7 +33839,7 @@ void write_picture(VideoParameters *p_Vid, StorablePicture *p, int p_out, int re
 
 #endif
 
-static void allocate_p_dec_pic(VideoParameters *p_Vid, DecodedPicList *pDecPic, StorablePicture *p, PIXEL_COORD iLumaSize, PIXEL_COORD iFrameSize, BLOCK_COORD iLumaSizeX, BLOCK_COORD iLumaSizeY, 
+static void allocate_p_dec_pic(VideoParameters *p_Vid, DecodedPicList *pDecPic, StorablePicture *p, uint32_t iLumaSize, uint32_t iFrameSize, BLOCK_COORD iLumaSizeX, BLOCK_COORD iLumaSizeY, 
 															 BLOCK_COORD iChromaSizeX, BLOCK_COORD iChromaSizeY) {
   uint8_t symbol_size_in_bytes= (p_Vid->pic_unit_bitsize_on_disk+7) >> 3;
   
@@ -33786,7 +33848,7 @@ static void allocate_p_dec_pic(VideoParameters *p_Vid, DecodedPicList *pDecPic, 
   pDecPic->iBufSize=iFrameSize;
   pDecPic->pY=(uint8_t*)sse_malloc(pDecPic->iBufSize);
   pDecPic->pU=pDecPic->pY+iLumaSize;
-  pDecPic->pV=pDecPic->pU+((iFrameSize-iLumaSize) >> 1);
+  pDecPic->pV=pDecPic->pU+(iFrameSize-iLumaSize)/2;
   //init;
   pDecPic->iYUVFormat=p->chroma_format_idc;
   pDecPic->iYUVStorageFormat=0;
@@ -33825,7 +33887,6 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
   BLOCK_COORD iLumaSizeX, iLumaSizeY;
   BLOCK_COORD iChromaSizeX, iChromaSizeY;
 
-
   int ret;
 	uint32_t outptr=0;
 
@@ -33852,12 +33913,12 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 		}
 	else
 		crop_left=crop_right=crop_top=crop_bottom=0;
-	iChromaSizeX= p->size_x_cr- p->frame_crop_left_offset -p->frame_crop_right_offset;
+	iChromaSizeX=p->size_x_cr- p->frame_crop_left_offset -p->frame_crop_right_offset;
 	iChromaSizeY=p->size_y_cr-(2-p->frame_mbs_only_flag)*p->frame_crop_top_offset -(2-p->frame_mbs_only_flag)*p->frame_crop_bottom_offset;
 	iLumaSizeX=p->size_x-crop_left-crop_right;
 	iLumaSizeY=p->size_y-crop_top-crop_bottom;
-	iLumaSize =iLumaSizeX*iLumaSizeY*symbol_size_in_bytes;
-	iFrameSize=(iLumaSizeX*iLumaSizeY+2*(iChromaSizeX*iChromaSizeY))*symbol_size_in_bytes; //iLumaSize*iPicSizeTab[p->chroma_format_idc]/2;
+	iLumaSize =((uint32_t)iLumaSizeX)*iLumaSizeY*symbol_size_in_bytes;
+	iFrameSize=(((uint32_t)iLumaSizeX)*iLumaSizeY+2*(((uint32_t)iChromaSizeX)*iChromaSizeY))*symbol_size_in_bytes; //iLumaSize*iPicSizeTab[p->chroma_format_idc]/2;
 
 	//printf ("write frame size: %dx%d\n", p->size_x-crop_left-crop_right,p->size_y-crop_top-crop_bottom);
 
@@ -33871,6 +33932,7 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 
 	if(!pDecPic->pY || pDecPic->iBufSize<iFrameSize)
 		allocate_p_dec_pic(p_Vid, pDecPic, p, iLumaSize, iFrameSize, iLumaSizeX, iLumaSizeY, iChromaSizeX, iChromaSizeY);
+
 #if MVC_EXTENSION_ENABLE
 	{
 		pDecPic->bValid=1;
@@ -33892,7 +33954,7 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 		imgpel **pluma=p->imgY;
 		imgpel **pcb=p->imgUV[0];
 		imgpel **pcr=p->imgUV[1];
-		uint8_t *bgra=p_Inp->outbuf+h*w*3;
+		uint8_t *bgra=p_Inp->outbuf+((uint32_t)h)*w*3;
 		outptr=bgra-p_Inp->outbuf;
 		uint8_t *luma=*pluma;
 		uint8_t *cb=*pcb;
@@ -33907,7 +33969,7 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 			int16_t e=*cr-128;
 
 //https://fourcc.org/fccyvrgb.php  o usare array come in PIR_CAM
-//	B = 1.164(Y - 16)                   + 2.018(U - 128)
+//	B = 1.164(Y - 16)                  + 2.018(U - 128)
 //	G = 1.164(Y - 16) - 0.813(V - 128) - 0.391(U - 128)
 //	R = 1.164(Y - 16) + 1.596(V - 128)
 			uint8_t r=(uint16_t)CLIP1((298*c        +409*e+128) >> 8);
@@ -33943,16 +34005,17 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 				cr=*++pcr;
 				}
 			}
-		}
+		}		// RGB
 	else {
 		if(rgb_output) {
-			buf=(uint8_t*)H264MALLOC(p->size_x*p->size_y*symbol_size_in_bytes);
+			buf=(uint8_t*)H264MALLOC(((uint32_t)p->size_x)*p->size_y*symbol_size_in_bytes);
 			crop_left  =p->frame_crop_left_offset;
 			crop_right =p->frame_crop_right_offset;
 			crop_top   =(2-p->frame_mbs_only_flag)*p->frame_crop_top_offset;
 			crop_bottom=(2-p->frame_mbs_only_flag)*p->frame_crop_bottom_offset;
 
-			p_Vid->img2buf(p->imgUV[1], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, crop_top, crop_bottom, pDecPic->iYBufStride);
+			p_Vid->img2buf(p->imgUV[1], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, 
+				crop_top, crop_bottom, pDecPic->iYBufStride);
 			if(p_out>0) {
 				ret=_lwrite(p_out, (const char*)buf,(p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
 				if(ret != ((p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes))
@@ -33976,15 +34039,16 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 			}
 
 		buf= pDecPic->bValid==1 ? pDecPic->pY : pDecPic->pY+iLumaSizeX*symbol_size_in_bytes;
-		p_Vid->img2buf(p->imgY, buf, p->size_x, p->size_y, symbol_size_in_bytes, crop_left, crop_right, crop_top, crop_bottom, pDecPic->iYBufStride);
+		p_Vid->img2buf(p->imgY, buf, p->size_x, p->size_y, symbol_size_in_bytes, crop_left, crop_right, 
+			crop_top, crop_bottom, pDecPic->iYBufStride);
 		if(p_out>0) {
 			ret=_lwrite(p_out, (const char*)buf, (p->size_y-crop_bottom-crop_top)*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes);
 			if(ret != ((p->size_y-crop_bottom-crop_top)*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes))
 				error("write_out_picture: error writing to YUV file", 500);
 			}
 		else {
-			memcpy(p_Inp->outbuf+outptr,buf,(p->size_y-crop_bottom-crop_top)*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes);
-			outptr += (p->size_y-crop_bottom-crop_top)*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes;
+			memcpy(p_Inp->outbuf+outptr,buf,((uint32_t)(p->size_y-crop_bottom-crop_top))*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes);
+			outptr += ((uint32_t)(p->size_y-crop_bottom-crop_top))*(p->size_x-crop_right-crop_left)*symbol_size_in_bytes;
 			}
 
 		if(p->chroma_format_idc != YUV400) {
@@ -33993,28 +34057,30 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 			crop_top   =(2-p->frame_mbs_only_flag)*p->frame_crop_top_offset;
 			crop_bottom=(2-p->frame_mbs_only_flag)*p->frame_crop_bottom_offset;
 			buf= pDecPic->bValid==1 ? pDecPic->pU : pDecPic->pU+iChromaSizeX*symbol_size_in_bytes;
-			p_Vid->img2buf(p->imgUV[0], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, crop_top, crop_bottom, pDecPic->iUVBufStride);
+			p_Vid->img2buf(p->imgUV[0], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, 
+				crop_top, crop_bottom, pDecPic->iUVBufStride);
 			if(p_out>0) {
 				ret=_lwrite(p_out,(const char*)buf, (p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
 				if(ret != ((p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes))
 					error("write_out_picture: error writing to YUV file", 500);
 				}
 			else {
-				memcpy(p_Inp->outbuf+outptr,buf,(p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
-				outptr += (p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes;
+				memcpy(p_Inp->outbuf+outptr,buf,((uint32_t)(p->size_y_cr-crop_bottom-crop_top))*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
+				outptr += ((uint32_t)(p->size_y_cr-crop_bottom-crop_top))*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes;
 				}
 
 			if(!rgb_output) {
 				buf= pDecPic->bValid==1 ? pDecPic->pV : pDecPic->pV+iChromaSizeX*symbol_size_in_bytes;
-				p_Vid->img2buf(p->imgUV[1], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, crop_top, crop_bottom, pDecPic->iUVBufStride);
+				p_Vid->img2buf(p->imgUV[1], buf, p->size_x_cr, p->size_y_cr, symbol_size_in_bytes, crop_left, crop_right, 
+					crop_top, crop_bottom, pDecPic->iUVBufStride);
 				if(p_out>0) {
 					ret=_lwrite(p_out,(const char*)buf, (p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
 					if(ret != ((p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes))
 						error("write_out_picture: error writing to YUV file", 500);
 					}
 				else {
-					memcpy(p_Inp->outbuf+outptr,buf,(p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
-					outptr += (p->size_y_cr-crop_bottom-crop_top)*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes;
+					memcpy(p_Inp->outbuf+outptr,buf,((uint32_t)(p->size_y_cr-crop_bottom-crop_top))*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes);
+					outptr += ((uint32_t)(p->size_y_cr-crop_bottom-crop_top))*(p->size_x_cr-crop_right-crop_left)*symbol_size_in_bytes;
 					}
 				}
 			}
@@ -34030,8 +34096,9 @@ static void write_out_picture(VideoParameters *p_Vid, StorablePicture *p, int p_
 					}
 
 				// fake out U=V=128 to make a YUV 4:2:0 stream
-				buf=(uint8_t*)H264MALLOC(p->size_x*p->size_y*symbol_size_in_bytes);
-				p_Vid->img2buf(p->imgUV[0], buf, p->size_x/2, p->size_y/2, symbol_size_in_bytes, crop_left/2, crop_right/2, crop_top/2, crop_bottom/2, pDecPic->iYBufStride/2);
+				buf=(uint8_t*)H264MALLOC(((uint32_t)p->size_x)*p->size_y*symbol_size_in_bytes);
+				p_Vid->img2buf(p->imgUV[0], buf, p->size_x/2, p->size_y/2, symbol_size_in_bytes, crop_left/2, crop_right/2, 
+					crop_top/2, crop_bottom/2, pDecPic->iYBufStride/2);
 				if(p_out>0) {
 					ret=_lwrite(p_out,(const char*)buf, symbol_size_in_bytes*(p->size_y-crop_bottom-crop_top)/2*(p->size_x-crop_right-crop_left)/2);
 					if(ret != (symbol_size_in_bytes*(p->size_y-crop_bottom-crop_top)/2*(p->size_x-crop_right-crop_left)/2))
@@ -34064,7 +34131,7 @@ bad_image:
     pDecPic->bValid=0;
 	if(p_out==0)
 		p_Dec->p_Inp->outbufSize=outptr;
-
+skippa:
 	sse_free(pDecPic->pY);			// NON c'era! ma senza memory leak PD PM cancer programmers of shit (in teoria viene pulita la prossima volta ma...
 	pDecPic->pY=NULL;
   //  fsync(p_out);
@@ -34145,13 +34212,15 @@ void clear_picture(VideoParameters *p_Vid, StorablePicture *p) {
  */
 void write_unpaired_field(VideoParameters *p_Vid, FrameStore* fs, int p_out) {
   StorablePicture *p;
-  assert (fs->is_used<3);
+
+  assert(fs->is_used<3);
 
   if(fs->is_used & 0x01) {
     // we have a top field
     // construct an empty bottom field
     p=fs->top_field;
     fs->bottom_field=alloc_storable_picture(p_Vid, BOTTOM_FIELD, p->size_x, 2*p->size_y, p->size_x_cr, 2*p->size_y_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,fs->bottom_field);
     fs->bottom_field->chroma_format_idc=p->chroma_format_idc;
     clear_picture(p_Vid, fs->bottom_field);
     dpb_combine_field_yuv(p_Vid, fs);
@@ -34166,6 +34235,7 @@ void write_unpaired_field(VideoParameters *p_Vid, FrameStore* fs, int p_out) {
     // construct an empty top field
     p=fs->bottom_field;
     fs->top_field=alloc_storable_picture(p_Vid, TOP_FIELD, p->size_x, 2*p->size_y, p->size_x_cr, 2*p->size_y_cr, TRUE);
+//    theApp.FileSpool->print(CLogFile::flagInfo,"alloc_storable_picture %u %08X",(uint16_t)__LINE__,fs->top_field);
     fs->top_field->chroma_format_idc=p->chroma_format_idc;
     clear_picture(p_Vid, fs->top_field);
     fs->top_field->frame_cropping_flag=fs->bottom_field->frame_cropping_flag;
@@ -34179,7 +34249,7 @@ void write_unpaired_field(VideoParameters *p_Vid, FrameStore* fs, int p_out) {
 #if MVC_EXTENSION_ENABLE
     fs->frame->view_id=fs->view_id;
 #endif
-    write_picture (p_Vid, fs->frame, p_out, BOTTOM_FIELD);
+    write_picture(p_Vid, fs->frame, p_out, BOTTOM_FIELD);
 		}
 
   fs->is_used=3;
@@ -34259,8 +34329,7 @@ void direct_output(VideoParameters *p_Vid, StorablePicture *p, int p_out) {
 
 	switch(p->structure) {
 		case FRAME:
-			// we have a frame (or complementary field pair)
-			// so output it directly
+			// we have a frame (or complementary field pair) so output it directly
 			flush_direct_output(p_Vid, p_out);
 			write_picture(p_Vid, p, p_out, FRAME);
 			calculate_frame_no(p_Vid, p);
@@ -34317,7 +34386,7 @@ void Scaling_List(int16_t *scalingList, int sizeOfScalingList, bool *UseDefaultS
   nextScale=8;
 
   for(j=0; j<sizeOfScalingList; j++) {
-    scanj = (sizeOfScalingList==16) ? ZZ_SCAN[j] : ZZ_SCAN8[j];
+    scanj = sizeOfScalingList==16 ? ZZ_SCAN[j] : ZZ_SCAN8[j];
 
     if(nextScale!=0) {
       delta_scale=read_se_v(  "   : delta_sl   "                           , s, &p_Dec->UsedBits);
@@ -34346,7 +34415,7 @@ int InterpretSPS(VideoParameters *p_Vid, DataPartition *p, seq_parameter_set_rbs
 
   sps->profile_idc=(ProfileIDC)read_u_v(8, "SPS: profile_idc"                           , s, &p_Dec->UsedBits);
 
-  if((sps->profile_idc!=BASELINE      ) &&
+  if((sps->profile_idc!=BASELINE     ) &&
     (sps->profile_idc!=MAIN          ) &&
     (sps->profile_idc!=EXTENDED      ) &&
     (sps->profile_idc!=FREXT_HP      ) && (sps->profile_idc!=FREXT_Hi10P ) &&
@@ -35025,7 +35094,7 @@ void reset_format_info(seq_parameter_set_rbsp_t *sps, VideoParameters *p_Vid, Fr
 	}
 
 static void setup_layer_info(VideoParameters *p_Vid, seq_parameter_set_rbsp_t *sps, LayerParameters *p_Lps) {
-  int layer_id=p_Lps->layer_id;
+  uint8_t layer_id=p_Lps->layer_id;
 
   p_Lps->p_Vid=p_Vid;
   p_Lps->p_Cps=p_Vid->p_EncodePar[layer_id];
@@ -35168,8 +35237,7 @@ void activate_sps(VideoParameters *p_Vid, seq_parameter_set_rbsp_t *sps) {
   InputParameters *p_Inp=p_Vid->p_Inp;  
 
   if(p_Vid->active_sps != sps) {
-    if(p_Vid->dec_picture) {
-      // this may only happen on slice loss
+    if(p_Vid->dec_picture) {      // this may only happen on slice loss
       exit_picture(p_Vid, &p_Vid->dec_picture);
 			}
     p_Vid->active_sps=sps;
@@ -35341,7 +35409,7 @@ void seq_parameter_set_mvc_extension(subset_seq_parameter_set_rbsp_t *subset_sps
   subset_sps->num_views_minus1=read_ue_v("num_views_minus1", s, &p_Dec->UsedBits);
   num_views=1+subset_sps->num_views_minus1;
   if(num_views >0) {
-    if(!(subset_sps->view_id =(int*)H264CALLOC(num_views,sizeof(int))))
+    if(!(subset_sps->view_id =(int8_t*)H264CALLOC(num_views,sizeof(int8_t))))
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->view_id");
     if(!(subset_sps->num_anchor_refs_l0 =(int*)H264CALLOC(num_views,sizeof(int))))
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->num_anchor_refs_l0");
@@ -35406,7 +35474,7 @@ void seq_parameter_set_mvc_extension(subset_seq_parameter_set_rbsp_t *subset_sps
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_temporal_id");
     if(!(subset_sps->applicable_op_num_target_views_minus1 =(int**)H264CALLOC(i,sizeof(int*))))
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_num_target_views_minus1");
-    if(!(subset_sps->applicable_op_target_view_id =(int***)H264CALLOC(i,sizeof(int**))))
+    if(!(subset_sps->applicable_op_target_view_id =(int8_t***)H264CALLOC(i,sizeof(int8_t**))))
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_target_view_id");
     if(!(subset_sps->applicable_op_num_views_minus1 =(int**)H264CALLOC(i,sizeof(int*))))
       no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_num_views_minus1");
@@ -35419,7 +35487,7 @@ void seq_parameter_set_mvc_extension(subset_seq_parameter_set_rbsp_t *subset_sps
         no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_temporal_id[i]");
       if(!(subset_sps->applicable_op_num_target_views_minus1[i] =(int*)H264CALLOC(1+subset_sps->num_applicable_ops_minus1[i],sizeof(int))))
         no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_num_target_views_minus1[i]");
-      if(!(subset_sps->applicable_op_target_view_id[i] =(int**)H264CALLOC(1+subset_sps->num_applicable_ops_minus1[i],sizeof(int *))))
+      if(!(subset_sps->applicable_op_target_view_id[i] =(int8_t**)H264CALLOC(1+subset_sps->num_applicable_ops_minus1[i],sizeof(int8_t*))))
         no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_target_view_id[i]");
       if(!(subset_sps->applicable_op_num_views_minus1[i] =(int*)H264CALLOC(1+subset_sps->num_applicable_ops_minus1[i],sizeof(int))))
         no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_num_views_minus1[i]");
@@ -35429,7 +35497,7 @@ void seq_parameter_set_mvc_extension(subset_seq_parameter_set_rbsp_t *subset_sps
         subset_sps->applicable_op_temporal_id[i][j]=read_u_v(3, "applicable_op_temporal_id", s, &p_Dec->UsedBits);
         subset_sps->applicable_op_num_target_views_minus1[i][j]=read_ue_v("applicable_op_num_target_views_minus1", s, &p_Dec->UsedBits);
         if(subset_sps->applicable_op_num_target_views_minus1[i][j]>=0) {
-          if(!(subset_sps->applicable_op_target_view_id[i][j] =(int*)H264CALLOC(1+subset_sps->applicable_op_num_target_views_minus1[i][j],sizeof(int))))
+          if(!(subset_sps->applicable_op_target_view_id[i][j] =(int8_t*)H264CALLOC(1+subset_sps->applicable_op_num_target_views_minus1[i][j],sizeof(int8_t))))
             no_mem_exit("init_subset_seq_parameter_set: subset_sps->applicable_op_target_view_id[i][j]");
           for(k=0; k <= subset_sps->applicable_op_num_target_views_minus1[i][j]; k++)
             subset_sps->applicable_op_target_view_id[i][j][k]=read_ue_v("applicable_op_target_view_id", s, &p_Dec->UsedBits);
@@ -35474,7 +35542,7 @@ void mvc_vui_parameters_extension(MVCVUI_t *pMVCVUI, Bitstream *s) {
   if(iNumOps>0) {
     MemAlloc1D((void **)&pMVCVUI->temporal_id,sizeof(pMVCVUI->temporal_id[0]), iNumOps);
     MemAlloc1D((void **)&pMVCVUI->num_target_output_views_minus1,sizeof(pMVCVUI->num_target_output_views_minus1[0]), iNumOps);
-    if(!(pMVCVUI->view_id =(int**)H264CALLOC(iNumOps,sizeof(int*))))
+    if(!(pMVCVUI->view_id =(int8_t**)H264CALLOC(iNumOps,sizeof(int8_t*))))
       no_mem_exit("mvc_vui_parameters_extension: pMVCVUI->view_id");
     MemAlloc1D((void **)&pMVCVUI->timing_info_present_flag,sizeof(pMVCVUI->timing_info_present_flag[0]), iNumOps);
     MemAlloc1D((void **)&pMVCVUI->num_units_in_tick,sizeof(pMVCVUI->num_units_in_tick[0]), iNumOps);
@@ -36054,7 +36122,7 @@ static void read_comp_coeff_4x4_smb_CABAC(Macroblock *currMB, SyntaxElement *cur
           i0=*pos_scan_4x4++;
           j0=*pos_scan_4x4++;
 
-          *cbp_blk |= i64_power2(j +(i >> 2)) ;
+          *cbp_blk |= i64_power2(j +(i >> 2));
           //cof[j+j0][i+i0]= rshift_rnd_sf((level*InvLevelScale4x4[j0][i0]) << qp_per, 4);
           cof[j+j0][i+i0]= level;
           //currSlice->fcf[pl][j+j0][i+i0]= level;
@@ -36659,7 +36727,7 @@ static void read_CBP_and_coeffs_from_NAL_CABAC_420(Macroblock *currMB) {
         level=currSE.value1;
 
         if(level != 0) {
-          s_cbp->blk |= 0xf0000 <<(ll<<1) ;
+          s_cbp->blk |= 0xf0000 <<(ll<<1);
           coef_ctr += currSE.value2+1;
 
           // Bug: currSlice->cofu has only 4 entries, hence coef_ctr MUST be <4(which is
@@ -37472,7 +37540,7 @@ static void read_CBP_and_coeffs_from_NAL_CABAC_422(Macroblock *currMB) {
             level=currSE.value1;
 
             if(level != 0) {
-              s_cbp->blk |= ((INT64T)0xff0000) <<(ll<<2) ;
+              s_cbp->blk |= ((INT64T)0xff0000) << (ll << 2);
               coef_ctr += currSE.value2+1;
               assert(coef_ctr<p_Vid->num_cdc_coeff);
               i0=SCAN_YUV422[coef_ctr][0];
@@ -39982,7 +40050,7 @@ void InterpretSEIMessage(uint8_t* msg, int16_t size, VideoParameters *p_Vid, Sli
 
     offset += payload_size;
 		if(offset>size)
-			break;			//GD dire, v.sotto
+			break;			//GD direi, v.sotto
 
 		} while(msg[offset] != 0x80);    // more_rbsp_data()  msg[offset] != 0x80
 
@@ -41862,9 +41930,8 @@ void interpret_post_filter_hints_info(uint8_t *payload, int16_t size, VideoParam
 
   for(color_component=0; color_component<3; color_component++)
     for(cy=0; cy<filter_hint_size_y; cy++) {
-      for(cx=0; cx<filter_hint_size_x; cx++) {
+      for(cx=0; cx<filter_hint_size_x; cx++)
         filter_hint[color_component][cy][cx]=read_se_v("SEI: filter_hint", buf, &p_Dec->UsedBits); // interpret post-filter hint SEI here
-				}
 			}
 
   additional_extension_flag=read_u_1("SEI: additional_extension_flag", buf, &p_Dec->UsedBits); // interpret post-filter hint SEI here
@@ -42234,7 +42301,7 @@ void linfo_se(int len,  int info, int8_t *value1, int *dummy) {
   unsigned int n =((unsigned int)1 << (len >> 1)) + (unsigned int)info-1;
 
   *value1 =(n+1) >> 1;
-  if((n & 0x01) == 0)                           // lsb is signed bit
+  if(!(n & 0x01))                           // lsb is signed bit
     *value1=-*value1;
 	}
 
@@ -42323,7 +42390,7 @@ void linfo_levrun_inter(int len, int info, int8_t *level, int *irun) {
   else {                                 // if len>9, skip using the array
     *irun  =(info & 0x1e) >> 1;
     *level=LEVRUN1[*irun] +(info >> 5) +(1 <<((len >> 1)-5));
-    if((info & 0x01) == 1)
+    if(info & 0x01)
       *level=-*level;
 		}
   
@@ -42347,13 +42414,13 @@ void linfo_levrun_c2x2(int len, int info, int8_t *level, int *irun) {
     int inf =info >> 1;
     *level=NTAB3[l2][inf][0];
     *irun =NTAB3[l2][inf][1];
-    if((info & 0x01) == 1)
+    if(info & 0x01)
       *level=-*level;                 // make sign
 	  }
   else {                                 // if len>5, skip using the array
     *irun =(info & 0x06) >> 1;
     *level=LEVRUN3[*irun] +(info >> 3) +(1 <<((len >> 1)-3));
-    if((info & 0x01) == 1)
+    if(info & 0x01)
       *level=-*level;
 		}
   
@@ -42483,7 +42550,7 @@ int more_rbsp_data(uint8_t buffer[],int totbitoffset,int bytecount) {
       int cnt=0;
 
       while(bitoffset>=0 && !cnt)
-        cnt |= ((*cur_byte)>>(bitoffset--)) & 0x01;   // set up control bit
+        cnt |= ((*cur_byte) >> (bitoffset--)) & 0x01;   // set up control bit
 
       return cnt;
 			}
@@ -42555,7 +42622,7 @@ int GetVLCSymbol(uint8_t buffer[],int totbitoffset,int *info, int bytecount) {
       cur_byte  +=(bitoffset == 7);
       bitcounter++;
       inf <<= 1;    
-      inf |= ((*cur_byte) >>(bitoffset)) & 0x01;
+      inf |= ((*cur_byte) >> (bitoffset)) & 0x01;
 			}
 
     *info=inf;
@@ -43188,20 +43255,20 @@ void forward4x4(int **block, int **tblock, BLOCK_COORD pos_y, BLOCK_COORD pos_x)
   // Horizontal
   for(i=pos_y; i<pos_y+BLOCK_SIZE; i++) {
     pblock=&block[i][pos_x];
-    p0=*(pblock++);
-    p1=*(pblock++);
-    p2=*(pblock++);
-    p3=*(pblock );
+    p0=*pblock++;
+    p1=*pblock++;
+    p2=*pblock++;
+    p3=*pblock;
 
     t0=p0+p3;
     t1=p1+p2;
     t2=p1-p2;
     t3=p0-p3;
 
-    *(pTmp++)= t0+t1;
-    *(pTmp++) =(t3 << 1)+t2;
-    *(pTmp++)= t0-t1;    
-    *(pTmp++)= t3 -(t2 << 1);
+    *pTmp++= t0+t1;
+    *pTmp++ =(t3 << 1)+t2;
+    *pTmp++= t0-t1;    
+    *pTmp++= t3 -(t2 << 1);
 		}
 
   // Vertical 
@@ -43218,7 +43285,7 @@ void forward4x4(int **block, int **tblock, BLOCK_COORD pos_y, BLOCK_COORD pos_x)
     t3=p0-p3;
 
     ii=pos_x+i;
-    tblock[pos_y    ][ii]=t0+ t1;
+    tblock[pos_y  ][ii]=t0+ t1;
     tblock[pos_y+1][ii]=t2 +(t3 << 1);
     tblock[pos_y+2][ii]=t0- t1;
     tblock[pos_y+3][ii]=t3 -(t2 << 1);
@@ -43235,20 +43302,20 @@ void inverse4x4(int **tblock, int **block, BLOCK_COORD pos_y, BLOCK_COORD pos_x)
   // Horizontal
   for(i=pos_y; i<pos_y+BLOCK_SIZE; i++) {
     pblock=&tblock[i][pos_x];
-    t0=*(pblock++);
-    t1=*(pblock++);
-    t2=*(pblock++);
-    t3=*(pblock );
+    t0=*pblock++;
+    t1=*pblock++;
+    t2=*pblock++;
+    t3=*pblock;
 
     p0= t0+t2;
     p1= t0-t2;
     p2 =(t1 >> 1)-t3;
     p3= t1 +(t3 >> 1);
 
-    *(pTmp++)=p0+p3;
-    *(pTmp++)=p1+p2;
-    *(pTmp++)=p1-p2;
-    *(pTmp++)=p0-p3;
+    *pTmp++=p0+p3;
+    *pTmp++=p1+p2;
+    *pTmp++=p1-p2;
+    *pTmp++=p0-p3;
 		}
 
   //  Vertical 
@@ -43265,7 +43332,7 @@ void inverse4x4(int **tblock, int **block, BLOCK_COORD pos_y, BLOCK_COORD pos_x)
     p3=t1 +(t3 >> 1);
 
     ii=i+pos_x;
-    block[pos_y    ][ii]=p0+p3;
+    block[pos_y  ][ii]=p0+p3;
     block[pos_y+1][ii]=p1+p2;
     block[pos_y+2][ii]=p1-p2;
     block[pos_y+3][ii]=p0-p3;
@@ -43282,20 +43349,20 @@ void hadamard4x4(int **block, int **tblock) {
   // Horizontal
   for(i=0; i<BLOCK_SIZE; i++) {
     pblock=block[i];
-    p0=*(pblock++);
-    p1=*(pblock++);
-    p2=*(pblock++);
-    p3=*(pblock );
+    p0=*pblock++;
+    p1=*pblock++;
+    p2=*pblock++;
+    p3=*pblock;
 
     t0=p0+p3;
     t1=p1+p2;
     t2=p1-p2;
     t3=p0-p3;
 
-    *(pTmp++)=t0+t1;
-    *(pTmp++)=t3+t2;
-    *(pTmp++)=t0-t1;    
-    *(pTmp++)=t3-t2;
+    *pTmp++=t0+t1;
+    *pTmp++=t3+t2;
+    *pTmp++=t0-t1;    
+    *pTmp++=t3-t2;
 	  }
 
   // Vertical 
@@ -43328,20 +43395,20 @@ void ihadamard4x4(int **tblock, int **block) {
   // Horizontal
   for(i=0; i<BLOCK_SIZE; i++) {
     pblock=tblock[i];
-    t0=*(pblock++);
-    t1=*(pblock++);
-    t2=*(pblock++);
-    t3=*(pblock );
+    t0=*pblock++;
+    t1=*pblock++;
+    t2=*pblock++;
+    t3=*pblock;
 
     p0=t0+t2;
     p1=t0-t2;
     p2=t1-t3;
     p3=t1+t3;
 
-    *(pTmp++)=p0+p3;
-    *(pTmp++)=p1+p2;
-    *(pTmp++)=p1-p2;
-    *(pTmp++)=p0-p3;
+    *pTmp++=p0+p3;
+    *pTmp++=p1+p2;
+    *pTmp++=p1-p2;
+    *pTmp++=p0-p3;
 	  }
 
   //  Vertical 
@@ -43372,33 +43439,33 @@ void hadamard4x2(int **block, int **tblock) {
   int t0,t1,t2,t3;
 
   // Horizontal
-  *(pTmp++)=block[0][0]+block[1][0];
-  *(pTmp++)=block[0][1]+block[1][1];
-  *(pTmp++)=block[0][2]+block[1][2];
-  *(pTmp++)=block[0][3]+block[1][3];
+  *pTmp++=block[0][0]+block[1][0];
+  *pTmp++=block[0][1]+block[1][1];
+  *pTmp++=block[0][2]+block[1][2];
+  *pTmp++=block[0][3]+block[1][3];
 
-  *(pTmp++)=block[0][0]-block[1][0];
-  *(pTmp++)=block[0][1]-block[1][1];
-  *(pTmp++)=block[0][2]-block[1][2];
-  *(pTmp )=block[0][3]-block[1][3];
+  *pTmp++=block[0][0]-block[1][0];
+  *pTmp++=block[0][1]-block[1][1];
+  *pTmp++=block[0][2]-block[1][2];
+  *pTmp =block[0][3]-block[1][3];
 
   // Vertical
   pTmp=tmp;
-  for(i=0;i<2;i++) {      
-    p0=*(pTmp++);
-    p1=*(pTmp++);
-    p2=*(pTmp++);
-    p3=*(pTmp++);
+  for(i=0; i<2; i++) {      
+    p0=*pTmp++;
+    p1=*pTmp++;
+    p2=*pTmp++;
+    p3=*pTmp++;
 
     t0=p0+p3;
     t1=p1+p2;
     t2=p1-p2;
     t3=p0-p3;
 
-    tblock[i][0] =(t0+t1);
-    tblock[i][1] =(t3+t2);
-    tblock[i][2] =(t0-t1);      
-    tblock[i][3] =(t3-t2);
+    tblock[i][0] = t0+t1;
+    tblock[i][1] = t3+t2;
+    tblock[i][2] = t0-t1;      
+    tblock[i][3] = t3-t2;
 		}
 	}
 
@@ -43410,23 +43477,23 @@ void ihadamard4x2(int **tblock, int **block){
   int t0,t1,t2,t3;
 
   // Horizontal
-  *(pTmp++)=tblock[0][0]+tblock[1][0];
-  *(pTmp++)=tblock[0][1]+tblock[1][1];
-  *(pTmp++)=tblock[0][2]+tblock[1][2];
-  *(pTmp++)=tblock[0][3]+tblock[1][3];
+  *pTmp++=tblock[0][0]+tblock[1][0];
+  *pTmp++=tblock[0][1]+tblock[1][1];
+  *pTmp++=tblock[0][2]+tblock[1][2];
+  *pTmp++=tblock[0][3]+tblock[1][3];
 
-  *(pTmp++)=tblock[0][0]-tblock[1][0];
-  *(pTmp++)=tblock[0][1]-tblock[1][1];
-  *(pTmp++)=tblock[0][2]-tblock[1][2];
-  *(pTmp )=tblock[0][3]-tblock[1][3];
+  *pTmp++=tblock[0][0]-tblock[1][0];
+  *pTmp++=tblock[0][1]-tblock[1][1];
+  *pTmp++=tblock[0][2]-tblock[1][2];
+  *pTmp =tblock[0][3]-tblock[1][3];
 
   // Vertical
   pTmp=tmp;
   for(i=0; i<2; i++) {
-    p0=*(pTmp++);
-    p1=*(pTmp++);
-    p2=*(pTmp++);
-    p3=*(pTmp++);
+    p0=*pTmp++;
+    p1=*pTmp++;
+    p2=*pTmp++;
+    p3=*pTmp++;
 
     t0=p0+p2;
     t1=p0-p2;
@@ -43450,10 +43517,10 @@ void hadamard2x2(int **block, int tblock[4]) {
   p2=block[4][0]+block[4][4];
   p3=block[4][0]-block[4][4];
  
-  tblock[0] =(p0+p2);
-  tblock[1] =(p1+p3);
-  tblock[2] =(p0-p2);
-  tblock[3] =(p1-p3);
+  tblock[0] = p0+p2;
+  tblock[1] = p1+p3;
+  tblock[2] = p0-p2;
+  tblock[3] = p1-p3;
 	}
 
 void ihadamard2x2(int tblock[4], int block[4]) {
@@ -43464,10 +43531,10 @@ void ihadamard2x2(int tblock[4], int block[4]) {
   t2=tblock[2]+tblock[3];
   t3=tblock[2]-tblock[3];
 
-  block[0] =(t0+t2);
-  block[1] =(t1+t3);
-  block[2] =(t0-t2);
-  block[3] =(t1-t3);
+  block[0] = t0+t2;
+  block[1] = t1+t3;
+  block[2] = t0-t2;
+  block[3] = t1-t3;
 	}
 
 /*
@@ -43477,15 +43544,14 @@ void hadamard2x2(int **block, int tblock[4]) {
     tblock[1] =(block[0][0]-block[0][4]+block[4][0]-block[4][4]);
     tblock[2] =(block[0][0]+block[0][4]-block[4][0]-block[4][4]);
     tblock[3] =(block[0][0]-block[0][4]-block[4][0]+block[4][4]);
-}
+	}
 
-void ihadamard2x2(int tblock[4], int block[4])
-{
+void ihadamard2x2(int tblock[4], int block[4]) {
     block[0] =(tblock[0]+tblock[1]+tblock[2]+tblock[3]);
     block[1] =(tblock[0]-tblock[1]+tblock[2]-tblock[3]);
     block[2] =(tblock[0]+tblock[1]-tblock[2]-tblock[3]);
     block[3] =(tblock[0]-tblock[1]-tblock[2]+tblock[3]);
-}
+	}
 
 */
 
@@ -43501,14 +43567,14 @@ void forward8x8(int **block, int **tblock, PIXEL_COORD pos_y, PIXEL_COORD pos_x)
   // Horizontal
   for(i=pos_y; i<pos_y+BLOCK_SIZE_8x8; i++) {
     pblock=&block[i][pos_x];
-    p0=*(pblock++);
-    p1=*(pblock++);
-    p2=*(pblock++);
-    p3=*(pblock++);
-    p4=*(pblock++);
-    p5=*(pblock++);
-    p6=*(pblock++);
-    p7=*(pblock );
+    p0=*pblock++;
+    p1=*pblock++;
+    p2=*pblock++;
+    p3=*pblock++;
+    p4=*pblock++;
+    p5=*pblock++;
+    p6=*pblock++;
+    p7=*pblock;
 
     a0=p0+p7;
     a1=p1+p6;
@@ -43530,14 +43596,14 @@ void forward8x8(int **block, int **tblock, PIXEL_COORD pos_y, PIXEL_COORD pos_x)
     b6=a0+a3 -((a1 >> 1)+a1);
     b7=a1-a2 +((a3 >> 1)+a3);
 
-    *(pTmp++)= b0+b1;
-    *(pTmp++)= b4 +(b7 >> 2);
-    *(pTmp++)= b2 +(b3 >> 1);
-    *(pTmp++)= b5 +(b6 >> 2);
-    *(pTmp++)= b0-b1;
-    *(pTmp++)= b6 -(b5 >> 2);
-    *(pTmp++) =(b2 >> 1)-b3;                 
-    *(pTmp++) =(b4 >> 2)-b7;
+    *pTmp++= b0+b1;
+    *pTmp++= b4 +(b7 >> 2);
+    *pTmp++= b2 +(b3 >> 1);
+    *pTmp++= b5 +(b6 >> 2);
+    *pTmp++= b0-b1;
+    *pTmp++= b6 -(b5 >> 2);
+    *pTmp++=(b2 >> 1)-b3;                 
+    *pTmp++ =(b4 >> 2)-b7;
 	  }
 
   // Vertical 
@@ -43573,7 +43639,7 @@ void forward8x8(int **block, int **tblock, PIXEL_COORD pos_y, PIXEL_COORD pos_x)
     b7=a1-a2 +((a3 >> 1)+a3);
 
     ii=pos_x+i;
-    tblock[pos_y    ][ii]= b0+b1;
+    tblock[pos_y  ][ii]= b0+b1;
     tblock[pos_y+1][ii]= b4 +(b7 >> 2);
     tblock[pos_y+2][ii]= b2 +(b3 >> 1);
     tblock[pos_y+3][ii]= b5 +(b6 >> 2);
@@ -43595,14 +43661,14 @@ void inverse8x8(int **tblock, int **block, BLOCK_COORD pos_x) {
   // Horizontal  
   for(i=0; i<BLOCK_SIZE_8x8; i++) {
     pblock=&tblock[i][pos_x];
-    p0=*(pblock++);
-    p1=*(pblock++);
-    p2=*(pblock++);
-    p3=*(pblock++);
-    p4=*(pblock++);
-    p5=*(pblock++);
-    p6=*(pblock++);
-    p7=*(pblock );
+    p0=*pblock++;
+    p1=*pblock++;
+    p2=*pblock++;
+    p3=*pblock++;
+    p4=*pblock++;
+    p5=*pblock++;
+    p6=*pblock++;
+    p7=*pblock;
 
     a0=p0+p4;
     a1=p0-p4;
@@ -43625,14 +43691,14 @@ void inverse8x8(int **tblock, int **block, BLOCK_COORD pos_x) {
     b5= a2 -(a1>> 2);
     b7= a3 -(a0>> 2);                
 
-    *(pTmp++)=b0+b7;
-    *(pTmp++)=b2-b5;
-    *(pTmp++)=b4+b3;
-    *(pTmp++)=b6+b1;
-    *(pTmp++)=b6-b1;
-    *(pTmp++)=b4-b3;
-    *(pTmp++)=b2+b5;
-    *(pTmp++)=b0-b7;
+    *pTmp++=b0+b7;
+    *pTmp++=b2-b5;
+    *pTmp++=b4+b3;
+    *pTmp++=b6+b1;
+    *pTmp++=b6-b1;
+    *pTmp++=b4-b3;
+    *pTmp++=b2+b5;
+    *pTmp++=b0-b7;
 	  }
 
   //  Vertical 
@@ -43692,7 +43758,7 @@ static bool is_short_term_reference(FrameStore* fs) {
   if(fs->is_used==3) {		// frame
     if(fs->frame->used_for_reference && !fs->frame->is_long_term)
       return TRUE;
-		 }
+		}
 
   if(fs->is_used & 1) {		// top field
     if(fs->top_field) {
@@ -43719,19 +43785,19 @@ static bool is_short_term_reference(FrameStore* fs) {
  */
 static bool is_long_term_reference(FrameStore* fs) {
 
-  if(fs->is_used==3)  {	// frame
+  if(fs->is_used==3) {	// frame
     if(fs->frame->used_for_reference && (fs->frame->is_long_term))
       return TRUE;
 		}
 
-  if(fs->is_used & 1)  {	// top field
+  if(fs->is_used & 1) {	// top field
     if(fs->top_field) {
       if(fs->top_field->used_for_reference && (fs->top_field->is_long_term))
         return TRUE;
 			}
 		}
 
-  if(fs->is_used & 2)  {	// bottom field
+  if(fs->is_used & 2) {	// bottom field
     if(fs->bottom_field) {
       if(fs->bottom_field->used_for_reference && (fs->bottom_field->is_long_term))
         return TRUE;
@@ -43755,7 +43821,7 @@ void gen_pic_list_from_frame_list(PictureStructure currStructure, FrameStore **f
   bool (*is_ref)(StorablePicture *s) = long_term ? is_long_ref : is_short_ref;
 
   if(currStructure == TOP_FIELD) {
-    while((top_idx<list_idx)|| (bot_idx<list_idx)) {
+    while((top_idx<list_idx) || (bot_idx<list_idx)) {
       for(; top_idx<list_idx; top_idx++) {
         if(fs_list[top_idx]->is_used & 1) {
           if(is_ref(fs_list[top_idx]->top_field)) {
@@ -43781,7 +43847,7 @@ void gen_pic_list_from_frame_list(PictureStructure currStructure, FrameStore **f
 			}
 		}
   else if(currStructure == BOTTOM_FIELD) {
-    while((top_idx<list_idx)|| (bot_idx<list_idx)) {
+    while((top_idx<list_idx) || (bot_idx<list_idx)) {
       for(; bot_idx<list_idx; bot_idx++) {
         if(fs_list[bot_idx]->is_used & 2) {
           if(is_ref(fs_list[bot_idx]->bottom_field)) {
@@ -43959,12 +44025,12 @@ void mm_unmark_long_term_for_reference(DecodedPictureBuffer *p_Dpb, StorablePict
       if((p_Dpb->fs_ltref[i]->is_reference & 1) && ((p_Dpb->fs_ltref[i]->is_long_term & 1))) {
         if(p_Dpb->fs_ltref[i]->top_field->long_term_pic_num == long_term_pic_num) {
           p_Dpb->fs_ltref[i]->top_field->used_for_reference=FALSE;
-          p_Dpb->fs_ltref[i]->top_field->is_long_term=FALSE;
+          p_Dpb->fs_ltref[i]->top_field->is_long_term=0;
           p_Dpb->fs_ltref[i]->is_reference &= 2;
           p_Dpb->fs_ltref[i]->is_long_term &= 2;
           if(p_Dpb->fs_ltref[i]->is_used == 3) {
             p_Dpb->fs_ltref[i]->frame->used_for_reference=FALSE;
-            p_Dpb->fs_ltref[i]->frame->is_long_term=FALSE;
+            p_Dpb->fs_ltref[i]->frame->is_long_term=0;
 						}
           return;
 					}
@@ -43972,12 +44038,12 @@ void mm_unmark_long_term_for_reference(DecodedPictureBuffer *p_Dpb, StorablePict
       if((p_Dpb->fs_ltref[i]->is_reference & 2) && ((p_Dpb->fs_ltref[i]->is_long_term & 2))) {
         if(p_Dpb->fs_ltref[i]->bottom_field->long_term_pic_num == long_term_pic_num) {
           p_Dpb->fs_ltref[i]->bottom_field->used_for_reference=FALSE;
-          p_Dpb->fs_ltref[i]->bottom_field->is_long_term=FALSE;
+          p_Dpb->fs_ltref[i]->bottom_field->is_long_term=0;
           p_Dpb->fs_ltref[i]->is_reference &= 1;
           p_Dpb->fs_ltref[i]->is_long_term &= 1;
           if(p_Dpb->fs_ltref[i]->is_used == 3) {
             p_Dpb->fs_ltref[i]->frame->used_for_reference=FALSE;
-            p_Dpb->fs_ltref[i]->frame->is_long_term=FALSE;
+            p_Dpb->fs_ltref[i]->frame->is_long_term=0;
 						}
           return;
 					}
@@ -44012,12 +44078,12 @@ static void unmark_long_term_frame_for_reference_by_frame_idx(DecodedPictureBuff
  */
 static void mark_pic_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture* p, int long_term_frame_idx, int picNumX) {
   uint32_t i;
-  int add_top, add_bottom;
+  int8_t add_top, add_bottom;
 
   if(p->structure == FRAME) {
     for(i=0; i<p_Dpb->ref_frames_in_buffer; i++) {
       if(p_Dpb->fs_ref[i]->is_reference == 3) {
-        if((!p_Dpb->fs_ref[i]->frame->is_long_term)&& (p_Dpb->fs_ref[i]->frame->pic_num == picNumX)) {
+        if((!p_Dpb->fs_ref[i]->frame->is_long_term) && (p_Dpb->fs_ref[i]->frame->pic_num == picNumX)) {
           p_Dpb->fs_ref[i]->long_term_frame_idx=p_Dpb->fs_ref[i]->frame->long_term_frame_idx
                                             =long_term_frame_idx;
           p_Dpb->fs_ref[i]->frame->long_term_pic_num=long_term_frame_idx;
@@ -44029,8 +44095,7 @@ static void mark_pic_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture* p, 
             p_Dpb->fs_ref[i]->top_field->long_term_pic_num=long_term_frame_idx;
             p_Dpb->fs_ref[i]->bottom_field->long_term_pic_num=long_term_frame_idx;
 
-            p_Dpb->fs_ref[i]->top_field->is_long_term=p_Dpb->fs_ref[i]->bottom_field->is_long_term
-                                                  =1;
+            p_Dpb->fs_ref[i]->top_field->is_long_term=p_Dpb->fs_ref[i]->bottom_field->is_long_term=1;
 
 	          }
           p_Dpb->fs_ref[i]->is_long_term=3;
@@ -44051,7 +44116,7 @@ static void mark_pic_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture* p, 
 			}
     for(i=0; i<p_Dpb->ref_frames_in_buffer; i++) {
       if(p_Dpb->fs_ref[i]->is_reference & 1) {
-        if((!p_Dpb->fs_ref[i]->top_field->is_long_term)&& (p_Dpb->fs_ref[i]->top_field->pic_num == picNumX)) {
+        if((!p_Dpb->fs_ref[i]->top_field->is_long_term) && (p_Dpb->fs_ref[i]->top_field->pic_num == picNumX)) {
           if((p_Dpb->fs_ref[i]->is_long_term) && (p_Dpb->fs_ref[i]->long_term_frame_idx != long_term_frame_idx))
             theApp.FileSpool->print(CLogFile::flagError,"Warning: assigning long_term_frame_idx different from other field");
 
@@ -44068,7 +44133,7 @@ static void mark_pic_long_term(DecodedPictureBuffer *p_Dpb, StorablePicture* p, 
 					}
 				}
       if(p_Dpb->fs_ref[i]->is_reference & 2) {
-        if((!p_Dpb->fs_ref[i]->bottom_field->is_long_term)&& (p_Dpb->fs_ref[i]->bottom_field->pic_num == picNumX)) {
+        if((!p_Dpb->fs_ref[i]->bottom_field->is_long_term) && (p_Dpb->fs_ref[i]->bottom_field->pic_num == picNumX)) {
           if((p_Dpb->fs_ref[i]->is_long_term) && (p_Dpb->fs_ref[i]->long_term_frame_idx != long_term_frame_idx))
               theApp.FileSpool->print(CLogFile::flagError,"Warning: assigning long_term_frame_idx different from other field");
 
@@ -44258,7 +44323,7 @@ int remove_unused_frame_from_dpb(DecodedPictureBuffer *p_Dpb) {
 
   // check for frames that were already output and no longer used for reference
   for(i=0; i<p_Dpb->used_size; i++) {
-    if(p_Dpb->fs[i]->is_output && (!is_used_for_reference(p_Dpb->fs[i]))) {
+    if(p_Dpb->fs[i]->is_output && !is_used_for_reference(p_Dpb->fs[i])) {
       remove_frame_from_dpb(p_Dpb, i);
       return 1;
 			}
@@ -44365,7 +44430,7 @@ int init_top_bot_planes(imgpel **imgFrame, int dim0, imgpel ***imgTopField, imgp
  /*!
  ************************************************************************
 *\brief
-*   H264FREE 2-dimensional top and bottom fields without freeing target memory
+*   free 2-dimensional top and bottom fields without freeing target memory
  *
 *\par Output:
 *   memory size in bytes
@@ -44424,7 +44489,7 @@ int get_mem2Dlm(LambdaParams ***array2D, int dim0, int dim1) {
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Ddist()
  ************************************************************************
  */
@@ -44435,18 +44500,18 @@ void free_mem2Ddist(DistortionData **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Ddist: trying to H264FREE unused memory",100);
+      error("free_mem2Ddist: trying to free unused memory",100);
 
     sse_free(array2D);
 	  } 
   else
-    error("free_mem2Ddist: trying to H264FREE unused memory",100);
+    error("free_mem2Ddist: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dlm()
  ************************************************************************
  */
@@ -44457,12 +44522,12 @@ void free_mem2Dlm(LambdaParams **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dlm: trying to H264FREE unused memory",100);
+      error("free_mem2Dlm: trying to free unused memory",100);
 
     sse_free(array2D);
   } 
   else
-    error("free_mem2Dlm: trying to H264FREE unused memory",100);
+    error("free_mem2Dlm: trying to free unused memory",100);
 	}
 
 /*!
@@ -44512,7 +44577,7 @@ int get_mem3Dmp(PicMotionParams ****array3D, int dim0, int dim1, int dim2) {
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dmp()
  ************************************************************************
  */
@@ -44523,18 +44588,18 @@ void free_mem2Dmp(PicMotionParams **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dmp: trying to H264FREE unused memory",100);
+      error("free_mem2Dmp: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dmp: trying to H264FREE unused memory",100);
+    error("free_mem2Dmp: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dmp()
  ************************************************************************
  */
@@ -44545,7 +44610,7 @@ void free_mem3Dmp(PicMotionParams ***array3D) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3Dmp: trying to H264FREE unused memory",100);
+    error("free_mem3Dmp: trying to free unused memory",100);
 	}
 
 /*!
@@ -44664,7 +44729,7 @@ int get_mem2Dwp(WPParams ***array2D, int dim0, int dim1) {
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dwp()
  ************************************************************************
  */
@@ -44675,18 +44740,18 @@ void free_mem2Dwp(WPParams **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dwp: trying to H264FREE unused memory",100);
+      error("free_mem2Dwp: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dwp: trying to H264FREE unused memory",100);
+    error("free_mem2Dwp: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dquant()
  ************************************************************************
  */
@@ -44697,19 +44762,19 @@ void free_mem2Dquant(LevelQuantParams **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dquant: trying to H264FREE unused memory",100);
+      error("free_mem2Dquant: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dquant: trying to H264FREE unused memory",100);
+    error("free_mem2Dquant: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dquant()
  ************************************************************************
  */
@@ -44720,13 +44785,13 @@ void free_mem3Dquant(LevelQuantParams ***array3D) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3Dquant: trying to H264FREE unused memory",100);
+    error("free_mem3Dquant: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D memory array
+*   free 4D memory array
 *   which was allocated with get_mem4Dquant()
  ************************************************************************
  */
@@ -44737,13 +44802,13 @@ void free_mem4Dquant(LevelQuantParams ****array4D) {
     sse_free(array4D);
 		}
   else
-    error("free_mem4Dquant: trying to H264FREE unused memory",100);
+    error("free_mem4Dquant: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 5D memory array
+*   free 5D memory array
 *   which was allocated with get_mem5Dquant()
  ************************************************************************
  */
@@ -44754,7 +44819,7 @@ void free_mem5Dquant(LevelQuantParams *****array5D) {
     sse_free(array5D);
 	  }
   else
-    error("free_mem5Dquant: trying to H264FREE unused memory",100);
+    error("free_mem5Dquant: trying to free unused memory",100);
 	}
 
 
@@ -44939,7 +45004,7 @@ int get_mem7Dmv(MotionVector ********array7D, int dim0, int dim1, int dim2, int 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2D_spp()
  ************************************************************************
  */
@@ -44950,19 +45015,19 @@ void free_mem2D_spp(StorablePicturePtr **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2D_spp: trying to H264FREE unused memory",100);
+      error("free_mem2D_spp: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2D_spp: trying to H264FREE unused memory",100);
+    error("free_mem2D_spp: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3D_spp()
  ************************************************************************
  */
@@ -44973,14 +45038,14 @@ void free_mem3D_spp(StorablePicturePtr ***array3D) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3D_spp: trying to H264FREE unused memory",100);
+    error("free_mem3D_spp: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dmv()
  ************************************************************************
  */
@@ -44991,19 +45056,19 @@ void free_mem2Dmv(MotionVector **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dmv: trying to H264FREE unused memory",100);
+      error("free_mem2Dmv: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dmv: trying to H264FREE unused memory",100);
+    error("free_mem2Dmv: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dmv()
  ************************************************************************
  */
@@ -45014,13 +45079,13 @@ void free_mem3Dmv(MotionVector ***array3D) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3Dmv: trying to H264FREE unused memory",100);
+    error("free_mem3Dmv: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D memory array
+*   free 4D memory array
 *   which was allocated with get_mem4Dmv()
  ************************************************************************
  */
@@ -45031,13 +45096,13 @@ void free_mem4Dmv(MotionVector ****array4D) {
     sse_free(array4D);
 		}
   else
-    error("free_mem4Dmv: trying to H264FREE unused memory",100);
+    error("free_mem4Dmv: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 5D memory array
+*   free 5D memory array
 *   which was allocated with get_mem5Dmv()
  ************************************************************************
  */
@@ -45048,13 +45113,13 @@ void free_mem5Dmv(MotionVector *****array5D) {
     sse_free(array5D);
 		}
   else
-    error("free_mem5Dmv: trying to H264FREE unused memory",100);
+    error("free_mem5Dmv: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 6D memory array
+*   free 6D memory array
 *   which was allocated with get_mem6Dmv()
  ************************************************************************
  */
@@ -45065,13 +45130,13 @@ void free_mem6Dmv(MotionVector ******array6D) {
     sse_free(array6D);
 		}
   else
-    error("free_mem6Dmv: trying to H264FREE unused memory",100);
+    error("free_mem6Dmv: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 7D memory array
+*   free 7D memory array
 *   which was allocated with get_mem7Dmv()
  ************************************************************************
  */
@@ -45082,7 +45147,7 @@ void free_mem7Dmv(MotionVector *******array7D) {
     sse_free(array7D);
 		}
   else
-    error("free_mem7Dmv: trying to H264FREE unused memory",100);
+    error("free_mem7Dmv: trying to free unused memory",100);
 	}
 
 /*!
@@ -45208,12 +45273,12 @@ int get_mem4Dpel(imgpel *****array4D, int dim0, int dim1, int dim2, int dim3) {
 int get_mem4Dpel_pad(imgpel *****array4D, int dim0, int dim1, int dim2, int dim3, int iPadY, int iPadX) {  
   int i, mem_size=dim0*sizeof(imgpel***);
 
-  if(!((*array4D) =(imgpel****)sse_malloc(dim0*sizeof(imgpel***))))
+  if(!((*array4D)=(imgpel****)sse_malloc(dim0*sizeof(imgpel***))))
     no_mem_exit("get_mem4Dpel_pad: array4D");
 
   mem_size += get_mem3Dpel_pad(*array4D, dim0*dim1, dim2, dim3, iPadY, iPadX);
   for(i=1; i<dim0; i++)
-		(*array4D)[i] =(*array4D)[i-1]+dim1;
+		(*array4D)[i]=(*array4D)[i-1]+dim1;
 
   return mem_size;
 	}
@@ -45230,12 +45295,12 @@ int get_mem4Dpel_pad(imgpel *****array4D, int dim0, int dim1, int dim2, int dim3
 int get_mem5Dpel(imgpel ******array5D, int dim0, int dim1, int dim2, int dim3, int dim4) {
   int i, mem_size=dim0*sizeof(imgpel****);
 
-  if(!((*array5D) =(imgpel*****)sse_malloc(dim0*sizeof(imgpel****))))
+  if(!((*array5D)=(imgpel*****)sse_malloc(dim0*sizeof(imgpel****))))
     no_mem_exit("get_mem5Dpel: array5D");
 
   mem_size += get_mem4Dpel(*array5D, dim0*dim1, dim2, dim3, dim4);
   for(i=1; i<dim0; i++)
-   (*array5D)[i] =(*array5D)[i-1]+dim1;
+    (*array5D)[i]=(*array5D)[i-1]+dim1;
 
   return mem_size;
 	}
@@ -45256,7 +45321,7 @@ int get_mem5Dpel_pad(imgpel ******array5D, int dim0, int dim1, int dim2, int dim
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 1D memory array
+*   free 1D memory array
 *   which was allocated with get_mem1Dpel()
  ************************************************************************
  */
@@ -45266,13 +45331,13 @@ void free_mem1Dpel(imgpel *array1D) {
     sse_free(array1D);
 		}
   else
-    error("free_mem1Dpel: trying to H264FREE unused memory",100);
+    error("free_mem1Dpel: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dpel()
  ************************************************************************
  */
@@ -45283,12 +45348,12 @@ void free_mem2Dpel(imgpel **array2D) {
       sse_free(*array2D);
 			}
     else 
-     error("free_mem2Dpel: trying to H264FREE unused memory",100);
+     error("free_mem2Dpel: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dpel: trying to H264FREE unused memory",100);
+    error("free_mem2Dpel: trying to free unused memory",100);
 	}
 
 void free_mem2Dpel_pad(imgpel **array2D, int iPadY, int iPadX) {
@@ -45298,18 +45363,18 @@ void free_mem2Dpel_pad(imgpel **array2D, int iPadY, int iPadX) {
       sse_free(array2D[-iPadY]-iPadX);
 			}
     else 
-      error("free_mem2Dpel_pad: trying to H264FREE unused memory",100);
+      error("free_mem2Dpel_pad: trying to free unused memory",100);
 
     sse_free(&array2D[-iPadY]);
 		} 
   else
-    error("free_mem2Dpel_pad: trying to H264FREE unused memory",100);
+    error("free_mem2Dpel_pad: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dpel()
  ************************************************************************
  */
@@ -45320,7 +45385,7 @@ void free_mem3Dpel(imgpel ***array3D) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3Dpel: trying to H264FREE unused memory",100);
+    error("free_mem3Dpel: trying to free unused memory",100);
 	}
 
 void free_mem3Dpel_pad(imgpel ***array3D, int iDim12, int iPadY, int iPadX) {
@@ -45336,14 +45401,14 @@ void free_mem3Dpel_pad(imgpel ***array3D, int iDim12, int iPadY, int iPadX) {
     sse_free(array3D);
 		}
   else
-    error("free_mem3Dpel_pad: trying to H264FREE unused memory",100);
+    error("free_mem3Dpel_pad: trying to free unused memory",100);
   
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D memory array
+*   free 4D memory array
 *   which was allocated with get_mem4Dpel()
  ************************************************************************
  */
@@ -45354,7 +45419,7 @@ void free_mem4Dpel(imgpel ****array4D) {
     sse_free(array4D);
 		}
   else
-    error("free_mem4Dpel: trying to H264FREE unused memory",100);
+    error("free_mem4Dpel: trying to free unused memory",100);
 	}
 
 void free_mem4Dpel_pad(imgpel  ****array4D, int iFrames, int iPadY, int iPadX) {
@@ -45364,13 +45429,13 @@ void free_mem4Dpel_pad(imgpel  ****array4D, int iFrames, int iPadY, int iPadX) {
     sse_free(array4D);
 		}
   else
-    error("free_mem4Dpel_pad: trying to H264FREE unused memory",100);
+    error("free_mem4Dpel_pad: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 5D memory array
+*   free 5D memory array
 *   which was allocated with get_mem5Dpel()
  ************************************************************************
  */
@@ -45381,7 +45446,7 @@ void free_mem5Dpel(imgpel *****array5D) {
     sse_free(array5D);
 		}
   else
-    error("free_mem5Dpel: trying to H264FREE unused memory",100);
+    error("free_mem5Dpel: trying to free unused memory",100);
 	}
 
 void free_mem5Dpel_pad(imgpel *****array5D, int iFrames, int iPadY, int iPadX) {
@@ -45391,7 +45456,7 @@ void free_mem5Dpel_pad(imgpel *****array5D, int iFrames, int iPadY, int iPadX) {
     sse_free(array5D);
 		}
   else
-    error("free_mem5Dpel_pad: trying to H264FREE unused memory",100);
+    error("free_mem5Dpel_pad: trying to free unused memory",100);
 	}
 
 /*!
@@ -45724,7 +45789,7 @@ int get_mem5Dint(int ******array5D, int dim0, int dim1, int dim2, int dim3, int 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2D()
  ************************************************************************
  */
@@ -45735,18 +45800,18 @@ void free_mem2D(uint8_t **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2D: trying to H264FREE unused memory",100);
+      error("free_mem2D: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2D: trying to H264FREE unused memory",100);
+    error("free_mem2D: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dint()
  ************************************************************************
  */
@@ -45757,12 +45822,12 @@ void free_mem2Dint(int **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dint: trying to H264FREE unused memory",100);
+      error("free_mem2Dint: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dint: trying to H264FREE unused memory",100);
+    error("free_mem2Dint: trying to free unused memory",100);
 	}
 
 void free_mem2Dint_pad(int **array2D, int iPadY, int iPadX) {
@@ -45772,18 +45837,18 @@ void free_mem2Dint_pad(int **array2D, int iPadY, int iPadX) {
       sse_free(array2D[-iPadY]-iPadX);
 			}
     else 
-      error("free_mem2Dint_pad: trying to H264FREE unused memory",100);
+      error("free_mem2Dint_pad: trying to free unused memory",100);
 
     sse_free(&array2D[-iPadY]);
 		} 
   else
-    error("free_mem2Dint_pad: trying to H264FREE unused memory",100);
+    error("free_mem2Dint_pad: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D memory array
+*   free 2D memory array
 *   which was allocated with get_mem2Dint64()
  ************************************************************************
  */
@@ -45794,18 +45859,18 @@ void free_mem2Dint64(INT64T **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Dint64: trying to H264FREE unused memory",100);
+      error("free_mem2Dint64: trying to free unused memory",100);
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dint64: trying to H264FREE unused memory",100);
+    error("free_mem2Dint64: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3D()
  ************************************************************************
  */
@@ -45816,13 +45881,13 @@ void free_mem3D(uint8_t ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3D: trying to H264FREE unused memory",100);
+    error("free_mem3D: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D memory array
+*   free 4D memory array
 *   which was allocated with get_mem3D()
  ************************************************************************
  */
@@ -45833,13 +45898,13 @@ void free_mem4D(uint8_t ****array4D) {
     sse_free(array4D);
 		} 
   else
-    error("free_mem4D: trying to H264FREE unused memory",100);
+    error("free_mem4D: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dint()
  ************************************************************************
  */
@@ -45850,14 +45915,14 @@ void free_mem3Dint(int ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3Dint: trying to H264FREE unused memory",100);
+    error("free_mem3Dint: trying to free unused memory",100);
 	}
 
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was allocated with get_mem3Dint64()
  ************************************************************************
  */
@@ -45868,7 +45933,7 @@ void free_mem3Dint64(INT64T ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3Dint64: trying to H264FREE unused memory",100);
+    error("free_mem3Dint64: trying to free unused memory",100);
 	}
 
 void free_mem3Ddistblk(distblk ***array3D) {
@@ -45878,13 +45943,13 @@ void free_mem3Ddistblk(distblk ***array3D) {
 		sse_free(array3D);
 		} 
   else
-    error("free_mem3Ddistblk: trying to H264FREE unused memory",100);
+    error("free_mem3Ddistblk: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D memory array
+*   free 4D memory array
 *   which was allocated with get_mem4Dint()
  ************************************************************************
  */
@@ -45895,7 +45960,7 @@ void free_mem4Dint(int ****array4D) {
     sse_free(array4D);
 		} 
 	else
-    error("free_mem4Dint: trying to H264FREE unused memory",100);
+    error("free_mem4Dint: trying to free unused memory",100);
 	}
 
 void free_mem4Dint64(INT64T ****array4D) {
@@ -45905,7 +45970,7 @@ void free_mem4Dint64(INT64T ****array4D) {
     sse_free(array4D);
 		} 
 	else
-    error("free_mem4Dint64: trying to H264FREE unused memory",100);
+    error("free_mem4Dint64: trying to free unused memory",100);
 	}
 
 void free_mem4Ddistblk(distblk ****array4D) {
@@ -45915,13 +45980,13 @@ void free_mem4Ddistblk(distblk ****array4D) {
     sse_free(array4D);
 		} 
 	else
-    error("free_mem4Ddistblk: trying to H264FREE unused memory",100);
+    error("free_mem4Ddistblk: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 5D int memory array
+*   free 5D int memory array
 *   which was allocated with get_mem5Dint()
  ************************************************************************
  */
@@ -45932,7 +45997,7 @@ void free_mem5Dint(int *****array5D) {
     sse_free(array5D);
 		} 
 	else
-    error("free_mem5Dint: trying to H264FREE unused memory",100);
+    error("free_mem5Dint: trying to free unused memory",100);
 	}
 
 /*!
@@ -46189,7 +46254,7 @@ int get_mem7Dshort(int16_t ********array7D, int dim0, int dim1, int dim2, int di
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D uint16_t memory array
+*   free 2D uint16_t memory array
 *   which was allocated with get_mem2Duint16()
  ************************************************************************
  */
@@ -46200,18 +46265,18 @@ void free_mem2Duint16(uint16_t **array2D) {
       sse_free(*array2D);
 			}
     else 
-			error("free_mem2Duint16: trying to H264FREE unused memory",100);
+			error("free_mem2Duint16: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Duint16: trying to H264FREE unused memory",100);
+    error("free_mem2Duint16: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D uint16_t memory array
+*   free 3D uint16_t memory array
 *   which was allocated with get_mem3Duint16()
  ************************************************************************
  */
@@ -46222,13 +46287,13 @@ void free_mem3Duint16(uint16_t ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3Duint16: trying to H264FREE unused memory",100);
+    error("free_mem3Duint16: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D uint16_t memory array
+*   free 4D uint16_t memory array
 *   which was allocated with get_mem4Duint16()
  ************************************************************************
  */
@@ -46239,13 +46304,13 @@ void free_mem4Duint16(uint16_t ****array4D) {
     sse_free(array4D);
 		} 
   else
-    error("free_mem4Duint16: trying to H264FREE unused memory",100);
+    error("free_mem4Duint16: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D short memory array
+*   free 2D short memory array
 *   which was allocated with get_mem2Dshort()
  ************************************************************************
  */
@@ -46256,18 +46321,18 @@ void free_mem2Dshort(int16_t **array2D) {
       sse_free(*array2D);
 			}
     else 
-			error("free_mem2Dshort: trying to H264FREE unused memory",100);
+			error("free_mem2Dshort: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dshort: trying to H264FREE unused memory",100);
+    error("free_mem2Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D short memory array
+*   free 3D short memory array
 *   which was allocated with get_mem3Dshort()
  ************************************************************************
  */
@@ -46278,13 +46343,13 @@ void free_mem3Dshort(int16_t ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3Dshort: trying to H264FREE unused memory",100);
+    error("free_mem3Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 4D short memory array
+*   free 4D short memory array
 *   which was allocated with get_mem4Dshort()
  ************************************************************************
  */
@@ -46295,30 +46360,30 @@ void free_mem4Dshort(int16_t ****array4D) {
     sse_free(array4D);
 		} 
   else
-    error("free_mem4Dshort: trying to H264FREE unused memory",100);
+    error("free_mem4Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 5D short memory array
+*   free 5D short memory array
 *   which was allocated with get_mem5Dshort()
  ************************************************************************
  */
 void free_mem5Dshort(int16_t *****array5D) {
 
   if(array5D) {
-    free_mem4Dshort(*array5D) ;
+    free_mem4Dshort(*array5D);
     sse_free(array5D);
 		}
   else
-    error("free_mem5Dshort: trying to H264FREE unused memory",100);
+    error("free_mem5Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 6D short memory array
+*   free 6D short memory array
 *   which was allocated with get_mem6Dshort()
  ************************************************************************
  */
@@ -46329,13 +46394,13 @@ void free_mem6Dshort(int16_t ******array6D) {
     sse_free(array6D);
 		}
   else
-    error("free_mem6Dshort: trying to H264FREE unused memory",100);
+    error("free_mem6Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 7D short memory array
+*   free 7D short memory array
 *   which was allocated with get_mem7Dshort()
  ************************************************************************
  */
@@ -46346,7 +46411,7 @@ void free_mem7Dshort(int16_t *******array7D) {
     sse_free(array7D);
 		}
   else
-    error("free_mem7Dshort: trying to H264FREE unused memory",100);
+    error("free_mem7Dshort: trying to free unused memory",100);
 	}
 
 /*!
@@ -46538,7 +46603,7 @@ int get_mem2Doint(int ***array2D, int dim0, int dim1, int offset) {
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 2D double memory array
+*   free 2D double memory array
 *   which was allocated with get_mem2Ddouble()
  ************************************************************************
  */
@@ -46549,18 +46614,18 @@ void free_mem2Ddouble(double **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Ddouble: trying to H264FREE unused memory",100);
+      error("free_mem2Ddouble: trying to free unused memory",100);
 
     sse_free(array2D);
 		}
   else
-    error("free_mem2Ddouble: trying to H264FREE unused memory",100);
+    error("free_mem2Ddouble: trying to free unused memory",100);
 	}
 
 /*!
 ************************************************************************
 * \brief
-*    H264FREE 1D double memory array(with offset)
+*    free 1D double memory array(with offset)
 *    which was allocated with get_mem1Ddouble()
 ************************************************************************
 */
@@ -46571,14 +46636,14 @@ void free_mem1Dodouble(double *array1D, int offset) {
     sse_free(array1D);
 		} 
   else
-    error("free_mem1Dodouble: trying to H264FREE unused memory",100);
+    error("free_mem1Dodouble: trying to free unused memory",100);
 	}
 
 
 /*!
 ************************************************************************
 * \brief
-*    H264FREE 2D double memory array(with offset)
+*    free 2D double memory array(with offset)
 *    which was allocated with get_mem2Ddouble()
 ************************************************************************
 */
@@ -46590,18 +46655,18 @@ void free_mem2Dodouble(double **array2D, int offset) {
       sse_free(array2D[0]);
 			}
     else 
-			error("free_mem2Dodouble: trying to H264FREE unused memory",100);
+			error("free_mem2Dodouble: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
 	else
-    error("free_mem2Dodouble: trying to H264FREE unused memory",100);
+    error("free_mem2Dodouble: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array with offset
+*   free 3D memory array with offset
  ************************************************************************
  */
 void free_mem3Dodouble(double ***array3D, int dim0, int dim1, int offset) {
@@ -46614,7 +46679,7 @@ void free_mem3Dodouble(double ***array3D, int dim0, int dim1, int offset) {
           sse_free(array3D[i][j]);
 					}
         else
-          error("free_mem3Dodouble: trying to H264FREE unused memory",100);
+          error("free_mem3Dodouble: trying to free unused memory",100);
 				}
 			}
     array3D[0] -= offset;
@@ -46622,17 +46687,17 @@ void free_mem3Dodouble(double ***array3D, int dim0, int dim1, int offset) {
       sse_free(array3D[0]);
 			}
     else
-      error("free_mem3Dodouble: trying to H264FREE unused memory",100);
+      error("free_mem3Dodouble: trying to free unused memory",100);
     sse_free(array3D);
 	  }
   else
-    error("free_mem3Dodouble: trying to H264FREE unused memory",100);
+    error("free_mem3Dodouble: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array with offset
+*   free 3D memory array with offset
  ************************************************************************
  */
 void free_mem3Doint(int ***array3D, int dim0, int dim1, int offset) {
@@ -46645,7 +46710,7 @@ void free_mem3Doint(int ***array3D, int dim0, int dim1, int offset) {
           sse_free(array3D[i][j]);
 					}
         else
-          error("free_mem3Doint: trying to H264FREE unused memory",100);
+          error("free_mem3Doint: trying to free unused memory",100);
 		    }
 	    }
     array3D[0] -= offset;
@@ -46653,18 +46718,18 @@ void free_mem3Doint(int ***array3D, int dim0, int dim1, int offset) {
       sse_free(array3D[0]);
 			}
     else
-      error("free_mem3Doint: trying to H264FREE unused memory",100);
+      error("free_mem3Doint: trying to free unused memory",100);
     sse_free(array3D);
 		}
   else
-    error("free_mem3Doint: trying to H264FREE unused memory",100);
+    error("free_mem3Doint: trying to free unused memory",100);
 	}
 
 
 /*!
 ************************************************************************
 * \brief
-*    H264FREE 2D double memory array(with offset)
+*    free 2D double memory array(with offset)
 *    which was allocated with get_mem2Ddouble()
 ************************************************************************
 */
@@ -46676,18 +46741,18 @@ void free_mem2Doint(int **array2D, int offset) {
       sse_free(array2D[0]);
 			}
     else 
-      error("free_mem2Doint: trying to H264FREE unused memory",100);
+      error("free_mem2Doint: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Doint: trying to H264FREE unused memory",100);
+    error("free_mem2Doint: trying to free unused memory",100);
 	}
 
 /*!
 ************************************************************************
 * \brief
-*    H264FREE 2D double memory array(with offset)
+*    free 2D double memory array(with offset)
 *    which was allocated with get_mem2Ddouble()
 ************************************************************************
 */
@@ -46699,18 +46764,18 @@ void free_offset_mem2Dshort(int16_t **array2D, int dim1, int offset_y, int offse
       sse_free(array2D[0]);
 			}
     else 
-      error("free_offset_mem2Dshort: trying to H264FREE unused memory",100);
+      error("free_offset_mem2Dshort: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_offset_mem2Dshort: trying to H264FREE unused memory",100);
+    error("free_offset_mem2Dshort: trying to free unused memory",100);
 	}
 
 /*!
  ************************************************************************
 *\brief
-*   H264FREE 3D memory array
+*   free 3D memory array
 *   which was alocated with get_mem3Dint()
  ************************************************************************
  */
@@ -46721,7 +46786,7 @@ void free_mem3Ddouble(double ***array3D) {
     sse_free(array3D);
 		} 
   else
-    error("free_mem3D: trying to H264FREE unused memory",100);
+    error("free_mem3D: trying to free unused memory",100);
 	}
 
 
@@ -46754,7 +46819,7 @@ int get_mem2Dolm(LambdaParams ***array2D, int dim0, int dim1, int offset) {
 /*!
 ************************************************************************
 * \brief
-*    H264FREE 2D LambdaParams memory array(with offset)
+*    free 2D LambdaParams memory array(with offset)
 *    which was allocated with get_mem2Dlm()
 ************************************************************************
 */
@@ -46766,12 +46831,12 @@ void free_mem2Dolm(LambdaParams **array2D, int offset) {
       sse_free(array2D[0]);
 			}
     else 
-      error("free_mem2Dolm: trying to H264FREE unused memory",100);
+      error("free_mem2Dolm: trying to free unused memory",100);
 
     sse_free(array2D);
 		} 
   else
-    error("free_mem2Dolm: trying to H264FREE unused memory",100);
+    error("free_mem2Dolm: trying to free unused memory",100);
 	}
 
 void free_mem2Ddistblk(distblk **array2D) {
@@ -46781,11 +46846,11 @@ void free_mem2Ddistblk(distblk **array2D) {
       sse_free(*array2D);
 			}
     else 
-      error("free_mem2Ddistblk: trying to H264FREE unused memory",100);
+      error("free_mem2Ddistblk: trying to free unused memory",100);
     H264FREE(array2D);
 		} 
   else
-    error("free_mem2Ddistblk: trying to H264FREE unused memory",100);
+    error("free_mem2Ddistblk: trying to free unused memory",100);
 	}
 
 
@@ -46989,7 +47054,7 @@ int pps_is_equal(pic_parameter_set_rbsp_t *pps1, pic_parameter_set_rbsp_t *pps2)
         if(i<6) {
           for(j=0; j<16; j++)
             equal &= (pps1->ScalingList4x4[i][j] == pps2->ScalingList4x4[i][j]);
-        }
+	        }
         else {
           for(j=0; j<64; j++)
             equal &= (pps1->ScalingList8x8[i-6][j] == pps2->ScalingList8x8[i-6][j]);
@@ -47590,7 +47655,7 @@ int TestParams(Mapping *Map, int bitdepth_qp_scale[3]) {
       
       if(Map[i].Type == 0) {
         int cur_qp=*(int *)(Map[i].Place);
-        int min_qp = (int)(Map[i].min_limit -(bitdepth_qp_scale ? bitdepth_qp_scale[0]: 0));
+        int min_qp = (int)(Map[i].min_limit -(bitdepth_qp_scale ? bitdepth_qp_scale[0] : 0));
         int max_qp = (int)Map[i].max_limit;
         
         if((cur_qp<min_qp) || (cur_qp>max_qp)) {
@@ -47697,7 +47762,7 @@ int GetSPS(CRTSPClientSocket *sock,seq_parameter_set_rbsp_t *sps) {
 	S2=S.Tokenize('=',i2); 
 	S=S.Mid(i2);
 	S.Decode64();
-	dp.bitstream=(Bitstream *)H264CALLOC(1,sizeof(Bitstream));
+	dp.bitstream=(Bitstream*)H264CALLOC(1,sizeof(Bitstream));
 	dp.bitstream->streamBuffer=(uint8_t*)(LPCTSTR)S;
 	dp.bitstream->streamBuffer++;
 	dp.bitstream->bitstream_length=127*8;
@@ -47718,7 +47783,7 @@ int GetPPS(CRTSPClientSocket *sock,pic_parameter_set_rbsp_t *pps) {
 	ZeroMemory(&dp,sizeof(DataPartition ));
 	ZeroMemory(pps,sizeof(pic_parameter_set_rbsp_t));
 	S.Decode64();
-	dp.bitstream=(Bitstream *)H264CALLOC(1,sizeof(Bitstream));
+	dp.bitstream=(Bitstream*)H264CALLOC(1,sizeof(Bitstream));
 	dp.bitstream->streamBuffer=(uint8_t*)(LPCTSTR)S;
 	dp.bitstream->bitstream_length=63*8;
 	InterpretPPS(&vid, &dp, pps);

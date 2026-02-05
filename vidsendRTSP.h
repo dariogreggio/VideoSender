@@ -136,6 +136,7 @@ typedef struct SDPMediaInfo {
   CString transProt;
   map<int, map<SDP_ATTR_ENUM, CString> > fmtMap;
   CString controlURI;
+	int16_t frameRate;		// 	FRAME_RATE,	// FPS: "25" ecc
 
   // SDPMediaInfo {
   //     mediaType = "";
