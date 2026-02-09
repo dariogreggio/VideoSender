@@ -308,7 +308,7 @@ static const uint8_t decode_block_scan[16]={0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13
 
 // The tables actually used have been "hand optimized" though(by Anthony Joch). So, the
 // table values might be a little different to formula-generated values. Also, the first
-// few values of both tables is set to zero to force the filter off at low qp’s
+// few values of both tables is set to zero to force the filter off at low qpÂ’s
 
 static const uint8_t ALPHA_TABLE[52] ={0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,4,4,5,6,  7,8,9,10,12,13,15,17,  20,22,25,28,32,36,40,45,  
 	50,56,63,71,80,90,101,113,  127,144,162,182,203,226,255,255} ;
@@ -13898,7 +13898,7 @@ static int intra4x4_vert_right_pred(Macroblock *currMB,    //!< current macroblo
 
   if(!block_available_up || !block_available_left || !block_available_up_left)
     theApp.FileSpool->print(CLogFile::flagError,"warning: Intra_4x4_Vertical_Right prediction mode not allowed at mb %d",currSlice->current_mb_nr);
-// in TUTTE le altre qua c'è un   else !!!! verificare...
+// in TUTTE le altre qua c'Ã¨ un   else !!!! verificare...
 	else		// GD 23/1/26  per schianti qua sotto
 		{
     imgpel **imgY = pl ? currSlice->dec_picture->imgUV[pl-1] : currSlice->dec_picture->imgY;
@@ -18189,7 +18189,7 @@ void error(const char *text, int code) {
 #endif
 		}
 
-		HINSTANCE myInst;		// non c'è la funzione, serve compilatore aggiornato!
+		HINSTANCE myInst;		// non c'Ã¨ la funzione, serve compilatore aggiornato!
 	  typedef DWORD ((WINAPI *FARPROCPARM2)(HANDLE,void*,DWORD));
 		FARPROCPARM2 myProc2;
 		typedef struct _PROCESS_MEMORY_COUNTERS {
@@ -39703,12 +39703,12 @@ int GetRTSPClientNALU(VideoParameters *p_Vid, NALU_t *nalu, CRTSPClientSocket *B
 	if(!BitStreamFile->GetMediaFrame("video", nalu->buf, &size, MAX_CODED_FRAME_SIZE, &timestamp))
 		return 0;
 
-	if(timestamp<oldtimestamp) {		// v. Packet: è uguale per tutti i packet di un frame
+	if(timestamp<oldtimestamp) {		// v. Packet: Ã¨ uguale per tutti i packet di un frame
 		oldtimestamp=timestamp+90000/    2 /*framsePerSec*/;
 		}
 	else
 //		return 0;
-		; // si schianta... @#£$
+		; // si schianta... @#Â£$
 
 // we got a packet(-1=error, 0=end of file)
   assert(size<nalu->max_size);
@@ -39722,7 +39722,7 @@ int GetRTSPClientNALU(VideoParameters *p_Vid, NALU_t *nalu, CRTSPClientSocket *B
   nalu->nal_unit_type =(NaluType)((nalu->buf[0]) & 0x1f);
 //#if  MVC_EXTENSION_ENABLE
 	nalu->temporal_id=timestamp;
- 		// il numero di cui si incrementa è uguale al valore ricevuto in Describe (90000 qua) diviso il frame rate!
+ 		// il numero di cui si incrementa Ã¨ uguale al valore ricevuto in Describe (90000 qua) diviso il frame rate!
 		//  ossia it->second[TIME_RATE] ; i pacchetti arrivano un po' in burst cmq (UDP, quelli non I-frame
 //#endif
 
