@@ -107,7 +107,7 @@ typedef int32_t  transpel;
 //#define MAX_NUM_SLICES 150
 #define MAX_NUM_SLICES     100		// era 50
 #define MAX_REFERENCE_PICTURES 32               //!< H.264 allows 32 fields
-#define MAX_CODED_FRAME_SIZE 256000    /*8000000*/         //!< bytes for one frame (occhio hi-res, 952x576 ecc specie quando la compressione è bassa! di giorno
+#define MAX_CODED_FRAME_SIZE 256000    /*8000000*/         //!< bytes for one frame (occhio hi-res, 952x576 ecc specie quando la compressione Ã¨ bassa! di giorno
 #define MAX_NUM_DECSLICES  16
 #define MAX_DEC_THREADS    16                  //16 core deocoding;
 #define MCBUF_LUMA_PAD_X        32
