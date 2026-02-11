@@ -127,6 +127,10 @@ int INSERT_MEMORY(void *n,uint16_t l) {
 
 
 
+#define fast_memcpy memcpy
+#define fast_memset memset
+#define fast_memset_zero ZeroMemory
+
 CDecoderH264_MemoryMgr::CDecoderH264_MemoryMgr(uint32_t hsize) {
   heapSize=hsize;
 	hHeap = HeapCreate(0,heapSize,0);
@@ -683,12 +687,6 @@ const uint8_t CDecoderH264::assignSE2partition[][SE_MAX_ELEMENTS]={
 
 
 
-
-
-#define fast_memcpy memcpy
-#define fast_memset memset
-#define fast_memset_zero ZeroMemory
-
 const INT64T CDecoderH264::po2[64]={0x1,0x2,0x4,0x8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,
                               0x10000,0x20000,0x40000,0x80000,0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,
                               0x10000000,0x20000000,0x40000000,0x80000000,0x100000000,0x200000000,0x400000000,0x800000000,
@@ -704,7 +702,7 @@ inline INT64T CDecoderH264::i64_power2(int x) {
 	}
 
 inline int CDecoderH264::float2int(float x) {
-  return (int)((x<0) ? (x-0.5f) :(x+0.5f));
+  return (int)((x<0) ? (x-0.5f) : (x+0.5f));
 	}
 
 inline int CDecoderH264::get_bit(INT64T x,int n) {
@@ -717,7 +715,7 @@ inline float CDecoderH264::psnr(int max_sample_sq, int samples, float sse_distor
 	}
 #else
 inline float CDecoderH264::psnr(int max_sample_sq, int samples, float sse_distortion) {
-  return (float)(sse_distortion == 0.0 ? 0.0 :(10.0*log10(max_sample_sq *(double)((double) samples / sse_distortion))));
+  return (float)(sse_distortion == 0.0 ? 0.0 : (10.0*log10(max_sample_sq *(double)((double) samples / sse_distortion))));
 	}
 #endif
 
@@ -911,7 +909,7 @@ inline int CDecoderH264::FindStartCode(uint8_t *Buf, int zeros_in_startcode) {
  *
  ************************************************************************
  */
-int CDecoderH264::get_annex_b_NALU(CVideoParameters *p_Vid, NALU_t *nalu, ANNEXB_t *annex_b) {
+int CDecoderH264::get_annex_b_NALU(NALU_t *nalu, ANNEXB_t *annex_b) {
   int i;
   int info2=0, info3=0, pos=0;
   int StartCodeFound=0;
@@ -991,7 +989,7 @@ int CDecoderH264::get_annex_b_NALU(CVideoParameters *p_Vid, NALU_t *nalu, ANNEXB
 			}
 
     pos++;
-    *(pBuf ++) =getfbyte(annex_b);    
+    *(pBuf++) =getfbyte(annex_b);    
     info3=FindStartCode(pBuf-4, 3);
     if(info3 != 1) {
       info2=FindStartCode(pBuf-3, 2);
@@ -1235,7 +1233,7 @@ unsigned int CDecoderH264::biari_decode_symbol(DecodingEnvironment *dep, BiConte
   unsigned int *value=&dep->Dvalue;
   unsigned int *range=&dep->Drange;  
   uint16_t     *state=&bi_ct->state;
-  unsigned int rLPS  =rLPS_table_64x4[*state][(*range>>6) & 0x03];
+  unsigned int rLPS =rLPS_table_64x4[*state][(*range>>6) & 0x03];
   int *DbitsLeft=&dep->DbitsLeft;
 
   *range -= rLPS;
@@ -1367,10 +1365,6 @@ void CDecoderH264::biari_init_context(int8_t qp, BiContextTypePtr ctx, const int
 *   Inverse 4x4 transformation, transforms cof to mb_rres
  ***********************************************************************
  */
-extern void compute_residue   (imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x, 
-															 PIXEL_COORD width, PIXEL_COORD height);
-extern void sample_reconstruct(imgpel **curImg, imgpel **mb_pred, int **mb_rres, BLOCK_COORD mb_x, int opix_x,
-															 PIXEL_COORD width, PIXEL_COORD height, imgpel max_imgpel_value, uint8_t dq_bits);
 void CDecoderH264::itrans4x4(CMacroblock *currMB,   //!< current macroblock
                ColorPlane pl,        //!< used color plane
                PIXEL_COORD ioff,             //!< index to 4x4 block
@@ -1441,7 +1435,7 @@ void CDecoderH264::Inv_Residual_trans_4x4(CMacroblock *currMB,   //!< current ma
 				temp[3][i]=cof[joff+3][ioff+i]+temp[2][i];
 				}
 			for(i=0; i<4; i++) {
-				mb_rres[joff    ][ioff+i]=temp[0][i];
+				mb_rres[joff   ][ioff+i]=temp[0][i];
 				mb_rres[joff+1][ioff+i]=temp[1][i];
 				mb_rres[joff+2][ioff+i]=temp[2][i];
 				mb_rres[joff+3][ioff+i]=temp[3][i];
@@ -1449,13 +1443,13 @@ void CDecoderH264::Inv_Residual_trans_4x4(CMacroblock *currMB,   //!< current ma
 			break;
 		case HOR_PRED:
 			for(j=0; j<4; j++) {
-				temp[j][0]=cof[joff+j][ioff    ];
+				temp[j][0]=cof[joff+j][ioff ];
 				temp[j][1]=cof[joff+j][ioff+1]+temp[j][0];
 				temp[j][2]=cof[joff+j][ioff+2]+temp[j][1];
 				temp[j][3]=cof[joff+j][ioff+3]+temp[j][2];
 				}
 			for(j=0; j<4; j++) {
-				mb_rres[joff+j][ioff    ]=temp[j][0];
+				mb_rres[joff+j][ioff ]=temp[j][0];
 				mb_rres[joff+j][ioff+1]=temp[j][1];
 				mb_rres[joff+j][ioff+2]=temp[j][2];
 				mb_rres[joff+j][ioff+3]=temp[j][3];
@@ -1505,7 +1499,7 @@ void CDecoderH264::Inv_Residual_trans_8x8(CMacroblock *currMB, ColorPlane pl, PI
 				temp[7][i]=mb_rres[joff+7][ioff+i]+temp[6][i];
 				}
 			for(i=0; i<8; i++) {
-				mb_rres[joff  ][ioff+i]=temp[0][i];
+				mb_rres[joff ][ioff+i]=temp[0][i];
 				mb_rres[joff+1][ioff+i]=temp[1][i];
 				mb_rres[joff+2][ioff+i]=temp[2][i];
 				mb_rres[joff+3][ioff+i]=temp[3][i];
@@ -1554,18 +1548,18 @@ void CDecoderH264::Inv_Residual_trans_8x8(CMacroblock *currMB, ColorPlane pl, PI
 *
 ************************************************************************
 */
-void CDecoderH264::Inv_Residual_trans_16x16(CMacroblock *currMB,   //!< current macroblock
+void CMacroblock::Inv_Residual_trans_16x16(   //!< current macroblock
                               ColorPlane pl)       //!< used color plane
 {
   PIXEL_COORD i,j;
   int temp[16][16];
-  CSlice *currSlice=currMB->p_Slice;
+  CSlice *currSlice=p_Slice;
   imgpel **mb_pred=currSlice->mb_pred[pl];
   imgpel **mb_rec =currSlice->mb_rec[pl];
   int    **mb_rres=currSlice->mb_rres[pl];
   int    **cof    =currSlice->cof[pl];
 
-	switch(currMB->ipmode_DPCM) {
+	switch(ipmode_DPCM) {
 		case VERT_PRED_16:
 			for(i=0; i<MB_BLOCK_SIZE; i++) {
 				temp[0][i]=cof[0][i];
@@ -1579,7 +1573,7 @@ void CDecoderH264::Inv_Residual_trans_16x16(CMacroblock *currMB,   //!< current 
 			break;
 		case HOR_PRED_16:
 			for(j=0; j<MB_BLOCK_SIZE; j++) {
-				temp[j][ 0]=cof[j][ 0  ];
+				temp[j][0]=cof[j][0 ];
 				for(i=1; i<MB_BLOCK_SIZE; i++)
 					temp[j][i]=cof[j][i]+temp[j][i-1];
 				}
@@ -1610,20 +1604,20 @@ void CDecoderH264::Inv_Residual_trans_16x16(CMacroblock *currMB,   //!< current 
 *
 ************************************************************************
 */
-void CDecoderH264::Inv_Residual_trans_Chroma(CMacroblock *currMB, int uv) {
+void CMacroblock::Inv_Residual_trans_Chroma(int uv) {
   PIXEL_COORD i,j;
   int temp[16][16];
-  CSlice *currSlice=currMB->p_Slice;
+  CSlice *currSlice=p_Slice;
   //imgpel **mb_pred=currSlice->mb_pred[uv+1];
   //imgpel **mb_rec =currSlice->mb_rec[uv+1];
-  int    **mb_rres=currSlice->mb_rres[uv+1];
-  int    **cof    =currSlice->cof[uv+1];
+  int  **mb_rres=currSlice->mb_rres[uv+1];
+  int  **cof    =currSlice->cof[uv+1];
   BLOCK_COORD width, height; 
 
-  width=currMB->p_Vid->mb_cr_size_x;
-  height=currMB->p_Vid->mb_cr_size_y;
+  width=p_Vid->mb_cr_size_x;
+  height=p_Vid->mb_cr_size_y;
 
-	switch(currMB->c_ipred_mode) {
+	switch(c_ipred_mode) {
 		case VERT_PRED_8:
 			for(i=0; i<width; i++) {
 				temp[0][i]=cof[0][i];
@@ -1658,7 +1652,7 @@ void CDecoderH264::Inv_Residual_trans_Chroma(CMacroblock *currMB, int uv) {
  ***********************************************************************
  */ 
 void CDecoderH264::itrans_2(CMacroblock *currMB,    //!< current macroblock
-              ColorPlane pl)        //!< used color plane
+														ColorPlane pl)        //!< used color plane
 {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
@@ -1668,8 +1662,8 @@ void CDecoderH264::itrans_2(CMacroblock *currMB,    //!< current macroblock
   int **cof=currSlice->cof[transform_pl];
   int8_t qp_scaled=currMB->qp_scaled[transform_pl];
 
-  int8_t qp_per=p_Vid->qp_per_matrix[ qp_scaled ];
-  int8_t qp_rem=p_Vid->qp_rem_matrix[ qp_scaled ];      
+  int8_t qp_per=p_Vid->qp_per_matrix[qp_scaled];
+  int8_t qp_rem=p_Vid->qp_rem_matrix[qp_scaled];      
 
   int16_t invLevelScale=currSlice->InvLevelScale4x4_Intra[pl][qp_rem][0][0];
   int **M4;
@@ -1698,9 +1692,9 @@ void CDecoderH264::itrans_2(CMacroblock *currMB,    //!< current macroblock
 
 
 void CDecoderH264::itrans_sp(CMacroblock *currMB,   //!< current macroblock
-               ColorPlane pl,        //!< used color plane
-               PIXEL_COORD ioff,             //!< index to 4x4 block
-               PIXEL_COORD joff)             //!< index to 4x4 block
+														 ColorPlane pl,        //!< used color plane
+														 PIXEL_COORD ioff,             //!< index to 4x4 block
+														 PIXEL_COORD joff)             //!< index to 4x4 block
 {
   CVideoParameters *p_Vid=currMB->p_Vid;
   CSlice *currSlice=currMB->p_Slice;
@@ -1708,11 +1702,11 @@ void CDecoderH264::itrans_sp(CMacroblock *currMB,   //!< current macroblock
   int ilev, icof;
 
   int8_t qp = currSlice->slice_type == SI_SLICE ? currSlice->qs : currSlice->qp;
-  int8_t qp_per=p_Vid->qp_per_matrix[ qp ];
-  int8_t qp_rem=p_Vid->qp_rem_matrix[ qp ];
+  int8_t qp_per=p_Vid->qp_per_matrix[qp];
+  int8_t qp_rem=p_Vid->qp_rem_matrix[qp];
 
-  int8_t qp_per_sp=p_Vid->qp_per_matrix[ currSlice->qs ];
-  int8_t qp_rem_sp=p_Vid->qp_rem_matrix[ currSlice->qs ];
+  int8_t qp_per_sp=p_Vid->qp_per_matrix[currSlice->qs];
+  int8_t qp_rem_sp=p_Vid->qp_rem_matrix[currSlice->qs];
   int q_bits_sp=Q_BITS+qp_per_sp;
 
   imgpel **mb_pred=currSlice->mb_pred[pl];
@@ -1728,7 +1722,7 @@ void CDecoderH264::itrans_sp(CMacroblock *currMB,   //!< current macroblock
   p_Memory->get_mem2Dint(&PBlock, MB_BLOCK_SIZE, MB_BLOCK_SIZE);
 
   for(j=0; j< BLOCK_SIZE; j++) {
-    PBlock[j][0]=mb_pred[j+joff][ioff    ];
+    PBlock[j][0]=mb_pred[j+joff][ioff   ];
     PBlock[j][1]=mb_pred[j+joff][ioff+1];
     PBlock[j][2]=mb_pred[j+joff][ioff+2];
     PBlock[j][3]=mb_pred[j+joff][ioff+3];
@@ -1767,7 +1761,7 @@ void CDecoderH264::itrans_sp(CMacroblock *currMB,   //!< current macroblock
   inverse4x4(cof, mb_rres, joff, ioff);
 
   for(j=joff; j<joff +BLOCK_SIZE;j++) {
-    mb_rec[j][ioff   ] =(imgpel)iClip1(max_imgpel_value,rshift_rnd_sf(mb_rres[j][ioff   ], DQ_BITS));
+    mb_rec[j][ioff  ] =(imgpel)iClip1(max_imgpel_value,rshift_rnd_sf(mb_rres[j][ioff  ], DQ_BITS));
     mb_rec[j][ioff+ 1] =(imgpel)iClip1(max_imgpel_value,rshift_rnd_sf(mb_rres[j][ioff+ 1], DQ_BITS));
     mb_rec[j][ioff+ 2] =(imgpel)iClip1(max_imgpel_value,rshift_rnd_sf(mb_rres[j][ioff+ 2], DQ_BITS));
     mb_rec[j][ioff+ 3] =(imgpel)iClip1(max_imgpel_value,rshift_rnd_sf(mb_rres[j][ioff+ 3], DQ_BITS));
@@ -1788,11 +1782,11 @@ void CDecoderH264::itrans_sp_cr(CMacroblock *currMB, int uv) {
   int    **cof=currSlice->cof[uv+1];
   int **PBlock=p_Memory->new_mem2Dint(MB_BLOCK_SIZE, MB_BLOCK_SIZE);
 
-  qp_per   =p_Vid->qp_per_matrix[((currSlice->qp<0 ? currSlice->qp : QP_SCALE_CR[currSlice->qp]))];
-  qp_rem   =p_Vid->qp_rem_matrix[((currSlice->qp<0 ? currSlice->qp : QP_SCALE_CR[currSlice->qp]))];
+  qp_per   =p_Vid->qp_per_matrix[currSlice->qp<0 ? currSlice->qp : QP_SCALE_CR[currSlice->qp]];
+  qp_rem   =p_Vid->qp_rem_matrix[currSlice->qp<0 ? currSlice->qp : QP_SCALE_CR[currSlice->qp]];
 
-  qp_per_sp=p_Vid->qp_per_matrix[((currSlice->qs<0 ? currSlice->qs : QP_SCALE_CR[currSlice->qs]))];
-  qp_rem_sp=p_Vid->qp_rem_matrix[((currSlice->qs<0 ? currSlice->qs : QP_SCALE_CR[currSlice->qs]))];
+  qp_per_sp=p_Vid->qp_per_matrix[currSlice->qs<0 ? currSlice->qs : QP_SCALE_CR[currSlice->qs]];
+  qp_rem_sp=p_Vid->qp_rem_matrix[currSlice->qs<0 ? currSlice->qs : QP_SCALE_CR[currSlice->qs]];
   q_bits_sp=Q_BITS+qp_per_sp;  
 
   if(currSlice->slice_type == SI_SLICE) {
@@ -1813,14 +1807,14 @@ void CDecoderH264::itrans_sp_cr(CMacroblock *currMB, int uv) {
 	  }
 
   //     2X2 transform of DC coeffs.
-  mp1[0] =(PBlock[0][0]+PBlock[4][0]+PBlock[0][4]+PBlock[4][4]);
-  mp1[1] =(PBlock[0][0]-PBlock[4][0]+PBlock[0][4]-PBlock[4][4]);
-  mp1[2] =(PBlock[0][0]+PBlock[4][0]-PBlock[0][4]-PBlock[4][4]);
-  mp1[3] =(PBlock[0][0]-PBlock[4][0]-PBlock[0][4]+PBlock[4][4]);
+  mp1[0] =PBlock[0][0]+PBlock[4][0]+PBlock[0][4]+PBlock[4][4];
+  mp1[1] =PBlock[0][0]-PBlock[4][0]+PBlock[0][4]-PBlock[4][4];
+  mp1[2] =PBlock[0][0]+PBlock[4][0]-PBlock[0][4]-PBlock[4][4];
+  mp1[3] =PBlock[0][0]-PBlock[4][0]-PBlock[0][4]+PBlock[4][4];
 
   if(currSlice->sp_switch || currSlice->slice_type == SI_SLICE) {        
-    for(n2=0; n2<2; ++n2) {
-      for(n1=0; n1<2; ++n1) {
+    for(n2=0; n2<2; n2++) {
+      for(n1=0; n1<2; n1++) {
         //quantization fo predicted block
         ilev=rshift_rnd_sf(iabs(mp1[n1+n2*2])*quant_coef[qp_rem_sp][0][0], q_bits_sp+1);
         //addition
@@ -1836,7 +1830,6 @@ void CDecoderH264::itrans_sp_cr(CMacroblock *currMB, int uv) {
           for(i=0; i<BLOCK_SIZE; i++) {
             // recovering coefficient since they are already dequantized earlier
             cof[n2+j][n1+i] =(cof[n2+j][n1+i] >> qp_per) / dequant_coef[qp_rem][j][i];
-
             //quantization of the predicted block
             ilev=rshift_rnd_sf(iabs(PBlock[n2+j][n1+i])*quant_coef[qp_rem_sp][j][i], q_bits_sp);
             //addition of the residual
@@ -1899,14 +1892,13 @@ void CDecoderH264::iMBtrans4x4(CMacroblock *currMB, ColorPlane pl, bool smb) {
   // =============== 4x4 itrans ================
   // -------------------------------------------
   if(currMB->is_lossless && currMB->mb_type == I16MB)
-    Inv_Residual_trans_16x16(currMB, pl);
+    currMB->Inv_Residual_trans_16x16(pl);
   else if(smb || currMB->is_lossless) {
     currMB->itrans_4x4 = smb ? itrans_sp : (!currMB->is_lossless ? itrans4x4 : Inv_Residual_trans_4x4);
     for(block8x8=0; block8x8<MB_BLOCK_SIZE; block8x8 += 4) { 
       for(k=block8x8; k<block8x8+4; k++) {
         jj =((decode_block_scan[k] >> 2) & 3) << BLOCK_SHIFT;
         ii =(decode_block_scan[k] & 3) << BLOCK_SHIFT;
-
         (this->*currMB->itrans_4x4)(currMB, pl, ii,jj);   // use integer transform and make 4x4 block mb_rres from prediction block mb_pred
 				}
 			}
@@ -2011,7 +2003,7 @@ void CDecoderH264::iTransform(CMacroblock *currMB, ColorPlane pl, bool smb) {
     PIXEL_COORD ioff, joff;
     imgpel **mb_rec;
 
-    for(uv=PLANE_U; uv <= PLANE_V; ++uv) {
+    for(uv=PLANE_U; uv <= PLANE_V; uv++) {
       // =============== 4x4 itrans ================
       // -------------------------------------------
       curUV=&dec_picture->imgUV[uv-1][currMB->pix_c_y]; 
@@ -2252,7 +2244,7 @@ void CDecoderH264::delete_contexts_TextureInfo(TextureInfoContexts *deco_ctx) {
 
 void CheckAvailabilityOfNeighborsMBAFF(CMacroblock *currMB);
 
-void CDecoderH264::readFieldModeInfo_CABAC(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readFieldModeInfo_CABAC(CMacroblock *currMB, CSyntaxElement *se,
                              DecodingEnvironmentPtr dep_dp) {  
   CSlice *currSlice=currMB->p_Slice;
   //CVideoParameters *p_Vid=currMB->p_Vid;
@@ -2270,7 +2262,7 @@ void CDecoderH264::readFieldModeInfo_CABAC(CMacroblock *currMB, SyntaxElement *s
 	}
 
 
-bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_p_slice(CSlice *currSlice, SyntaxElement *se,                                           
+bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_p_slice(CSlice *currSlice, CSyntaxElement *se,                                           
                                            DataPartition  *act_dp) {
   CVideoParameters *p_Vid=currSlice->p_Vid;
   BiContextTypePtr          mb_type_ctx_copy[3];
@@ -2352,7 +2344,7 @@ bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_p_slice(CSlice *currSl
   return skip;
 	}
 
-bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_b_slice(CSlice *currSlice,SyntaxElement *se,                                           
+bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_b_slice(CSlice *currSlice, CSyntaxElement *se,                                           
                                            DataPartition  *act_dp) {
   CVideoParameters *p_Vid=currSlice->p_Vid;
   BiContextTypePtr          mb_type_ctx_copy[3];
@@ -2433,7 +2425,6 @@ bool CDecoderH264::check_next_mb_and_get_field_mode_CABAC_b_slice(CSlice *currSl
   return skip;
 	}
 
-void get4x4NeighbourBase(CMacroblock *currMB, BLOCK_COORD block_x, BLOCK_COORD block_y, uint32_t mb_size[2], PixelPos *pix);
 /*!
  ************************************************************************
 *\brief
@@ -2441,7 +2432,7 @@ void get4x4NeighbourBase(CMacroblock *currMB, BLOCK_COORD block_x, BLOCK_COORD b
 *   vector data of a B-frame MB.
  ************************************************************************
  */
-void CDecoderH264::read_MVD_CABAC(CMacroblock *currMB, SyntaxElement *se, DecodingEnvironmentPtr dep_dp) {  
+void CDecoderH264::read_MVD_CABAC(CMacroblock *currMB, CSyntaxElement *se, DecodingEnvironmentPtr dep_dp) {  
   uint32_t *mb_size=currMB->p_Vid->mb_size[IS_LUMA];
   CSlice *currSlice=currMB->p_Slice;
   MotionInfoContexts *ctx=currSlice->mot_ctx;
@@ -2498,7 +2489,7 @@ void CDecoderH264::read_MVD_CABAC(CMacroblock *currMB, SyntaxElement *se, Decodi
 *   vector data of a B-frame MB.
  ************************************************************************
  */
-void CDecoderH264::read_mvd_CABAC_mbaff(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::read_mvd_CABAC_mbaff(CMacroblock *currMB, CSyntaxElement *se,
                     DecodingEnvironmentPtr dep_dp) {
   CVideoParameters *p_Vid=currMB->p_Vid;
   CSlice *currSlice=currMB->p_Slice;
@@ -2524,7 +2515,7 @@ void CDecoderH264::read_mvd_CABAC_mbaff(CMacroblock *currMB, SyntaxElement *se,
 			}
 		}
 
-  get4x4NeighbourBase(currMB, i    , j-1, p_Vid->mb_size[IS_LUMA], &block_b);
+  get4x4NeighbourBase(currMB, i, j-1, p_Vid->mb_size[IS_LUMA], &block_b);
   if(block_b.available) {
     b=iabs(currSlice->mb_data[block_b.mb_addr].mvd[list_idx][block_b.y][block_b.x][k]);
     if(currSlice->mb_aff_frame_flag && (k==1)) {
@@ -2569,7 +2560,7 @@ void CDecoderH264::read_mvd_CABAC_mbaff(CMacroblock *currMB, SyntaxElement *se,
 *   This function is used to arithmetically decode the 8x8 block type.
  ************************************************************************
  */
-void CDecoderH264::readB8_typeInfo_CABAC_p_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readB8_typeInfo_CABAC_p_slice(CMacroblock *currMB, CSyntaxElement *se,
                                     DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   int act_sym=0;
@@ -2601,7 +2592,7 @@ void CDecoderH264::readB8_typeInfo_CABAC_p_slice(CMacroblock *currMB, SyntaxElem
 *   This function is used to arithmetically decode the 8x8 block type.
  ************************************************************************
  */
-void CDecoderH264::readB8_typeInfo_CABAC_b_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readB8_typeInfo_CABAC_b_slice(CMacroblock *currMB, CSyntaxElement *se,
                                     DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   int act_sym=0;
@@ -2655,7 +2646,7 @@ void CDecoderH264::readB8_typeInfo_CABAC_b_slice(CMacroblock *currMB, SyntaxElem
 *   type info of a given MB.
  ************************************************************************
  */
-void CDecoderH264::read_skip_flag_CABAC_p_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::read_skip_flag_CABAC_p_slice(CMacroblock *currMB, CSyntaxElement *se,
                                   DecodingEnvironmentPtr dep_dp) {
   int8_t a = currMB->mb_left ? !currMB->mb_left->skip_flag : 0;
   int8_t b = currMB->mb_up ? !currMB->mb_up->skip_flag : 0;
@@ -2678,7 +2669,7 @@ void CDecoderH264::read_skip_flag_CABAC_p_slice(CMacroblock *currMB, SyntaxEleme
 *   type info of a given MB.
  ************************************************************************
  */
-void CDecoderH264::read_skip_flag_CABAC_b_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::read_skip_flag_CABAC_b_slice(CMacroblock *currMB, CSyntaxElement *se,
                                   DecodingEnvironmentPtr dep_dp) {
   int8_t a = currMB->mb_left ? !currMB->mb_left->skip_flag : 0;
   int8_t b = currMB->mb_up ? !currMB->mb_up  ->skip_flag : 0;
@@ -2703,7 +2694,7 @@ void CDecoderH264::read_skip_flag_CABAC_b_slice(CMacroblock *currMB, SyntaxEleme
 *    intra_pred_size flag info of a given MB.
 ***************************************************************************
 */
-void CDecoderH264::readMB_transform_size_flag_CABAC(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readMB_transform_size_flag_CABAC(CMacroblock *currMB, CSyntaxElement *se,
                                       DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   TextureInfoContexts*ctx=currSlice->tex_ctx;
@@ -2729,7 +2720,7 @@ void CDecoderH264::readMB_transform_size_flag_CABAC(CMacroblock *currMB, SyntaxE
 *   type info of a given MB.
  ************************************************************************
  */
-void CDecoderH264::readMB_typeInfo_CABAC_i_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readMB_typeInfo_CABAC_i_slice(CMacroblock *currMB, CSyntaxElement *se,
                            DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   MotionInfoContexts *ctx=currSlice->mot_ctx;
@@ -2855,7 +2846,7 @@ void CDecoderH264::readMB_typeInfo_CABAC_i_slice(CMacroblock *currMB, SyntaxElem
 *   type info of a given MB.
  ************************************************************************
  */
- void CDecoderH264::readMB_typeInfo_CABAC_p_slice(CMacroblock *currMB, SyntaxElement *se,
+ void CDecoderH264::readMB_typeInfo_CABAC_p_slice(CMacroblock *currMB, CSyntaxElement *se,
                            DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   MotionInfoContexts *ctx=currSlice->mot_ctx;
@@ -2934,7 +2925,7 @@ void CDecoderH264::readMB_typeInfo_CABAC_i_slice(CMacroblock *currMB, SyntaxElem
 *   type info of a given MB.
  ************************************************************************
  */
-void CDecoderH264::readMB_typeInfo_CABAC_b_slice(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readMB_typeInfo_CABAC_b_slice(CMacroblock *currMB, CSyntaxElement *se,
                            DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   MotionInfoContexts *ctx=currSlice->mot_ctx;
@@ -3044,7 +3035,7 @@ void CDecoderH264::readMB_typeInfo_CABAC_b_slice(CMacroblock *currMB, SyntaxElem
 *   intra prediction modes of a given MB.
  ************************************************************************
  */
-void CDecoderH264::readIntraPredMode_CABAC(CMacroblock *currMB, SyntaxElement *se, DecodingEnvironmentPtr dep_dp) {
+void CDecoderH264::readIntraPredMode_CABAC(CMacroblock *currMB, CSyntaxElement *se, DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   TextureInfoContexts *ctx    =currSlice->tex_ctx;
   // use_most_probable_mode
@@ -3065,7 +3056,6 @@ void CDecoderH264::readIntraPredMode_CABAC(CMacroblock *currMB, SyntaxElement *s
 #endif
 	}
 
-void get4x4Neighbour(CMacroblock *currMB, BLOCK_COORD block_x, BLOCK_COORD block_y, uint32_t mb_size[2], PixelPos *pix);
 /*!
  ************************************************************************
 *\brief
@@ -3073,7 +3063,7 @@ void get4x4Neighbour(CMacroblock *currMB, BLOCK_COORD block_x, BLOCK_COORD block
 *   parameter of a given MB.
  ************************************************************************
  */
-void CDecoderH264::readRefFrame_CABAC(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readRefFrame_CABAC(CMacroblock *currMB, CSyntaxElement *se,
                         DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
@@ -3140,7 +3130,7 @@ void CDecoderH264::readRefFrame_CABAC(CMacroblock *currMB, SyntaxElement *se,
 *   This function is used to arithmetically decode the delta qp of a given MB.
  ************************************************************************
  */
-void CDecoderH264::read_dQuant_CABAC(CMacroblock *currMB, SyntaxElement *se,                       
+void CDecoderH264::read_dQuant_CABAC(CMacroblock *currMB, CSyntaxElement *se,                       
                        DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   MotionInfoContexts *ctx=currSlice->mot_ctx;
@@ -3174,7 +3164,7 @@ void CDecoderH264::read_dQuant_CABAC(CMacroblock *currMB, SyntaxElement *se,
 *   block pattern of a given MB.
  ************************************************************************
  */
-void CDecoderH264::read_CBP_CABAC(CMacroblock *currMB, SyntaxElement *se, DecodingEnvironmentPtr dep_dp) {
+void CDecoderH264::read_CBP_CABAC(CMacroblock *currMB, CSyntaxElement *se, DecodingEnvironmentPtr dep_dp) {
   CVideoParameters *p_Vid=currMB->p_Vid;
   StorablePicture *dec_picture=currMB->p_Slice->dec_picture;
   CSlice *currSlice=currMB->p_Slice;
@@ -3290,7 +3280,7 @@ void CDecoderH264::read_CBP_CABAC(CMacroblock *currMB, SyntaxElement *se, Decodi
 *   intra prediction mode of a given MB.
  ************************************************************************
  */
-void CDecoderH264::readCIPredMode_CABAC(CMacroblock *currMB, SyntaxElement *se,
+void CDecoderH264::readCIPredMode_CABAC(CMacroblock *currMB, CSyntaxElement *se,
                           DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   TextureInfoContexts *ctx=currSlice->tex_ctx;
@@ -3322,8 +3312,8 @@ void CDecoderH264::readCIPredMode_CABAC(CMacroblock *currMB, SyntaxElement *se,
  ************************************************************************
 */
 int CDecoderH264::read_and_store_CBP_block_bit_444(CMacroblock       *currMB,
-                                             DecodingEnvironmentPtr  dep_dp,
-                                             CABACBlockTypes         type) {
+																									 DecodingEnvironmentPtr  dep_dp,
+																									 CABACBlockTypes         type) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
   StorablePicture *dec_picture=currSlice->dec_picture;
@@ -3413,7 +3403,6 @@ int CDecoderH264::read_and_store_CBP_block_bit_444(CMacroblock       *currMB,
         else
           left_bit=get_bit(mb_data[block_a.mb_addr].s_cbp[0].bits,bit+bit_pos_a);
 	      }
-      
       
       ctx=2*upper_bit+left_bit;     
       //===== encode symbol =====
@@ -3929,12 +3918,12 @@ const uint8_t* CDecoderH264::pos2ctx_last    []={pos2ctx_last4x4, pos2ctx_last4x
 *   Read Significance MAP
  ************************************************************************
  */
-int CDecoderH264::read_significance_map(CMacroblock              *currMB,
-                                  DecodingEnvironmentPtr  dep_dp,
-                                  int                     type,
-                                  int                     coeff[]) {
+int CDecoderH264::read_significance_map(CMacroblock           *currMB,
+																				DecodingEnvironmentPtr dep_dp,
+																				int                    type,
+																				int                    coeff[]) {
   CSlice *currSlice=currMB->p_Slice;
-  int               fld    =(currSlice->structure!=FRAME || currMB->mb_field);
+  int   fld    =(currSlice->structure!=FRAME || currMB->mb_field);
   const uint8_t *pos2ctx_Map = fld ? pos2ctx_map_int[type] : pos2ctx_map[type];
   const uint8_t *pos2ctx_Last=pos2ctx_last[type];
 
@@ -3954,7 +3943,7 @@ int CDecoderH264::read_significance_map(CMacroblock              *currMB,
 
   for(i=i0; i<i1; i++) {		// if last coeff is reached, it has to be significant
     //--- read significance symbol ---
-    if(biari_decode_symbol  (dep_dp, map_ctx+pos2ctx_Map[i])) {
+    if(biari_decode_symbol(dep_dp, map_ctx+pos2ctx_Map[i])) {
       *(coeff++)=1;
       coeff_ctr++;
       //--- read last coefficient symbol ---
@@ -3969,7 +3958,7 @@ int CDecoderH264::read_significance_map(CMacroblock              *currMB,
   //--- last coefficient must be significant if no last symbol was received ---
   if(i<i1+1) {
     *coeff=1;
-    ++coeff_ctr;
+    coeff_ctr++;
 		}
 
   return coeff_ctr;
@@ -3984,8 +3973,8 @@ int CDecoderH264::read_significance_map(CMacroblock              *currMB,
  ************************************************************************
  */
 void CDecoderH264::read_significant_coefficients(DecodingEnvironmentPtr  dep_dp,
-                                           TextureInfoContexts    *tex_ctx,
-                                           int type, int *coeff) {
+																								 TextureInfoContexts    *tex_ctx,
+																								 int type, int *coeff) {
   BiContextType *one_contexts=tex_ctx->one_contexts[type2ctx_one[type]];
   BiContextType *abs_contexts=tex_ctx->abs_contexts[type2ctx_abs[type]];
   const int16_t max_type=max_c2[type];
@@ -4020,7 +4009,7 @@ void CDecoderH264::read_significant_coefficients(DecodingEnvironmentPtr  dep_dp,
 *   Read Block-Transform Coefficients
  ************************************************************************
  */
-void CDecoderH264::readRunLevel_CABAC(CMacroblock *currMB, SyntaxElement  *se,
+void CDecoderH264::readRunLevel_CABAC(CMacroblock *currMB, CSyntaxElement  *se,
                          DecodingEnvironmentPtr dep_dp) {
   CSlice *currSlice=currMB->p_Slice;
   int  *coeff_ctr=&currSlice->coeff_ctr;
@@ -4065,7 +4054,7 @@ void CDecoderH264::readRunLevel_CABAC(CMacroblock *currMB, SyntaxElement  *se,
 *   arithmetic decoding
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_CABAC(CMacroblock *currMB, SyntaxElement *se, DataPartition *this_dataPart) {
+int CDecoderH264::readSyntaxElement_CABAC(CMacroblock *currMB, CSyntaxElement *se, DataPartition *this_dataPart) {
   DecodingEnvironmentPtr dep_dp=&this_dataPart->de_cabac;
   int curr_len=arideco_bits_read(dep_dp);
 
@@ -4135,8 +4124,8 @@ unsigned int CDecoderH264::unary_bin_decode(DecodingEnvironmentPtr dep_dp,
     symbol=0;
     do {
       l=biari_decode_symbol(dep_dp, ctx);
-      ++symbol;
-			}    while(l != 0);
+      symbol++;
+			} while(l != 0);
     return symbol;
 		}
 	}
@@ -4153,7 +4142,7 @@ unsigned int CDecoderH264::unary_bin_decode(DecodingEnvironmentPtr dep_dp,
 *StW, 8.7.02
  ************************************************************************
  */
-int CDecoderH264::cabac_startcode_follows(CSlice *currSlice, bool eos_bit) {
+bool CDecoderH264::cabac_startcode_follows(CSlice *currSlice, bool eos_bit) {
   unsigned int bit;
 
   if(eos_bit) {
@@ -4171,7 +4160,7 @@ int CDecoderH264::cabac_startcode_follows(CSlice *currSlice, bool eos_bit) {
   else
     bit=0;
 
-  return bit == 1 ? 1 : 0;
+  return bit == 1 ? TRUE : FALSE;
 	}
 
 /*!
@@ -4234,7 +4223,6 @@ unsigned int CDecoderH264::unary_exp_golomb_level_decode(DecodingEnvironmentPtr 
 
 
 
-
 /*!
  ************************************************************************
 *\brief
@@ -4261,8 +4249,8 @@ unsigned int CDecoderH264::unary_exp_golomb_mv_decode(DecodingEnvironmentPtr dep
       if((++bin)==2) 
 				ctx++;
       if(bin==max_bin) 
-        ++ctx;
-      ++symbol;
+        ctx++;
+      symbol++;
       k++;
 			} while((l!=0) && (k!=exp_start));
     if(l!=0)
@@ -4336,11 +4324,6 @@ void CDecoderH264::readIPCM_CABAC(CSlice *currSlice, struct datapartition_dec *d
 	}
 
 
-
-
-#define MAX_ITEMS_TO_PARSE  10000
-
-static void PatchInp               (InputParameters *p_Inp);
 
 /*!
  ***********************************************************************
@@ -6075,13 +6058,15 @@ int main(int argc, char **argv) {
 /*!
  ************************************************************************
 *\brief
-*   Initinize the error concealment module
+*   Initialize the error concealment module
  ************************************************************************
  */
-void CDecoderH264::ercInit(CVideoParameters *p_Vid, int pic_sizex, int pic_sizey, bool flag) {
+void CDecoderH264::ercInit(CVideoParameters *p_Vid, PIXEL_COORD pic_sizex, PIXEL_COORD pic_sizey, bool flag) {
+
   ercClose(p_Vid, p_Vid->erc_errorVar);
 
-  p_Vid->erc_object_list =(objectBuffer_t *)p_Memory->H264CALLOC((pic_sizex*pic_sizey) >> 6,sizeof(objectBuffer_t));
+  p_Vid->erc_object_list = (objectBuffer_t *)p_Memory->H264CALLOC((((uint32_t)pic_sizex)*pic_sizey) >> 6,
+		sizeof(objectBuffer_t));
   if(!p_Vid->erc_object_list) 
 		p_Memory->no_mem_exit("ercInit: erc_object_list");
 
@@ -6089,7 +6074,7 @@ void CDecoderH264::ercInit(CVideoParameters *p_Vid, int pic_sizex, int pic_sizey
   p_Vid->erc_errorVar=ercOpen();
 
   // set error concealment ON
-  ercSetErrorConcealment(p_Vid->erc_errorVar, flag);
+  p_Vid->ercSetErrorConcealment(p_Vid->erc_errorVar, flag);
 	}
 
 /*!
@@ -6253,7 +6238,7 @@ void CDecoderH264::ercClose(CVideoParameters *p_Vid,  ercVariables_t *errorVar) 
 *     New value
  ************************************************************************
  */
-void CDecoderH264::ercSetErrorConcealment(ercVariables_t *errorVar, int value) {
+void CVideoParameters::ercSetErrorConcealment(ercVariables_t *errorVar, int value) {
 
   if(errorVar)
     errorVar->concealment=value;
@@ -6276,7 +6261,7 @@ void CDecoderH264::ercSetErrorConcealment(ercVariables_t *errorVar, int value) {
 *     Variables for error detector
  ************************************************************************
  */
-void CDecoderH264::ercStartSegment(int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar) {
+void CVideoParameters::ercStartSegment(int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar) {
 
   if(errorVar && errorVar->concealment) {
     errorVar->currSegmentCorrupted=FALSE;
@@ -6301,7 +6286,7 @@ void CDecoderH264::ercStartSegment(int currMBNum, int segment, unsigned int bitP
 *     Variables for error detector
  ************************************************************************
  */
-void CDecoderH264::ercStopSegment(int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar) {
+void CVideoParameters::ercStopSegment(int currMBNum, int segment, unsigned int bitPos, ercVariables_t *errorVar) {
 
   if(errorVar && errorVar->concealment) {
     errorVar->segments[segment].endMBPos =(int16_t)currMBNum;
@@ -6320,7 +6305,7 @@ void CDecoderH264::ercStopSegment(int currMBNum, int segment, unsigned int bitPo
 *     Variables for error detector
  ************************************************************************
  */
-void CDecoderH264::ercMarkCurrSegmentLost(int picSizeX, ercVariables_t *errorVar) {
+void CVideoParameters::ercMarkCurrSegmentLost(PIXEL_COORD picSizeX, ercVariables_t *errorVar) {
   int j=0;
   int current_segment;
 
@@ -6354,7 +6339,7 @@ void CDecoderH264::ercMarkCurrSegmentLost(int picSizeX, ercVariables_t *errorVar
 *     Variables for error detector
  ************************************************************************
  */
-void CDecoderH264::ercMarkCurrSegmentOK(int picSizeX, ercVariables_t *errorVar) {
+void CVideoParameters::ercMarkCurrSegmentOK(PIXEL_COORD picSizeX, ercVariables_t *errorVar) {
   int j=0;
   int current_segment;
 
@@ -6387,7 +6372,7 @@ void CDecoderH264::ercMarkCurrSegmentOK(int picSizeX, ercVariables_t *errorVar) 
 *     Variables for error detector
  ************************************************************************
  */
-void CDecoderH264::ercMarkCurrMBConcealed(int currMBNum, int8_t comp, PIXEL_COORD picSizeX, ercVariables_t *errorVar) {
+void CVideoParameters::ercMarkCurrMBConcealed(int currMBNum, int8_t comp, PIXEL_COORD picSizeX, ercVariables_t *errorVar) {
   bool setAll=0;
 
   if(errorVar && errorVar->concealment) {
@@ -6437,7 +6422,7 @@ void CDecoderH264::ercMarkCurrMBConcealed(int currMBNum, int8_t comp, PIXEL_COOR
 *     Variables for error concealment
  ************************************************************************
  */
-int CDecoderH264::ercConcealIntraFrame(CVideoParameters *p_Vid, frame *recfr, PIXEL_COORD picSizeX, PIXEL_COORD picSizeY, ercVariables_t *errorVar) {
+int CVideoParameters::ercConcealIntraFrame(frame *recfr, PIXEL_COORD picSizeX, PIXEL_COORD picSizeY, ercVariables_t *errorVar) {
   int lastColumn=0, lastRow=0;
 
   // if concealment is on
@@ -6447,15 +6432,15 @@ int CDecoderH264::ercConcealIntraFrame(CVideoParameters *p_Vid, frame *recfr, PI
       // Y
       lastRow = picSizeY >> 3;
       lastColumn = picSizeX >> 3;
-      concealBlocks(p_Vid, lastColumn, lastRow, 0, recfr, picSizeX, errorVar->yCondition);
+      concealBlocks(lastColumn, lastRow, 0, recfr, picSizeX, errorVar->yCondition);
 
       // U(dimensions halved compared to Y)
       lastRow = picSizeY >> 4;
       lastColumn = picSizeX >> 4;
-      concealBlocks(p_Vid, lastColumn, lastRow, 1, recfr, picSizeX, errorVar->uCondition);
+      concealBlocks(lastColumn, lastRow, 1, recfr, picSizeX, errorVar->uCondition);
 
       // V(dimensions equal to u)
-      concealBlocks(p_Vid, lastColumn, lastRow, 2, recfr, picSizeX, errorVar->vCondition);
+      concealBlocks(lastColumn, lastRow, 2, recfr, picSizeX, errorVar->vCondition);
 			}
     return 1;
 		}
@@ -6484,7 +6469,7 @@ int CDecoderH264::ercConcealIntraFrame(CVideoParameters *p_Vid, frame *recfr, PI
 *     2 for Y, 1 for U/V components
  ************************************************************************
  */
-void CDecoderH264::ercPixConcealIMB(CVideoParameters *p_Vid, imgpel *currFrame, PIXEL_COORD row, PIXEL_COORD column, 
+void CVideoParameters::ercPixConcealIMB(imgpel *currFrame, PIXEL_COORD row, PIXEL_COORD column, 
 											int predBlocks[], PIXEL_COORD frameWidth, BLOCK_COORD mbWidthInBlocks) {
 	imgpel *src[8]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
 	imgpel *currBlock=NULL;
@@ -6508,7 +6493,7 @@ void CDecoderH264::ercPixConcealIMB(CVideoParameters *p_Vid, imgpel *currFrame, 
 		src[7]=currFrame+row*frameWidth*8 +(column+mbWidthInBlocks)*8;
 
 	currBlock=currFrame+row*frameWidth*8+column*8;
-	pixMeanInterpolateBlock(p_Vid, src, currBlock, mbWidthInBlocks*8, frameWidth);
+	pixMeanInterpolateBlock(src, currBlock, mbWidthInBlocks*8, frameWidth);
 	}
 
 /*!
@@ -6544,7 +6529,7 @@ void CDecoderH264::ercPixConcealIMB(CVideoParameters *p_Vid, imgpel *currFrame, 
 *     No corner neighbors are considered
  ************************************************************************
  */
-int CDecoderH264::ercCollect8PredBlocks(int predBlocks[], PIXEL_COORD currRow, PIXEL_COORD currColumn, int8_t* condition,
+int CVideoParameters::ercCollect8PredBlocks(int predBlocks[], PIXEL_COORD currRow, PIXEL_COORD currColumn, int8_t* condition,
                            PIXEL_COORD maxRow, PIXEL_COORD maxColumn, int8_t step, uint8_t fNoCornerNeigh) {
   int srcCounter =0;
   int srcCountMin = fNoCornerNeigh ? 2 : 4;
@@ -6556,32 +6541,32 @@ int CDecoderH264::ercCollect8PredBlocks(int predBlocks[], PIXEL_COORD currRow, P
   do {
     srcCounter=0;
     // top
-    if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn ] >= threshold) {                           //ERC_BLOCK_OK(3) or ERC_BLOCK_CONCEALED(2)
-      predBlocks[4]=condition[(currRow-1)*maxColumn+currColumn ];
+    if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn] >= threshold) {                           //ERC_BLOCK_OK(3) or ERC_BLOCK_CONCEALED(2)
+      predBlocks[4]=condition[(currRow-1)*maxColumn+currColumn];
       srcCounter++;
 			}
     // bottom
-    if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn ] >= threshold) {
-      predBlocks[6]=condition[(currRow+step)*maxColumn+currColumn ];
+    if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn] >= threshold) {
+      predBlocks[6]=condition[(currRow+step)*maxColumn+currColumn];
       srcCounter++;
 		  }
 
     if(currColumn>0) {
       // left
-      if(condition[ currRow*maxColumn+currColumn-1 ] >= threshold) {
-        predBlocks[5]=condition[ currRow*maxColumn+currColumn-1 ];
+      if(condition[currRow*maxColumn+currColumn-1] >= threshold) {
+        predBlocks[5]=condition[currRow*maxColumn+currColumn-1];
         srcCounter++;
 			  }
 
       if(!fNoCornerNeigh) {
         // top-left
-        if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn-1 ] >= threshold) {
-          predBlocks[1]=condition[(currRow-1)*maxColumn+currColumn-1 ];
+        if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn-1] >= threshold) {
+          predBlocks[1]=condition[(currRow-1)*maxColumn+currColumn-1];
           srcCounter++;
 				  }
         // bottom-left
-        if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn-1 ] >= threshold) {
-          predBlocks[2]=condition[(currRow+step)*maxColumn+currColumn-1 ];
+        if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn-1] >= threshold) {
+          predBlocks[2]=condition[(currRow+step)*maxColumn+currColumn-1];
           srcCounter++;
 					}
 				}
@@ -6589,20 +6574,20 @@ int CDecoderH264::ercCollect8PredBlocks(int predBlocks[], PIXEL_COORD currRow, P
 
     if(currColumn <(maxColumn-step)) {
       // right
-      if(condition[ currRow*maxColumn+currColumn+step ] >= threshold) {
-        predBlocks[7]=condition[ currRow*maxColumn+currColumn+step ];
+      if(condition[currRow*maxColumn+currColumn+step] >= threshold) {
+        predBlocks[7]=condition[currRow*maxColumn+currColumn+step];
         srcCounter++;
 			  }
 
       if(!fNoCornerNeigh) {
         // top-right
-        if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn+step ] >= threshold) {
-          predBlocks[0]=condition[(currRow-1)*maxColumn+currColumn+step ];
+        if(currRow>0 && condition[(currRow-1)*maxColumn+currColumn+step] >= threshold) {
+          predBlocks[0]=condition[(currRow-1)*maxColumn+currColumn+step];
           srcCounter++;
 				  }
         // bottom-right
-        if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn+step ] >= threshold) {
-          predBlocks[3]=condition[(currRow+step)*maxColumn+currColumn+step ];
+        if(currRow <(maxRow-step) && condition[(currRow+step)*maxColumn+currColumn+step] >= threshold) {
+          predBlocks[3]=condition[(currRow+step)*maxColumn+currColumn+step];
           srcCounter++;
 					}
 				}
@@ -6639,18 +6624,18 @@ int CDecoderH264::ercCollect8PredBlocks(int predBlocks[], PIXEL_COORD currRow, P
 *     in vertical/horizontal direction.(Y:2 U,V:1)
  ************************************************************************
  */
-int CDecoderH264::ercCollectColumnBlocks(int predBlocks[], PIXEL_COORD currRow, PIXEL_COORD currColumn, int8_t* condition, 
+int CVideoParameters::ercCollectColumnBlocks(int predBlocks[], PIXEL_COORD currRow, PIXEL_COORD currColumn, int8_t* condition, 
 																				 PIXEL_COORD maxRow, PIXEL_COORD maxColumn, int8_t step) {
   int srcCounter=0, threshold=ERC_BLOCK_CORRUPTED;
 
   memset(predBlocks, 0, 8*sizeof(int));
 
   // in this case, row>0 and row<17
-  if(condition[(currRow-1)*maxColumn+currColumn ]>threshold) {
+  if(condition[(currRow-1)*maxColumn+currColumn]>threshold) {
     predBlocks[4]=1;
     srcCounter++;
 	  }
-  if(condition[(currRow+step)*maxColumn+currColumn ]>threshold) {
+  if(condition[(currRow+step)*maxColumn+currColumn]>threshold) {
     predBlocks[6]=1;
     srcCounter++;
 		}
@@ -6683,7 +6668,7 @@ int CDecoderH264::ercCollectColumnBlocks(int predBlocks[], PIXEL_COORD currRow, 
 *     The block condition(ok, lost) table
  ************************************************************************
  */
-void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn, PIXEL_COORD lastRow, int8_t comp, frame *recfr, PIXEL_COORD picSizeX, int8_t *condition) {
+void CVideoParameters::concealBlocks(PIXEL_COORD lastColumn, PIXEL_COORD lastRow, int8_t comp, frame *recfr, PIXEL_COORD picSizeX, int8_t *condition) {
   int16_t row, column;
 	int srcCounter=0,  thr=ERC_BLOCK_CORRUPTED,
       lastCorruptedRow=-1, firstCorruptedRow=-1, currRow=0,
@@ -6705,7 +6690,7 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
         // find the last row which has corrupted blocks(in same continuous area)
         for(lastCorruptedRow=row+step; lastCorruptedRow<lastRow; lastCorruptedRow += step) {
           // check blocks in the current column
-          if(condition[ lastCorruptedRow*lastColumn+column ]>thr) {
+          if(condition[lastCorruptedRow*lastColumn+column]>thr) {
             // current one is already OK, so the last was the previous one
             lastCorruptedRow -= step;
             break;
@@ -6719,24 +6704,24 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
 
             switch(comp) {
 							case 0:
-								ercPixConcealIMB(p_Vid, recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
+								ercPixConcealIMB(recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
 								break;
 							case 1:
-								ercPixConcealIMB(p_Vid, recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+								ercPixConcealIMB(recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
 							case 2:
-								ercPixConcealIMB(p_Vid, recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+								ercPixConcealIMB(recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
 							}
 
             if(comp == 0) {
-              condition[ currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
 	            }
             else
-              condition[ currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
 
 						}
           row=lastRow;
@@ -6748,24 +6733,24 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
 
             switch(comp) {
 							case 0:
-								ercPixConcealIMB(p_Vid, recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
+								ercPixConcealIMB(recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
 								break;
 							case 1:
-								ercPixConcealIMB(p_Vid, recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+								ercPixConcealIMB(recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
 							case 2:
-								ercPixConcealIMB(p_Vid, recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+								ercPixConcealIMB(recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
 							}
 
             if(comp == 0) {
-              condition[ currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
 							}
             else
-              condition[ currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
 
 		        }
 
@@ -6773,7 +6758,6 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
 	        }
         else {
           // correct bi-directionally
-
           row=lastCorruptedRow+step;
           areaHeight=lastCorruptedRow-firstCorruptedRow+step;
 
@@ -6794,25 +6778,25 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
               srcCounter=ercCollect8PredBlocks(predBlocks, currRow, column, condition, lastRow, lastColumn, step, 1);
 
             switch(comp) {
-							case 0 :
-								ercPixConcealIMB(p_Vid, recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
+							case 0:
+								ercPixConcealIMB(recfr->yptr, currRow, column, predBlocks, picSizeX, 2);
 								break;
-							case 1 :
-								ercPixConcealIMB(p_Vid, recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+							case 1:
+								ercPixConcealIMB(recfr->uptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
-							case 2 :
-								ercPixConcealIMB(p_Vid, recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
+							case 2:
+								ercPixConcealIMB(recfr->vptr, currRow, column, predBlocks,(picSizeX>>1), 1);
 								break;
 							}
 
             if(comp == 0) {
-              condition[ currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
-              condition[ currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+1]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column+lastColumn+1]=ERC_BLOCK_CONCEALED;
 	            }
             else {
-              condition[ currRow*lastColumn+column ]=ERC_BLOCK_CONCEALED;
+              condition[currRow*lastColumn+column]=ERC_BLOCK_CONCEALED;
 							}
 						}
 					}
@@ -6841,7 +6825,7 @@ void CDecoderH264::concealBlocks(CVideoParameters *p_Vid, PIXEL_COORD lastColumn
 *     Width of the frame in pixels
  ************************************************************************
  */
-void CDecoderH264::pixMeanInterpolateBlock(CVideoParameters *p_Vid, imgpel *src[], imgpel *block, int blockSize, PIXEL_COORD frameWidth) {
+void CVideoParameters::pixMeanInterpolateBlock(imgpel *src[], imgpel *block, int blockSize, PIXEL_COORD frameWidth) {
   int row, column, k, tmp, srcCounter=0, weight=0, bmax=blockSize-1;
 
   k=0;
@@ -6875,9 +6859,9 @@ void CDecoderH264::pixMeanInterpolateBlock(CVideoParameters *p_Vid, imgpel *src[
 		    }
 
       if(srcCounter>0)
-        block[ k+column ] =(imgpel)(tmp/srcCounter);
+        block[k+column] =(imgpel)(tmp/srcCounter);
       else
-        block[ k+column ] =(imgpel)(blockSize == 8 ? p_Vid->dc_pred_value_comp[1] : p_Vid->dc_pred_value_comp[0]);
+        block[k+column] =(imgpel)(blockSize == 8 ? dc_pred_value_comp[1] : dc_pred_value_comp[0]);
 	    }
     k += frameWidth;
 		}
@@ -6951,38 +6935,33 @@ int CDecoderH264::ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list
               /* correct only from above */
               lastCorruptedRow=lastRow-1;
               for(currRow=firstCorruptedRow; currRow<lastRow; currRow++) {
-                ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
+                p_Vid->ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
                   errorVar->yCondition,(lastRow<<1),(lastColumn<<1), 2, 0);
 
                 if(p_Vid->erc_mvperMB >= MVPERMB_THR)
-                  concealByTrial(recfr, predMB,
-                    currRow*lastColumn+column, object_list, predBlocks,
-                    picSizeX, picSizeY,
-                    errorVar->yCondition);
+                  concealByTrial(recfr, predMB, currRow*lastColumn+column, object_list, predBlocks,
+                    picSizeX, picSizeY, errorVar->yCondition);
                 else
-                  concealByCopy(recfr, currRow*lastColumn+column,
-                    object_list, picSizeX);
+                  concealByCopy(recfr, currRow*lastColumn+column, object_list, picSizeX);
 
-                ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
+                p_Vid->ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
 				        }
               row=lastRow;
 					    }
             else if(firstCorruptedRow == 0) {
               /* correct only from below */
               for(currRow=lastCorruptedRow; currRow >= 0; currRow--) {
-                ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
+                p_Vid->ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
                   errorVar->yCondition,(lastRow<<1),(lastColumn<<1), 2, 0);
 
                 if(p_Vid->erc_mvperMB >= MVPERMB_THR)
-                  concealByTrial(recfr, predMB,
-                    currRow*lastColumn+column, object_list, predBlocks,
-                    picSizeX, picSizeY,
-                    errorVar->yCondition);
+                  concealByTrial(recfr, predMB, currRow*lastColumn+column, object_list, predBlocks,
+                    picSizeX, picSizeY, errorVar->yCondition);
                 else
                   concealByCopy(recfr, currRow*lastColumn+column,
                     object_list, picSizeX);
 
-                ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
+                p_Vid->ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
 	              }
               row=lastCorruptedRow+1;
 	            }
@@ -7004,7 +6983,7 @@ int CDecoderH264::ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list
                   firstCorruptedRow ++;
 			            }
 
-                ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
+                p_Vid->ercCollect8PredBlocks(predBlocks,(currRow<<1),(column<<1),
                   errorVar->yCondition,(lastRow<<1),(lastColumn<<1), 2, 0);
 
                 if(p_Vid->erc_mvperMB >= MVPERMB_THR)
@@ -7016,7 +6995,7 @@ int CDecoderH264::ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list
                   concealByCopy(recfr, currRow*lastColumn+column,
                     object_list, picSizeX);
 
-                ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
+                p_Vid->ercMarkCurrMBConcealed(currRow*lastColumn+column, -1, picSizeX, errorVar);
 								}
 							}
             lastCorruptedRow=-1;
@@ -7051,8 +7030,7 @@ int CDecoderH264::ercConcealInterFrame(frame *recfr, objectBuffer_t *object_list
 *     Width of the frame in pixels
  ************************************************************************
  */
-int CDecoderH264::concealByCopy(frame *recfr, int currMBNum,
-                         objectBuffer_t *object_list, PIXEL_COORD picSizeX) {
+int CDecoderH264::concealByCopy(frame *recfr, int currMBNum, objectBuffer_t *object_list, PIXEL_COORD picSizeX) {
   objectBuffer_t *currRegion;
 
   currRegion=object_list+(currMBNum<<2);
@@ -7088,8 +7066,8 @@ void CDecoderH264::copyBetweenFrames(frame *recfr, int currYBlockNum, PIXEL_COOR
   StorablePicture* refPic=p_Vid->ppSliceList[0]->listX[0][0];
 
   /* set the position of the region to be copied */
-  xmin =(xPosYBlock(currYBlockNum,picSizeX)<<3);
-  ymin =(yPosYBlock(currYBlockNum,picSizeX)<<3);
+  xmin = xPosYBlock(currYBlockNum,picSizeX) << 3;
+  ymin = yPosYBlock(currYBlockNum,picSizeX) << 3;
 
   for(j=ymin; j<ymin+regionSize; j++) {
     for(k=xmin; k<xmin+regionSize; k++) {
@@ -7216,7 +7194,6 @@ int CDecoderH264::concealByTrial(frame *recfr, imgpel *predMB,
 
               /* if Zero Motion Block, do the copying. This option is tried only once */
               if(isBlock(object_list, predMBNum, compPred, INTER_COPY)) {
-
                 if(fZeroMotionChecked)
                   continue;
                 else {
@@ -7473,8 +7450,7 @@ void CDecoderH264::buildPredRegionYUV(CVideoParameters *p_Vid, int *mv, BLOCK_CO
 *     can be 16 or 8 to tell the dimension of the region to copy
  ************************************************************************
  */
-void CDecoderH264::copyPredMB(int currYBlockNum, imgpel *predMB, frame *recfr,
-                        PIXEL_COORD picSizeX, int regionSize) {
+void CDecoderH264::copyPredMB(int currYBlockNum, imgpel *predMB, frame *recfr, PIXEL_COORD picSizeX, int regionSize) {
   CVideoParameters *p_Vid=recfr->p_Vid;
   StorablePicture *dec_picture=p_Vid->dec_picture;
   int j, k, xmin, ymin, xmax, ymax;
@@ -7919,8 +7895,8 @@ void CDecoderH264::copy_to_conceal(StorablePicture *src, StorablePicture *dst, C
         dst->mv_info[i][j].mv[LIST_0].mv_y =(int16_t)mv[1];
         dst->mv_info[i][j].ref_idx[LIST_0] =(int8_t)mv[2];
 
-        x =(j)*multiplier;
-        y =(i)*multiplier;
+        x =j*multiplier;
+        y =i*multiplier;
 
         if((mm%16==0) && (nn%16==0))
           current_mb_nr++;
@@ -7938,9 +7914,9 @@ void CDecoderH264::copy_to_conceal(StorablePicture *src, StorablePicture *dst, C
 
         if(dec_picture->chroma_format_idc != YUV400) {
 
-          for(uv=0;uv<2;uv++) {
-            for(ii=0;ii<(multiplier/2);ii++) {
-              for(jj=0;jj<(multiplier/2);jj++)
+          for(uv=0; uv<2; uv++) {
+            for(ii=0; ii<(multiplier/2); ii++) {
+              for(jj=0; jj<(multiplier/2);jj++)
                 dst->imgUV[uv][i*multiplier/2 +ii][j*multiplier/2 +jj]=predMB[ii*(multiplier/2)+jj];
 							}
             predMB=predMB +(multiplier*multiplier/4);
@@ -8275,14 +8251,14 @@ void CDecoderH264::print_list(struct concealment_node *ptr) {
 *
 ************************************************************************
 */
-void CDecoderH264::add_node(CVideoParameters *p_Vid, struct concealment_node *concealment_new) {
+void CVideoParameters::add_node(struct concealment_node *concealment_new) {
 
-  if(!p_Vid->concealment_head ) {
-    p_Vid->concealment_end=p_Vid->concealment_head=concealment_new;
+  if(!concealment_head) {
+    concealment_end=concealment_head=concealment_new;
     return;
 		}
-  p_Vid->concealment_end->next=concealment_new;
-  p_Vid->concealment_end=concealment_new;
+  concealment_end->next=concealment_new;
+  concealment_end=concealment_new;
 	}
 
 
@@ -8388,7 +8364,7 @@ void CDecoderH264::conceal_non_ref_pics(DecodedPictureBuffer *p_Dpb, int diff) {
         p_Vid->conceal_slice_type=B_SLICE;
         copy_to_conceal(conceal_from_picture, conceal_to_picture, p_Vid);
         concealment_ptr=init_node(conceal_to_picture, missingpoc);
-        add_node(p_Vid, concealment_ptr);
+        p_Vid->add_node(concealment_ptr);
         // Diagnostics
         // print_node(concealment_ptr);
 				}
@@ -8493,32 +8469,32 @@ void CDecoderH264::write_lost_ref_after_idr(DecodedPictureBuffer *p_Dpb, int pos
 *   EX_SYNC   sync on next header
  ***********************************************************************
  */
-int8_t CDecoderH264::set_ec_flag(CVideoParameters *p_Vid, int8_t se) {
+int8_t CVideoParameters::set_ec_flag(int8_t se) {
 
   /*
-  if(p_Vid->ec_flag[se] == NO_EC)
+  if(ec_flag[se] == NO_EC)
     printf("Error concealment on element %s\n",SEtypes[se]);
   */
   switch(se) {
 		case SE_HEADER:
-			p_Vid->ec_flag[SE_HEADER]=EC_REQ;
+			ec_flag[SE_HEADER]=EC_REQ;
 		case SE_PTYPE:
-			p_Vid->ec_flag[SE_PTYPE]=EC_REQ;
+			ec_flag[SE_PTYPE]=EC_REQ;
 		case SE_MBTYPE:
-			p_Vid->ec_flag[SE_MBTYPE]=EC_REQ;
+			ec_flag[SE_MBTYPE]=EC_REQ;
 
 		case SE_REFFRAME:
-			p_Vid->ec_flag[SE_REFFRAME]=EC_REQ;
-			p_Vid->ec_flag[SE_MVD]=EC_REQ; // set all motion vectors to zero length
+			ec_flag[SE_REFFRAME]=EC_REQ;
+			ec_flag[SE_MVD]=EC_REQ; // set all motion vectors to zero length
 			se=SE_CBP_INTER;      // conceal also Inter texture elements
 			break;
 
 		case SE_INTRAPREDMODE:
-			p_Vid->ec_flag[SE_INTRAPREDMODE]=EC_REQ;
+			ec_flag[SE_INTRAPREDMODE]=EC_REQ;
 			se=SE_CBP_INTRA;      // conceal also Intra texture elements
 			break;
 		case SE_MVD:
-			p_Vid->ec_flag[SE_MVD]=EC_REQ;
+			ec_flag[SE_MVD]=EC_REQ;
 			se=SE_CBP_INTER;      // conceal also Inter texture elements
 			break;
 
@@ -8528,33 +8504,33 @@ int8_t CDecoderH264::set_ec_flag(CVideoParameters *p_Vid, int8_t se) {
 
   switch(se) {
 		case SE_CBP_INTRA:
-			p_Vid->ec_flag[SE_CBP_INTRA]=EC_REQ;
+			ec_flag[SE_CBP_INTRA]=EC_REQ;
 		case SE_LUM_DC_INTRA:
-			p_Vid->ec_flag[SE_LUM_DC_INTRA]=EC_REQ;
+			ec_flag[SE_LUM_DC_INTRA]=EC_REQ;
 		case SE_CHR_DC_INTRA:
-			p_Vid->ec_flag[SE_CHR_DC_INTRA]=EC_REQ;
+			ec_flag[SE_CHR_DC_INTRA]=EC_REQ;
 		case SE_LUM_AC_INTRA:
-			p_Vid->ec_flag[SE_LUM_AC_INTRA]=EC_REQ;
+			ec_flag[SE_LUM_AC_INTRA]=EC_REQ;
 		case SE_CHR_AC_INTRA:
-			p_Vid->ec_flag[SE_CHR_AC_INTRA]=EC_REQ;
+			ec_flag[SE_CHR_AC_INTRA]=EC_REQ;
 			break;
 
 		case SE_CBP_INTER:
-			p_Vid->ec_flag[SE_CBP_INTER]=EC_REQ;
+			ec_flag[SE_CBP_INTER]=EC_REQ;
 		case SE_LUM_DC_INTER:
-			p_Vid->ec_flag[SE_LUM_DC_INTER]=EC_REQ;
+			ec_flag[SE_LUM_DC_INTER]=EC_REQ;
 		case SE_CHR_DC_INTER:
-			p_Vid->ec_flag[SE_CHR_DC_INTER]=EC_REQ;
+			ec_flag[SE_CHR_DC_INTER]=EC_REQ;
 		case SE_LUM_AC_INTER:
-			p_Vid->ec_flag[SE_LUM_AC_INTER]=EC_REQ;
+			ec_flag[SE_LUM_AC_INTER]=EC_REQ;
 		case SE_CHR_AC_INTER:
-			p_Vid->ec_flag[SE_CHR_AC_INTER]=EC_REQ;
+			ec_flag[SE_CHR_AC_INTER]=EC_REQ;
 			break;
 		case SE_DELTA_QUANT_INTER:
-			p_Vid->ec_flag[SE_DELTA_QUANT_INTER]=EC_REQ;
+			ec_flag[SE_DELTA_QUANT_INTER]=EC_REQ;
 			break;
 		case SE_DELTA_QUANT_INTRA:
-			p_Vid->ec_flag[SE_DELTA_QUANT_INTRA]=EC_REQ;
+			ec_flag[SE_DELTA_QUANT_INTRA]=EC_REQ;
 			break;
 		default:
 			break;
@@ -8570,11 +8546,11 @@ int8_t CDecoderH264::set_ec_flag(CVideoParameters *p_Vid, int8_t se) {
  *
  ***********************************************************************
  */
-void CDecoderH264::reset_ec_flags(CVideoParameters *p_Vid) {
+void CVideoParameters::reset_ec_flags() {
   int i;
 
   for(i=0; i<SE_MAX_ELEMENTS; i++)
-    p_Vid->ec_flag[i]=NO_EC;
+    ec_flag[i]=NO_EC;
 	}
 
 
@@ -8589,9 +8565,9 @@ void CDecoderH264::reset_ec_flags(CVideoParameters *p_Vid) {
 *   EC_REQ if element requires error concealment
  ***********************************************************************
  */
-int CDecoderH264::get_concealed_element(CVideoParameters *p_Vid, SyntaxElement *sym) {
+int CVideoParameters::get_concealed_element(CSyntaxElement *sym) {
 
-  if(p_Vid->ec_flag[sym->type] == NO_EC)
+  if(ec_flag[sym->type] == NO_EC)
     return NO_EC;
 /*
 #if JTRACE
@@ -8787,7 +8763,7 @@ void CDecoderH264::tracebits2(const char *trace_str,  //!< tracing information, 
 *   Tracing information such as motion/ref_idx etc
  ************************************************************************
  */
-void CDecoderH264::trace_info(SyntaxElement *currSE,        //!< syntax element to update
+void CDecoderH264::trace_info(CSyntaxElement *currSE,        //!< syntax element to update
                 const char *description_str,  //!< tracing information, char array describing the symbol
                 int value1                    //!< value to be recorded
 ) {
@@ -8844,25 +8820,25 @@ int CDecoderH264::FmoGenerateMapUnitToSliceGroupMap(CVideoParameters *p_Vid, CSl
 
   switch(pps->slice_group_map_type) {
 		case 0:
-			FmoGenerateType0MapUnitMap(p_Vid, NumSliceGroupMapUnits);
+			p_Vid->FmoGenerateType0MapUnitMap(NumSliceGroupMapUnits);
 			break;
 		case 1:
-			FmoGenerateType1MapUnitMap(p_Vid, NumSliceGroupMapUnits);
+			p_Vid->FmoGenerateType1MapUnitMap(NumSliceGroupMapUnits);
 			break;
 		case 2:
-			FmoGenerateType2MapUnitMap(p_Vid, NumSliceGroupMapUnits);
+			p_Vid->FmoGenerateType2MapUnitMap(NumSliceGroupMapUnits);
 			break;
 		case 3:
-			FmoGenerateType3MapUnitMap(p_Vid, NumSliceGroupMapUnits, currSlice);
+			p_Vid->FmoGenerateType3MapUnitMap(NumSliceGroupMapUnits, currSlice);
 			break;
 		case 4:
-			FmoGenerateType4MapUnitMap(p_Vid, NumSliceGroupMapUnits, currSlice);
+			p_Vid->FmoGenerateType4MapUnitMap(NumSliceGroupMapUnits, currSlice);
 			break;
 		case 5:
-			FmoGenerateType5MapUnitMap(p_Vid, NumSliceGroupMapUnits, currSlice);
+			p_Vid->FmoGenerateType5MapUnitMap(NumSliceGroupMapUnits, currSlice);
 			break;
 		case 6:
-			FmoGenerateType6MapUnitMap(p_Vid, NumSliceGroupMapUnits);
+			p_Vid->FmoGenerateType6MapUnitMap(NumSliceGroupMapUnits);
 			break;
 		default:
 //			theApp.FileSpool->print(CLogFile::flagError,"Illegal slice_group_map_type %d , exit",pps->slice_group_map_type);
@@ -8928,8 +8904,7 @@ int CDecoderH264::FmoGenerateMbToSliceGroupMap(CVideoParameters *p_Vid, CSlice *
 *     video encoding parameters for current picture
  ************************************************************************
  */
-int CDecoderH264::fmo_init(CVideoParameters *p_Vid, CSlice *pSlice) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
+int CDecoderH264::fmo_init(CVideoParameters *p_Vid,CSlice *pSlice) {
 
 #ifdef PRINT_FMO_MAPS
   BLOCK_COORD i,j;
@@ -8938,7 +8913,7 @@ int CDecoderH264::fmo_init(CVideoParameters *p_Vid, CSlice *pSlice) {
   FmoGenerateMapUnitToSliceGroupMap(p_Vid, pSlice);
   FmoGenerateMbToSliceGroupMap(p_Vid, pSlice);
 
-  p_Vid->NumberOfSliceGroups=pps->num_slice_groups_minus1+1;
+  p_Vid->NumberOfSliceGroups=p_Vid->active_pps->num_slice_groups_minus1+1;
 
 #ifdef PRINT_FMO_MAPS
   printf("\n");
@@ -8994,8 +8969,8 @@ int CDecoderH264::FmoFinit(CVideoParameters *p_Vid) {
 *   CVideoParameters
  ************************************************************************
  */
-int CDecoderH264::FmoGetNumberOfSliceGroup(CVideoParameters *p_Vid) {
-  return p_Vid->NumberOfSliceGroups;
+int CVideoParameters::FmoGetNumberOfSliceGroup() {
+  return NumberOfSliceGroups;
 	}
 
 
@@ -9011,8 +8986,8 @@ int CDecoderH264::FmoGetNumberOfSliceGroup(CVideoParameters *p_Vid) {
 *   None
  ************************************************************************
  */
-int CDecoderH264::FmoGetLastMBOfPicture(CVideoParameters *p_Vid) {
-  return FmoGetLastMBInSliceGroup(p_Vid, FmoGetNumberOfSliceGroup(p_Vid)-1);
+int CVideoParameters::FmoGetLastMBOfPicture() {
+  return FmoGetLastMBInSliceGroup(FmoGetNumberOfSliceGroup()-1);
 	}
 
 
@@ -9025,12 +9000,13 @@ int CDecoderH264::FmoGetLastMBOfPicture(CVideoParameters *p_Vid) {
 *   SliceGroupID(0 to 7)
  ************************************************************************
  */
-int CDecoderH264::FmoGetLastMBInSliceGroup(CVideoParameters *p_Vid, int SliceGroup) {
+int CVideoParameters::FmoGetLastMBInSliceGroup(int SliceGroup) {
   int i;
 
-  for(i=p_Vid->PicSizeInMbs-1; i>=0; i--)
-    if(FmoGetSliceGroupId(p_Vid, i) == SliceGroup)
+  for(i=PicSizeInMbs-1; i>=0; i--)  {
+    if(FmoGetSliceGroupId(i) == SliceGroup)
       return i;
+		}
   return -1;
 	}
 
@@ -9046,11 +9022,11 @@ int CDecoderH264::FmoGetLastMBInSliceGroup(CVideoParameters *p_Vid, int SliceGro
 *   CMacroblock number(in scan order)
  ************************************************************************
  */
-int CDecoderH264::FmoGetSliceGroupId(CVideoParameters *p_Vid, int mb) {
+int CVideoParameters::FmoGetSliceGroupId(int mb) {
 
-  assert(mb <(int) p_Vid->PicSizeInMbs);
-  assert(p_Vid->MbToSliceGroupMap != NULL);
-  return p_Vid->MbToSliceGroupMap[mb];
+//  assert(mb < (int)PicSizeInMbs);
+//  assert(MbToSliceGroupMap != NULL);
+  return MbToSliceGroupMap[mb];
 	}
 
 
@@ -9066,13 +9042,13 @@ int CDecoderH264::FmoGetSliceGroupId(CVideoParameters *p_Vid, int mb) {
 *   number of the current macroblock
  ************************************************************************
  */
-int CDecoderH264::FmoGetNextMBNr(CVideoParameters *p_Vid, int CurrentMbNr) {
-  int SliceGroup=FmoGetSliceGroupId(p_Vid, CurrentMbNr);
+int CVideoParameters::FmoGetNextMBNr(int CurrentMbNr) {
+  int SliceGroup=FmoGetSliceGroupId(CurrentMbNr);
 
-  while(++CurrentMbNr < p_Vid->PicSizeInMbs && p_Vid->MbToSliceGroupMap [CurrentMbNr] != SliceGroup)
+  while(++CurrentMbNr < PicSizeInMbs && MbToSliceGroupMap [CurrentMbNr] != SliceGroup)
     ;
 
-  if(CurrentMbNr >= p_Vid->PicSizeInMbs)
+  if(CurrentMbNr >= PicSizeInMbs)
     return -1;    // No further MB in this slice(could be end of picture)
   else
     return CurrentMbNr;
@@ -9086,19 +9062,17 @@ int CDecoderH264::FmoGetNextMBNr(CVideoParameters *p_Vid, int CurrentMbNr) {
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType0MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
-  unsigned iGroup, j;
+void CVideoParameters::FmoGenerateType0MapUnitMap(unsigned PicSizeInMapUnits) {
+  unsigned iGroup,j;
   unsigned i=0;
 
   do {
-    for(iGroup=0;
-        (iGroup <= pps->num_slice_groups_minus1) && (i<PicSizeInMapUnits);
-         i += pps->run_length_minus1[iGroup++]+1) {
-      for(j=0; j <= pps->run_length_minus1[ iGroup ] && i+j<PicSizeInMapUnits; j++)
-        p_Vid->MapUnitToSliceGroupMap[i+j]=iGroup;
+    for(iGroup=0; (iGroup <= active_pps->num_slice_groups_minus1) && (i<PicSizeInMapUnits);
+      i += active_pps->run_length_minus1[iGroup++]+1) {
+      for(j=0; j <= active_pps->run_length_minus1[iGroup] && i+j<PicSizeInMapUnits; j++)
+        MapUnitToSliceGroupMap[i+j]=iGroup;
 			}
-		}  while(i<PicSizeInMapUnits);
+		} while(i<PicSizeInMapUnits);
 	}
 
 
@@ -9109,13 +9083,12 @@ void CDecoderH264::FmoGenerateType0MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType1MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
+void CVideoParameters::FmoGenerateType1MapUnitMap(unsigned PicSizeInMapUnits) {
   unsigned i;
 
   for(i=0; i<PicSizeInMapUnits; i++) {
-    p_Vid->MapUnitToSliceGroupMap[i] =((i % p_Vid->PicWidthInMbs)+(((i/p_Vid->PicWidthInMbs)*(pps->num_slice_groups_minus1+1))/2))
-                                % (pps->num_slice_groups_minus1+1);
+    MapUnitToSliceGroupMap[i] =((i % PicWidthInMbs)+(((i/PicWidthInMbs)*(active_pps->num_slice_groups_minus1+1))/2))
+                                % (active_pps->num_slice_groups_minus1+1);
 		}
 	}
 
@@ -9126,23 +9099,22 @@ void CDecoderH264::FmoGenerateType1MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType2MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
+void CVideoParameters::FmoGenerateType2MapUnitMap(unsigned PicSizeInMapUnits) {
   int iGroup;
   unsigned i, x, y;
   unsigned yTopLeft, xTopLeft, yBottomRight, xBottomRight;
 
   for(i=0; i<PicSizeInMapUnits; i++)
-    p_Vid->MapUnitToSliceGroupMap[ i ]=pps->num_slice_groups_minus1;
+    MapUnitToSliceGroupMap[i]=active_pps->num_slice_groups_minus1;
 
-  for(iGroup=pps->num_slice_groups_minus1-1; iGroup >= 0; iGroup--) {
-    yTopLeft=pps->top_left[ iGroup ] / p_Vid->PicWidthInMbs;
-    xTopLeft=pps->top_left[ iGroup ] % p_Vid->PicWidthInMbs;
-    yBottomRight=pps->bottom_right[ iGroup ] / p_Vid->PicWidthInMbs;
-    xBottomRight=pps->bottom_right[ iGroup ] % p_Vid->PicWidthInMbs;
+  for(iGroup=active_pps->num_slice_groups_minus1-1; iGroup >= 0; iGroup--) {
+    yTopLeft=active_pps->top_left[iGroup] / PicWidthInMbs;
+    xTopLeft=active_pps->top_left[iGroup] % PicWidthInMbs;
+    yBottomRight=active_pps->bottom_right[iGroup] / PicWidthInMbs;
+    xBottomRight=active_pps->bottom_right[iGroup] % PicWidthInMbs;
     for(y=yTopLeft; y <= yBottomRight; y++)
       for(x=xTopLeft; x <= xBottomRight; x++)
-        p_Vid->MapUnitToSliceGroupMap[ y*p_Vid->PicWidthInMbs+x ]=iGroup;
+        MapUnitToSliceGroupMap[y*PicWidthInMbs+x]=iGroup;
 		}
 	}
 
@@ -9154,59 +9126,59 @@ void CDecoderH264::FmoGenerateType2MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType3MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits, CSlice *currSlice) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
+void CVideoParameters::FmoGenerateType3MapUnitMap(unsigned PicSizeInMapUnits, CSlice *currSlice) {
   unsigned i, k;
   int leftBound, topBound, rightBound, bottomBound;
-  int x, y, xDir, yDir;
-  int mapUnitVacant;
+  int x,y;
+	int8_t xDir, yDir;
+  int8_t mapUnitVacant;			// (inizializzata al primo giro... v.
 
-  unsigned mapUnitsInSliceGroup0=imin((pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
+  unsigned mapUnitsInSliceGroup0=CDecoderH264::imin((active_pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
 
   for(i=0; i<PicSizeInMapUnits; i++)
-    p_Vid->MapUnitToSliceGroupMap[i]=2;
+    MapUnitToSliceGroupMap[i]=2;
 
-  x =(p_Vid->PicWidthInMbs-pps->slice_group_change_direction_flag) / 2;
-  y =(p_Vid->PicHeightInMapUnits-pps->slice_group_change_direction_flag) / 2;
+  x =(PicWidthInMbs-active_pps->slice_group_change_direction_flag) / 2;
+  y =(PicHeightInMapUnits-active_pps->slice_group_change_direction_flag) / 2;
 
   leftBound  =x;
   topBound   =y;
   rightBound =x;
   bottomBound=y;
 
-  xDir= pps->slice_group_change_direction_flag-1;
-  yDir= pps->slice_group_change_direction_flag;
+  xDir= active_pps->slice_group_change_direction_flag-1;
+  yDir= active_pps->slice_group_change_direction_flag;
 
   for(k=0; k<PicSizeInMapUnits; k += mapUnitVacant) {
-    mapUnitVacant =(p_Vid->MapUnitToSliceGroupMap[ y*p_Vid->PicWidthInMbs+x ] == 2);
+    mapUnitVacant = MapUnitToSliceGroupMap[y*PicWidthInMbs+x] == 2 ? 1 : 0;
     if(mapUnitVacant)
-       p_Vid->MapUnitToSliceGroupMap[ y*p_Vid->PicWidthInMbs+x ] =(k >= mapUnitsInSliceGroup0);
+      MapUnitToSliceGroupMap[y*PicWidthInMbs+x] =(k >= mapUnitsInSliceGroup0);
 
     if(xDir == -1 && x == leftBound) {
-      leftBound=imax(leftBound-1, 0);
+      leftBound=CDecoderH264::imax(leftBound-1, 0);
       x=leftBound;
       xDir=0;
-      yDir=2*pps->slice_group_change_direction_flag-1;
+      yDir=2*active_pps->slice_group_change_direction_flag-1;
 			}
     else {
       if(xDir == 1 && x  == rightBound) {
-        rightBound=imin(rightBound+1,p_Vid->PicWidthInMbs-1);
+        rightBound=CDecoderH264::imin(rightBound+1,PicWidthInMbs-1);
         x=rightBound;
         xDir=0;
-        yDir=1-2*pps->slice_group_change_direction_flag;
+        yDir=1-2*active_pps->slice_group_change_direction_flag;
 				}
       else {
         if(yDir==-1 && y==topBound) {
-          topBound=imax(topBound-1, 0);
+          topBound=CDecoderH264::imax(topBound-1, 0);
           y=topBound;
-          xDir=1-2*pps->slice_group_change_direction_flag;
+          xDir=1-2*active_pps->slice_group_change_direction_flag;
           yDir=0;
 					}
         else {
           if(yDir==1 && y==bottomBound) {
-            bottomBound=imin(bottomBound+1,p_Vid->PicHeightInMapUnits-1);
+            bottomBound=CDecoderH264::imin(bottomBound+1,PicHeightInMapUnits-1);
             y=bottomBound;
-            xDir=2*pps->slice_group_change_direction_flag-1;
+            xDir=2*active_pps->slice_group_change_direction_flag-1;
             yDir=0;
 		        }
           else {
@@ -9227,19 +9199,17 @@ void CDecoderH264::FmoGenerateType3MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType4MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits, CSlice *currSlice) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
-
-  unsigned mapUnitsInSliceGroup0=imin((pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
-  unsigned sizeOfUpperLeftGroup=pps->slice_group_change_direction_flag ? (PicSizeInMapUnits-mapUnitsInSliceGroup0) : mapUnitsInSliceGroup0;
+void CVideoParameters::FmoGenerateType4MapUnitMap(unsigned PicSizeInMapUnits, CSlice *currSlice) {
+  unsigned mapUnitsInSliceGroup0=CDecoderH264::imin((active_pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
+  unsigned sizeOfUpperLeftGroup=active_pps->slice_group_change_direction_flag ? (PicSizeInMapUnits-mapUnitsInSliceGroup0) : mapUnitsInSliceGroup0;
 
   unsigned i;
 
   for(i=0; i<PicSizeInMapUnits; i++) {
     if(i<sizeOfUpperLeftGroup)
-        p_Vid->MapUnitToSliceGroupMap[ i ]=pps->slice_group_change_direction_flag;
+      MapUnitToSliceGroupMap[i]=active_pps->slice_group_change_direction_flag;
     else
-        p_Vid->MapUnitToSliceGroupMap[ i ]=1-pps->slice_group_change_direction_flag;
+      MapUnitToSliceGroupMap[i]=1-active_pps->slice_group_change_direction_flag;
 		}
 
 	}
@@ -9251,20 +9221,18 @@ void CDecoderH264::FmoGenerateType4MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType5MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits, CSlice *currSlice) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps;
-
-  unsigned mapUnitsInSliceGroup0=imin((pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
-  unsigned sizeOfUpperLeftGroup=pps->slice_group_change_direction_flag ? (PicSizeInMapUnits-mapUnitsInSliceGroup0) : mapUnitsInSliceGroup0;
+void CVideoParameters::FmoGenerateType5MapUnitMap(unsigned PicSizeInMapUnits, CSlice *currSlice) {
+  unsigned mapUnitsInSliceGroup0=CDecoderH264::imin((active_pps->slice_group_change_rate_minus1+1)*currSlice->slice_group_change_cycle, PicSizeInMapUnits);
+  unsigned sizeOfUpperLeftGroup=active_pps->slice_group_change_direction_flag ? (PicSizeInMapUnits-mapUnitsInSliceGroup0) : mapUnitsInSliceGroup0;
 
   PIXEL_COORD i,j, k=0;
 
-  for(j=0; j<p_Vid->PicWidthInMbs; j++) {
-    for(i=0; i<p_Vid->PicHeightInMapUnits; i++) {
-      if(k++<sizeOfUpperLeftGroup)
-          p_Vid->MapUnitToSliceGroupMap[ i*p_Vid->PicWidthInMbs+j ]=pps->slice_group_change_direction_flag;
+  for(j=0; j<PicWidthInMbs; j++) {
+    for(i=0; i<PicHeightInMapUnits; i++) {
+      if(k++ < sizeOfUpperLeftGroup)
+        MapUnitToSliceGroupMap[i*PicWidthInMbs+j]=active_pps->slice_group_change_direction_flag;
       else
-          p_Vid->MapUnitToSliceGroupMap[ i*p_Vid->PicWidthInMbs+j ]=1-pps->slice_group_change_direction_flag;
+        MapUnitToSliceGroupMap[i*PicWidthInMbs+j]=1-active_pps->slice_group_change_direction_flag;
 			}
 		}
 
@@ -9277,12 +9245,11 @@ void CDecoderH264::FmoGenerateType5MapUnitMap(CVideoParameters *p_Vid, unsigned 
  *
  ************************************************************************
  */
-void CDecoderH264::FmoGenerateType6MapUnitMap(CVideoParameters *p_Vid, unsigned PicSizeInMapUnits) {
-  pic_parameter_set_rbsp_t* pps=p_Vid->active_pps; 
+void CVideoParameters::FmoGenerateType6MapUnitMap(unsigned PicSizeInMapUnits) {
   unsigned i;
 
   for(i=0; i<PicSizeInMapUnits; i++)
-    p_Vid->MapUnitToSliceGroupMap[i]=pps->slice_group_id[i];
+    MapUnitToSliceGroupMap[i]=active_pps->slice_group_id[i];
 	}
 
 
@@ -9436,15 +9403,15 @@ int CDecoderH264::RestOfSliceHeader(CSlice *currSlice) {
 		}
   else if(active_sps->pic_order_cnt_type == 1) {
     if(!active_sps->delta_pic_order_always_zero_flag) {
-      currSlice->delta_pic_order_cnt[ 0 ]=read_se_v("SH: delta_pic_order_cnt[0]", currStream, &UsedBits);
+      currSlice->delta_pic_order_cnt[0]=read_se_v("SH: delta_pic_order_cnt[0]", currStream, &UsedBits);
       if(p_Vid->active_pps->bottom_field_pic_order_in_frame_present_flag  ==  1  && !currSlice->field_pic_flag)
-        currSlice->delta_pic_order_cnt[ 1 ]=read_se_v("SH: delta_pic_order_cnt[1]", currStream, &UsedBits);
+        currSlice->delta_pic_order_cnt[1]=read_se_v("SH: delta_pic_order_cnt[1]", currStream, &UsedBits);
       else
-        currSlice->delta_pic_order_cnt[ 1 ]=0;  // set to zero if not in stream
+        currSlice->delta_pic_order_cnt[1]=0;  // set to zero if not in stream
 			}
     else {
-      currSlice->delta_pic_order_cnt[ 0 ]=0;
-      currSlice->delta_pic_order_cnt[ 1 ]=0;
+      currSlice->delta_pic_order_cnt[0]=0;
+      currSlice->delta_pic_order_cnt[1]=0;
 			}
 		}
 
@@ -9527,7 +9494,7 @@ int CDecoderH264::RestOfSliceHeader(CSlice *currSlice) {
     currSlice->DFDisableIdc=currSlice->DFAlphaC0Offset=currSlice->DFBetaOffset=0;
 
 #if DPF_PARAM_DISP
-  printf("CSlice:%d, DFParameters:(%d,%d,%d)\n", currSlice->current_slice_nr, currSlice->DFDisableIdc, currSlice->DFAlphaC0Offset, currSlice->DFBetaOffset);
+  printf("CSlice:%d, DFParameters : (%d,%d,%d)\n", currSlice->current_slice_nr, currSlice->DFDisableIdc, currSlice->DFAlphaC0Offset, currSlice->DFBetaOffset);
 #endif
 
   // The conformance point for intra profiles is without deblocking, but decoders are still recommended to filter the output.
@@ -10028,31 +9995,30 @@ void CDecoderH264::decode_poc(CVideoParameters *p_Vid, CSlice *pSlice) {
 *   none
  ************************************************************************
  */
-int CDecoderH264::dumppoc(CVideoParameters *p_Vid) {
-  seq_parameter_set_rbsp_t *active_sps=p_Vid->active_sps;
+int CVideoParameters::dumppoc() {
 
   printf("\nPOC locals...\n");
-  printf("toppoc                                %d\n",(int) p_Vid->ppSliceList[0]->toppoc);
-  printf("bottompoc                             %d\n",(int) p_Vid->ppSliceList[0]->bottompoc);
-  printf("frame_num                             %d\n",(int) p_Vid->ppSliceList[0]->frame_num);
-  printf("field_pic_flag                        %d\n",(int) p_Vid->ppSliceList[0]->field_pic_flag);
-  printf("bottom_field_flag                     %d\n",(int) p_Vid->ppSliceList[0]->bottom_field_flag);
+  printf("toppoc                                %d\n",(int)ppSliceList[0]->toppoc);
+  printf("bottompoc                             %d\n",(int)ppSliceList[0]->bottompoc);
+  printf("frame_num                             %d\n",(int)ppSliceList[0]->frame_num);
+  printf("field_pic_flag                        %d\n",(int)ppSliceList[0]->field_pic_flag);
+  printf("bottom_field_flag                     %d\n",(int)ppSliceList[0]->bottom_field_flag);
   printf("POC SPS\n");
-  printf("log2_max_frame_num_minus4             %d\n",(int) active_sps->log2_max_frame_num_minus4);         // POC200301
-  printf("log2_max_pic_order_cnt_lsb_minus4     %d\n",(int) active_sps->log2_max_pic_order_cnt_lsb_minus4);
-  printf("pic_order_cnt_type                    %d\n",(int) active_sps->pic_order_cnt_type);
-  printf("num_ref_frames_in_pic_order_cnt_cycle %d\n",(int) active_sps->num_ref_frames_in_pic_order_cnt_cycle);
-  printf("delta_pic_order_always_zero_flag      %d\n",(int) active_sps->delta_pic_order_always_zero_flag);
-  printf("offset_for_non_ref_pic                %d\n",(int) active_sps->offset_for_non_ref_pic);
-  printf("offset_for_top_to_bottom_field        %d\n",(int) active_sps->offset_for_top_to_bottom_field);
-  printf("offset_for_ref_frame[0]               %d\n",(int) active_sps->offset_for_ref_frame[0]);
-  printf("offset_for_ref_frame[1]               %d\n",(int) active_sps->offset_for_ref_frame[1]);
+  printf("log2_max_frame_num_minus4             %d\n",(int)active_sps->log2_max_frame_num_minus4);         // POC200301
+  printf("log2_max_pic_order_cnt_lsb_minus4     %d\n",(int)active_sps->log2_max_pic_order_cnt_lsb_minus4);
+  printf("pic_order_cnt_type                    %d\n",(int)active_sps->pic_order_cnt_type);
+  printf("num_ref_frames_in_pic_order_cnt_cycle %d\n",(int)active_sps->num_ref_frames_in_pic_order_cnt_cycle);
+  printf("delta_pic_order_always_zero_flag      %d\n",(int)active_sps->delta_pic_order_always_zero_flag);
+  printf("offset_for_non_ref_pic                %d\n",(int)active_sps->offset_for_non_ref_pic);
+  printf("offset_for_top_to_bottom_field        %d\n",(int)active_sps->offset_for_top_to_bottom_field);
+  printf("offset_for_ref_frame[0]               %d\n",(int)active_sps->offset_for_ref_frame[0]);
+  printf("offset_for_ref_frame[1]               %d\n",(int)active_sps->offset_for_ref_frame[1]);
   printf("POC in SLice Header\n");
-  printf("bottom_field_pic_order_in_frame_present_flag                %d\n",(int) p_Vid->active_pps->bottom_field_pic_order_in_frame_present_flag);
-  printf("delta_pic_order_cnt[0]                %d\n",(int) p_Vid->ppSliceList[0]->delta_pic_order_cnt[0]);
-  printf("delta_pic_order_cnt[1]                %d\n",(int) p_Vid->ppSliceList[0]->delta_pic_order_cnt[1]);
-  printf("idr_flag                              %d\n",(int) p_Vid->ppSliceList[0]->idr_flag);
-  printf("max_frame_num                         %d\n",(int) p_Vid->max_frame_num);
+  printf("bottom_field_pic_order_in_frame_present_flag                %d\n",(int) active_pps->bottom_field_pic_order_in_frame_present_flag);
+  printf("delta_pic_order_cnt[0]                %d\n",(int)ppSliceList[0]->delta_pic_order_cnt[0]);
+  printf("delta_pic_order_cnt[1]                %d\n",(int)ppSliceList[0]->delta_pic_order_cnt[1]);
+  printf("idr_flag                              %d\n",(int)ppSliceList[0]->idr_flag);
+  printf("max_frame_num                         %d\n",(int)max_frame_num);
 
   return 0;
 	}
@@ -10075,11 +10041,6 @@ int CDecoderH264::picture_order(CSlice *pSlice) {
 	}
 
 
-
-
-extern int testEndian(void);
-void reorder_lists(CSlice *currSlice);
-
 inline void CDecoderH264::reset_mbs(CMacroblock *currMB) {
 
   currMB->slice_nr=-1; 
@@ -10087,38 +10048,38 @@ inline void CDecoderH264::reset_mbs(CMacroblock *currMB) {
   currMB->dpl_flag=FALSE;
 	}
 
-void CDecoderH264::setup_buffers(CVideoParameters *p_Vid, uint8_t layer_id) {
-  CodingParameters *cps=p_Vid->p_EncodePar[layer_id];
+void CVideoParameters::setup_buffers(uint8_t layer_id) {
+  CodingParameters *cps=p_EncodePar[layer_id];
   int i;
 
-  if(p_Vid->last_dec_layer_id != layer_id) {
-    p_Vid->imgY_ref=cps->imgY_ref;
-    p_Vid->imgUV_ref=cps->imgUV_ref;
+  if(last_dec_layer_id != layer_id) {
+    imgY_ref=cps->imgY_ref;
+    imgUV_ref=cps->imgUV_ref;
     if(cps->separate_colour_plane_flag) {
       for(i=0; i<MAX_PLANE; i++) {
-        p_Vid->mb_data_JV[i]=cps->mb_data_JV[i];
-        p_Vid->intra_block_JV[i]=cps->intra_block_JV[i];
-        p_Vid->ipredmode_JV[i]=cps->ipredmode_JV[i];
-        p_Vid->siblock_JV[i]=cps->siblock_JV[i];
+        mb_data_JV[i]=cps->mb_data_JV[i];
+        intra_block_JV[i]=cps->intra_block_JV[i];
+        ipredmode_JV[i]=cps->ipredmode_JV[i];
+        siblock_JV[i]=cps->siblock_JV[i];
 				}
-			p_Vid->mb_data=NULL;
-			p_Vid->intra_block=NULL;
-			p_Vid->ipredmode=NULL;
-			p_Vid->siblock=NULL;
+			mb_data=NULL;
+			intra_block=NULL;
+			ipredmode=NULL;
+			siblock=NULL;
 			}
     else {
-      p_Vid->mb_data=cps->mb_data;
-      p_Vid->intra_block=cps->intra_block;
-      p_Vid->ipredmode=cps->ipredmode;
-      p_Vid->siblock=cps->siblock;
+      mb_data=cps->mb_data;
+      intra_block=cps->intra_block;
+      ipredmode=cps->ipredmode;
+      siblock=cps->siblock;
 	    }
-    p_Vid->PicPos=cps->PicPos;
-    p_Vid->nz_coeff=cps->nz_coeff;
-    p_Vid->qp_per_matrix=cps->qp_per_matrix;
-    p_Vid->qp_rem_matrix=cps->qp_rem_matrix;
-    p_Vid->oldFrameSizeInMbs=cps->oldFrameSizeInMbs;
-    p_Vid->img2buf=cps->img2buf;
-    p_Vid->last_dec_layer_id=layer_id;
+    PicPos=cps->PicPos;
+    nz_coeff=cps->nz_coeff;
+    qp_per_matrix=cps->qp_per_matrix;
+    qp_rem_matrix=cps->qp_rem_matrix;
+    oldFrameSizeInMbs=cps->oldFrameSizeInMbs;
+    img2buf=cps->img2buf;
+    last_dec_layer_id=layer_id;
 		}
 	}
 
@@ -10169,10 +10130,6 @@ void CDecoderH264::init_mvc_picture(CSlice *currSlice) {
 	}
 #endif
 
-void get_mb_block_pos_normal(BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y);
-void get_mb_block_pos_mbaff(BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y);
-void getAffNeighbour(CMacroblock *currMB, BLOCK_COORD xN, BLOCK_COORD yN, uint32_t mb_size[2], PixelPos *pix);
-void getNonAffNeighbour(CMacroblock *currMB, BLOCK_COORD xN, BLOCK_COORD yN, uint32_t mb_size[2], PixelPos *pix);
 
 /*!
  ************************************************************************
@@ -10187,7 +10144,7 @@ void CDecoderH264::init_picture(CVideoParameters *p_Vid, CSlice *currSlice, Inpu
   seq_parameter_set_rbsp_t *active_sps=p_Vid->active_sps;
   DecodedPictureBuffer *p_Dpb=currSlice->p_Dpb;
 
-  p_Vid->PicHeightInMbs=p_Vid->FrameHeightInMbs /(1+currSlice->field_pic_flag);
+  p_Vid->PicHeightInMbs=p_Vid->FrameHeightInMbs / (1+currSlice->field_pic_flag);
   p_Vid->PicSizeInMbs  =p_Vid->PicWidthInMbs*p_Vid->PicHeightInMbs;
   p_Vid->FrameSizeInMbs=p_Vid->PicWidthInMbs*p_Vid->FrameHeightInMbs;
 
@@ -10198,7 +10155,7 @@ void CDecoderH264::init_picture(CVideoParameters *p_Vid, CSlice *currSlice, Inpu
 	  }
   p_Vid->dpb_layer_id=currSlice->layer_id;
   //set buffers;
-  setup_buffers(p_Vid, currSlice->layer_id);
+  p_Vid->setup_buffers(currSlice->layer_id);
 
   if(p_Vid->recovery_point)
     p_Vid->recovery_frame_num =(currSlice->frame_num+p_Vid->recovery_frame_cnt) % p_Vid->max_frame_num;
@@ -10306,7 +10263,7 @@ void CDecoderH264::init_picture(CVideoParameters *p_Vid, CSlice *currSlice, Inpu
   //p_Vid->current_slice_nr=0;
 
   if(p_Vid->type>SI_SLICE) {
-    set_ec_flag(p_Vid, SE_PTYPE);
+    p_Vid->set_ec_flag(SE_PTYPE);
     p_Vid->type=P_SLICE;  // concealed element
 	  }
 
@@ -10697,25 +10654,25 @@ void CDecoderH264::decode_slice(CSlice *currSlice, HEADER_TYPE current_header) {
 *                   current frame is lost, current frame is incorrect.
  ************************************************************************
  */
-void CDecoderH264::Error_tracking(CVideoParameters *p_Vid, CSlice *currSlice) {
+void CVideoParameters::Error_tracking(CSlice *currSlice) {
   int i;
 
   if(currSlice->redundant_pic_cnt == 0)
-    p_Vid->Is_primary_correct=p_Vid->Is_redundant_correct=TRUE;
+    Is_primary_correct=Is_redundant_correct=TRUE;
 
-  if(currSlice->redundant_pic_cnt == 0 && p_Vid->type != I_SLICE) {
+  if(currSlice->redundant_pic_cnt == 0 && type != I_SLICE) {
     for(i=0; i<currSlice->num_ref_idx_active[LIST_0]; i++) {
       if(!currSlice->ref_flag[i])  // any reference of primary slice is incorrect
-        p_Vid->Is_primary_correct=FALSE; // primary slice is incorrect
+        Is_primary_correct=FALSE; // primary slice is incorrect
 			}
 		}
-  else if(currSlice->redundant_pic_cnt != 0 && p_Vid->type != I_SLICE) {
+  else if(currSlice->redundant_pic_cnt != 0 && type != I_SLICE) {
     if(currSlice->ref_flag[currSlice->redundant_slice_ref_idx] == 0)  // reference of redundant slice is incorrect
-      p_Vid->Is_redundant_correct=0;  // redundant slice is incorrect
+      Is_redundant_correct=0;  // redundant slice is incorrect
 		}
 	}
 
-void CDecoderH264::CopyPOC(CSlice *pSlice0, CSlice *currSlice) {
+void CVideoParameters::CopyPOC(CSlice *pSlice0, CSlice *currSlice) {
 
   currSlice->framepoc =pSlice0->framepoc;
   currSlice->toppoc   =pSlice0->toppoc;
@@ -10791,7 +10748,7 @@ int CDecoderH264::decode_one_frame() {
     currSlice->current_header=current_header;
 
     // error tracking of primary and redundant slices.
-    Error_tracking(p_Vid, currSlice);
+    p_Vid->Error_tracking(currSlice);
     // If primary and redundant are received and primary is correct, discard the redundant
     // else, primary slice will be replaced with redundant slice.
     if(currSlice->frame_num == p_Vid->previous_frame_num && currSlice->redundant_pic_cnt != 0 &&
@@ -10799,30 +10756,30 @@ int CDecoderH264::decode_one_frame() {
       continue;
 
     if((current_header != SOP && current_header != EOS) || (p_Vid->iSliceNumOfCurrPic==0 && current_header == SOP)) {
-       currSlice->current_slice_nr =(int16_t)p_Vid->iSliceNumOfCurrPic;
-       p_Vid->dec_picture->max_slice_id =(int16_t)imax(currSlice->current_slice_nr, p_Vid->dec_picture->max_slice_id);
-       if(p_Vid->iSliceNumOfCurrPic > 0) {
-         CopyPOC(*ppSliceList, currSlice);
-         ppSliceList[p_Vid->iSliceNumOfCurrPic-1]->end_mb_nr_plus1=currSlice->start_mb_nr;
-	       }
-       p_Vid->iSliceNumOfCurrPic++;
-       if(p_Vid->iSliceNumOfCurrPic >= p_Vid->iNumOfSlicesAllocated) {
-         CSlice **tmpSliceList =(CSlice **)realloc(p_Vid->ppSliceList,(p_Vid->iNumOfSlicesAllocated+MAX_NUM_DECSLICES)*sizeof(CSlice*));
-         if(!tmpSliceList) {
-           tmpSliceList = (CSlice**)p_Memory->H264CALLOC((p_Vid->iNumOfSlicesAllocated+MAX_NUM_DECSLICES),sizeof(CSlice*));
-           memcpy(tmpSliceList, p_Vid->ppSliceList, p_Vid->iSliceNumOfCurrPic*sizeof(CSlice*));
-           //free;
-           p_Memory->H264FREE(p_Vid->ppSliceList);
-           ppSliceList=p_Vid->ppSliceList=tmpSliceList;
-					 }
-         else {
-           //assert(tmpSliceList == p_Vid->ppSliceList);
-           ppSliceList=p_Vid->ppSliceList=tmpSliceList;
-           memset(p_Vid->ppSliceList+p_Vid->iSliceNumOfCurrPic, 0,sizeof(CSlice*)*MAX_NUM_DECSLICES);
-				   }
-					p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
+      currSlice->current_slice_nr =(int16_t)p_Vid->iSliceNumOfCurrPic;
+      p_Vid->dec_picture->max_slice_id =(int16_t)imax(currSlice->current_slice_nr, p_Vid->dec_picture->max_slice_id);
+      if(p_Vid->iSliceNumOfCurrPic > 0) {
+        p_Vid->CopyPOC(*ppSliceList, currSlice);
+        ppSliceList[p_Vid->iSliceNumOfCurrPic-1]->end_mb_nr_plus1=currSlice->start_mb_nr;
+	      }
+      p_Vid->iSliceNumOfCurrPic++;
+      if(p_Vid->iSliceNumOfCurrPic >= p_Vid->iNumOfSlicesAllocated) {
+        CSlice **tmpSliceList =(CSlice **)realloc(p_Vid->ppSliceList,(p_Vid->iNumOfSlicesAllocated+MAX_NUM_DECSLICES)*sizeof(CSlice*));
+        if(!tmpSliceList) {
+          tmpSliceList = (CSlice**)p_Memory->H264CALLOC((p_Vid->iNumOfSlicesAllocated+MAX_NUM_DECSLICES),sizeof(CSlice*));
+          memcpy(tmpSliceList, p_Vid->ppSliceList, p_Vid->iSliceNumOfCurrPic*sizeof(CSlice*));
+          //free;
+          p_Memory->H264FREE(p_Vid->ppSliceList);
+          ppSliceList=p_Vid->ppSliceList=tmpSliceList;
 					}
-				current_header=SOS;       
+        else {
+           //assert(tmpSliceList == p_Vid->ppSliceList);
+          ppSliceList=p_Vid->ppSliceList=tmpSliceList;
+          memset(p_Vid->ppSliceList+p_Vid->iSliceNumOfCurrPic, 0,sizeof(CSlice*)*MAX_NUM_DECSLICES);
+				  }
+				p_Vid->iNumOfSlicesAllocated += MAX_NUM_DECSLICES;
+				}
+			current_header=SOS;
 			}
     else {
 			if(p_Vid->iSliceNumOfCurrPic<1)
@@ -10904,12 +10861,12 @@ int CDecoderH264::decode_one_frame() {
 void CDecoderH264::buffer2img(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, PIXEL_COORD size_y, uint8_t symbol_size_in_bytes) {
   PIXEL_COORD i,j;
   uint16_t tmp16, ui16;
-  unsigned long  tmp32, ui32;
+  uint32_t  tmp32, ui32;
 
   if(symbol_size_in_bytes>sizeof(imgpel))
     error("Source picture has higher bit depth than imgpel data type. \nPlease recompile with larger data type for imgpel.", 500);
 
-  if((sizeof(int8_t) ==sizeof(imgpel)) && (sizeof(int8_t) == symbol_size_in_bytes)) {
+  if((sizeof(int8_t) == sizeof(imgpel)) && (sizeof(int8_t) == symbol_size_in_bytes)) {
     // imgpel == pixel_in_file == 1 uint8_t -> simple copy
     fast_memcpy(&imgX[0][0], buf, size_x*size_y);
 		}
@@ -10950,9 +10907,10 @@ void CDecoderH264::buffer2img(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_x, P
     else {
       // little endian
       if(symbol_size_in_bytes == 1) {
-        for(j=0; j<size_y; j++)
+        for(j=0; j<size_y; j++) {
           for(i=0; i<size_x; i++)
             imgX[j][i]=*(buf++);
+					}
 		    }
       else {
         for(j=0; j<size_y; j++) {
@@ -10999,11 +10957,12 @@ INT64T CDecoderH264::compute_SSE(imgpel **imgRef, imgpel **imgSrc, int xRef, int
 */
 void CDecoderH264::calculate_frame_no(CVideoParameters *p_Vid, StorablePicture *p) {
   InputParameters *p_Inp=p_Vid->p_Inp;
+
   // calculate frame number
-  int psnrPOC=p_Vid->active_sps->mb_adaptive_frame_field_flag ? p->poc/(p_Inp->poc_scale) : p->poc/(p_Inp->poc_scale);
+  int psnrPOC=p_Vid->active_sps->mb_adaptive_frame_field_flag ? p->poc/p_Inp->poc_scale : p->poc/p_Inp->poc_scale;
   
   if(psnrPOC==0)// && p_Vid->psnr_number)
-    p_Vid->idr_psnr_number=p_Vid->g_nFrame*p_Vid->ref_poc_gap/(p_Inp->poc_scale);
+    p_Vid->idr_psnr_number=p_Vid->g_nFrame*p_Vid->ref_poc_gap/p_Inp->poc_scale;
   p_Vid->psnr_number=imax(p_Vid->psnr_number, p_Vid->idr_psnr_number+psnrPOC);
 
   p_Vid->frame_no=p_Vid->idr_psnr_number+psnrPOC;
@@ -11053,7 +11012,7 @@ void CDecoderH264::find_snr(CVideoParameters *p_Vid, StorablePicture *p, int *p_
 
   cur_comp[0]=p->imgY;
   cur_comp[1]=p->chroma_format_idc != YUV400 ? p->imgUV[0]  : NULL;
-  cur_comp[2]=p->chroma_format_idc != YUV400 ? p->imgUV[1]  : NULL; 
+	cur_comp[2]=p->chroma_format_idc != YUV400 ? p->imgUV[1]  : NULL; 
 
   comp_size_x[0]=p_Inp->source.width[0];
   comp_size_y[0]=p_Inp->source.height[0];
@@ -11128,9 +11087,9 @@ void CDecoderH264::reorder_lists(CSlice *currSlice) {
       reorder_ref_pic_list(currSlice, LIST_0);
     if(p_Vid->no_reference_picture == currSlice->listX[0][currSlice->num_ref_idx_active[LIST_0]-1]) {
       if(p_Vid->non_conforming_stream)
-        theApp.FileSpool->print(CLogFile::flagError,"RefPicList0[ %d ] is equal to 'no reference picture'", currSlice->num_ref_idx_active[LIST_0]-1);
+        theApp.FileSpool->print(CLogFile::flagError,"RefPicList0[%d] is equal to 'no reference picture'", currSlice->num_ref_idx_active[LIST_0]-1);
       else
-        error("RefPicList0[ num_ref_idx_l0_active_minus1 ] is equal to 'no reference picture', invalid bitstream",500);
+        error("RefPicList0[num_ref_idx_l0_active_minus1] is equal to 'no reference picture', invalid bitstream",500);
 			}
     // that's a definition
     currSlice->listXsize[0] =(int8_t)currSlice->num_ref_idx_active[LIST_0];
@@ -11141,9 +11100,9 @@ void CDecoderH264::reorder_lists(CSlice *currSlice) {
       reorder_ref_pic_list(currSlice, LIST_1);
     if(p_Vid->no_reference_picture == currSlice->listX[1][currSlice->num_ref_idx_active[LIST_1]-1]) {
       if(p_Vid->non_conforming_stream)
-        printf("RefPicList1[ %d ] is equal to 'no reference picture'", currSlice->num_ref_idx_active[LIST_1]-1);
+        printf("RefPicList1[%d] is equal to 'no reference picture'", currSlice->num_ref_idx_active[LIST_1]-1);
       else
-        error("RefPicList1[ num_ref_idx_l1_active_minus1 ] is equal to 'no reference picture', invalid bitstream",500);
+        error("RefPicList1[num_ref_idx_l1_active_minus1] is equal to 'no reference picture', invalid bitstream",500);
 			}
     // that's a definition
     currSlice->listXsize[1] =(int8_t)currSlice->num_ref_idx_active[LIST_1];
@@ -11159,7 +11118,7 @@ void CDecoderH264::reorder_lists(CSlice *currSlice) {
     if((p_Vid->profile_idc == MVC_HIGH || p_Vid->profile_idc == STEREO_HIGH) && currSlice->current_slice_nr==0) {
       if(currSlice->listXsize[0]>0) {
         printf("\n");
-        printf(" **(FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" **(FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 				}
@@ -11176,12 +11135,12 @@ void CDecoderH264::reorder_lists(CSlice *currSlice) {
       if((currSlice->listXsize[0]>0) || (currSlice->listXsize[1]>0))
         printf("\n");
       if(currSlice->listXsize[0]>0) {
-        printf(" **(FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" **(FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM" : currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 				}
       if(currSlice->listXsize[1]>0) {
-        printf(" **(FinalViewID:%d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" **(FinalViewID:%d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM" : currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[1]); i++)  //ref list 1
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[1][i]->poc, currSlice->listX[1][i]->pic_num, currSlice->listX[1][i]->view_id);
 				}
@@ -11247,8 +11206,8 @@ int CDecoderH264::read_new_slice(CSlice *currSlice) {
 				  }
         else
           nalu->nal_unit_type=NALU_TYPE_SLICE; //currSlice->NaluHeaderMVCExt.non_idr_flag==0? NALU_TYPE_IDR: NALU_TYPE_SLICE; 
-      }
-    }
+				}
+			}
 #endif
 
 process_nalu:
@@ -11476,7 +11435,7 @@ process_nalu:
 						currSlice->dpB_NotPresent=TRUE;
 						currSlice->dpC_NotPresent=TRUE;
 						}
-					else					{
+					else	{
 						if(p_Vid->active_pps->redundant_pic_cnt_present_flag)
 							read_ue_v("NALU: DP_B redundant_pic_cnt", currStream, &UsedBits);
 
@@ -11706,37 +11665,37 @@ void CDecoderH264::exit_picture(CVideoParameters *p_Vid, StorablePicture **dec_p
   //! mark the start of the first segment
   if(!(*dec_picture)->mb_aff_frame_flag) {
     int i;
-    ercStartSegment(0, ercSegment, 0 , p_Vid->erc_errorVar);
+    p_Vid->ercStartSegment(0, ercSegment, 0 , p_Vid->erc_errorVar);
     //! generate the segments according to the macroblock map
     for(i=1; i <(*dec_picture)->PicSizeInMbs; i++) {
       if(p_Vid->mb_data[i].ei_flag != p_Vid->mb_data[i-1].ei_flag) {
-        ercStopSegment(i-1, ercSegment, 0, p_Vid->erc_errorVar); //! stop current segment
+        p_Vid->ercStopSegment(i-1, ercSegment, 0, p_Vid->erc_errorVar); //! stop current segment
 
         //! mark current segment as lost or OK
         if(p_Vid->mb_data[i-1].ei_flag)
-          ercMarkCurrSegmentLost((*dec_picture)->size_x, p_Vid->erc_errorVar);
+          p_Vid->ercMarkCurrSegmentLost((*dec_picture)->size_x, p_Vid->erc_errorVar);
         else
-          ercMarkCurrSegmentOK((*dec_picture)->size_x, p_Vid->erc_errorVar);
+          p_Vid->ercMarkCurrSegmentOK((*dec_picture)->size_x, p_Vid->erc_errorVar);
 
         ercSegment++;  //! next segment
-        ercStartSegment(i, ercSegment, 0 , p_Vid->erc_errorVar); //! start new segment
+        p_Vid->ercStartSegment(i, ercSegment, 0 , p_Vid->erc_errorVar); //! start new segment
         ercStartMB=i;//! save start MB for this segment
 				}
 			}
 
     //! mark end of the last segment
-    ercStopSegment((*dec_picture)->PicSizeInMbs-1, ercSegment, 0, p_Vid->erc_errorVar);
+    p_Vid->ercStopSegment((*dec_picture)->PicSizeInMbs-1, ercSegment, 0, p_Vid->erc_errorVar);
     if(p_Vid->mb_data[i-1].ei_flag)
-      ercMarkCurrSegmentLost((*dec_picture)->size_x, p_Vid->erc_errorVar);
+      p_Vid->ercMarkCurrSegmentLost((*dec_picture)->size_x, p_Vid->erc_errorVar);
     else
-      ercMarkCurrSegmentOK((*dec_picture)->size_x, p_Vid->erc_errorVar);
+      p_Vid->ercMarkCurrSegmentOK((*dec_picture)->size_x, p_Vid->erc_errorVar);
 
     //! call the right error concealment function depending on the frame type.
     p_Vid->erc_mvperMB /= (*dec_picture)->PicSizeInMbs;
     p_Vid->erc_img=p_Vid;
 
     if((*dec_picture)->slice_type == I_SLICE || (*dec_picture)->slice_type == SI_SLICE) // I-frame
-      ercConcealIntraFrame(p_Vid, &recfr,(*dec_picture)->size_x,(*dec_picture)->size_y, p_Vid->erc_errorVar);
+      p_Vid->ercConcealIntraFrame(&recfr,(*dec_picture)->size_x,(*dec_picture)->size_y, p_Vid->erc_errorVar);
     else
       ercConcealInterFrame(&recfr, p_Vid->erc_object_list,(*dec_picture)->size_x,(*dec_picture)->size_y, p_Vid->erc_errorVar,(*dec_picture)->chroma_format_idc);
 	  }
@@ -11909,10 +11868,10 @@ void CDecoderH264::ercWriteMBMODEandMV(CMacroblock *currMB) {
         pRegion->mv[0]   =0;
         pRegion->mv[1]   =0;
         pRegion->mv[2]   =0;
-      }
+				}
       else {
-        ii    =4*mbx +(i & 0x01)*2;//+BLOCK_SIZE;
-        jj    =4*mby +(i >> 1 )*2;
+        ii =4*mbx +(i & 0x01)*2;//+BLOCK_SIZE;
+        jj =4*mby +(i >> 1 )*2;
         if(currMB->b8mode[i]>=5 && currMB->b8mode[i]<=7) {	 // SMALL BLOCKS
           pRegion->mv[0]  =(dec_picture->mv_info[jj][ii].mv[LIST_0].mv_x+dec_picture->mv_info[jj][ii+1].mv[LIST_0].mv_x+dec_picture->mv_info[jj+1][ii].mv[LIST_0].mv_x+dec_picture->mv_info[jj+1][ii+1].mv[LIST_0].mv_x+2)/4;
           pRegion->mv[1]  =(dec_picture->mv_info[jj][ii].mv[LIST_0].mv_y+dec_picture->mv_info[jj][ii+1].mv[LIST_0].mv_y+dec_picture->mv_info[jj+1][ii].mv[LIST_0].mv_y+dec_picture->mv_info[jj+1][ii+1].mv[LIST_0].mv_y+2)/4;
@@ -12184,8 +12143,8 @@ void CDecoderH264::init_cur_imgy(CSlice *currSlice, CVideoParameters *p_Vid) {
   else {
     StorablePicture *vidref=p_Vid->no_reference_picture;
     int noref =(currSlice->framepoc<p_Vid->recovery_poc);
-    uint8_t total_lists=currSlice->mb_aff_frame_flag ? 6 :(currSlice->slice_type==B_SLICE ? 2 : 1);
-    //    for(j=0; j<6; j++) {  //for(j=0; j <(currSlice->slice_type==B_SLICE?2:1); j++) { 
+    uint8_t total_lists=currSlice->mb_aff_frame_flag ? 6 : (currSlice->slice_type==B_SLICE ? 2 : 1);
+    //    for(j=0; j<6; j++) {  //for(j=0; j <(currSlice->slice_type==B_SLICE ? 2 : 1); j++) { 
     for(j=0; j<total_lists; j++) {
       // note that if we always set this to MAX_LIST_SIZE, we avoid crashes with invalid ref_idx being set
       // since currently this is done at the slice level, it seems safe to do so.
@@ -12386,9 +12345,9 @@ void CDecoderH264::intrapred_chroma_dc(CMacroblock *currMB) {
   BLOCK_COORD blk_x, blk_y;
   int        pred, pred1;
   static const int8_t block_pos[3][4][4]= {	//[yuv][b8][b4]
-		{ {0, 1, 2, 3},{0, 0, 0, 0},{0, 0, 0, 0},{0, 0, 0, 0}},
-		{  {0, 1, 2, 3},{2, 3, 2, 3},{0, 0, 0, 0},{0, 0, 0, 0}},
-		{ {0, 1, 2, 3},{1, 1, 3, 3},{2, 3, 2, 3},{3, 3, 3, 3}}
+		{ {0, 1, 2, 3},{0, 0, 0, 0},{0, 0, 0, 0},{0, 0, 0, 0} },
+		{ {0, 1, 2, 3},{2, 3, 2, 3},{0, 0, 0, 0},{0, 0, 0, 0} },
+		{ {0, 1, 2, 3},{1, 1, 3, 3},{2, 3, 2, 3},{3, 3, 3, 3} }
 		};
 
   PixelPos up;        //!< pixel position  p(0,-1)
@@ -12416,7 +12375,7 @@ void CDecoderH264::intrapred_chroma_dc(CMacroblock *currMB) {
   // Note that unlike what is stated in many presentations and papers, this mode does not operate
   // the same way as I_16x16 DC prediction.
   for(b8=0; b8 <(p_Vid->num_uv_blocks); b8++) {
-    for(b4=0; b4<4; ++b4) {
+    for(b4=0; b4<4; b4++) {
       blk_y=subblk_offset_y[yuv][b8][b4];
       blk_x=subblk_offset_x[yuv][b8][b4];
       pred =p_Vid->dc_pred_value_comp[1];
@@ -12675,9 +12634,10 @@ void CDecoderH264::intrapred_chroma_ver_mbaff(CMacroblock *currMB) {
   getAffNeighbour(currMB, 0, -1, p_Vid->mb_size[IS_CHROMA], &up);
 
   if(!p_Vid->active_pps->constrained_intra_pred_flag)
-    up_avail     =up.available;
+    up_avail=up.available;
   else
     up_avail=up.available ? currSlice->intra_block[up.mb_addr] : 0;
+
   // Vertical Prediction
   if(!up_avail)
     error("unexpected VERT_PRED_8 chroma intra prediction mode",-1);
@@ -12732,14 +12692,14 @@ void CDecoderH264::intra_pred_chroma_mbaff(CMacroblock *currMB) {
   int ih, iv, ib, ic, iaa;
   int    b8;
 	int8_t b4;
-  int        yuv=dec_picture->chroma_format_idc-1;
-  int        blk_x, blk_y;
-  int        pred;
+  int8_t yuv=dec_picture->chroma_format_idc-1;
+  int    blk_x, blk_y;
+  int    pred;
   static const int8_t block_pos[3][4][4]= //[yuv][b8][b4]
 		{
-		{ {0, 1, 4, 5},{0, 0, 0, 0},{0, 0, 0, 0},{0, 0, 0, 0}},
-		{ {0, 1, 2, 3},{4, 5, 4, 5},{0, 0, 0, 0},{0, 0, 0, 0}},
-		{ {0, 1, 2, 3},{1, 1, 3, 3},{4, 5, 4, 5},{5, 5, 5, 5}}
+			{ {0, 1, 4, 5},{0, 0, 0, 0},{0, 0, 0, 0},{0, 0, 0, 0} },
+			{ {0, 1, 2, 3},{4, 5, 4, 5},{0, 0, 0, 0},{0, 0, 0, 0} },
+			{ {0, 1, 2, 3},{1, 1, 3, 3},{4, 5, 4, 5},{5, 5, 5, 5} }
 	  };
 
   switch(currMB->c_ipred_mode) {
@@ -12895,7 +12855,7 @@ void CDecoderH264::intra_pred_chroma_mbaff(CMacroblock *currMB) {
 			}
     break;
   case PLANE_8:
-			{
+		{
       PixelPos up;        //!< pixel position  p(0,-1)
       PixelPos left[17];  //!< pixel positions p(-1, -1..16)
 
@@ -12961,10 +12921,6 @@ void CDecoderH264::intra_pred_chroma_mbaff(CMacroblock *currMB) {
 		}
 	}
 
-
-
-extern void intra_pred_chroma     (CMacroblock *currMB);
-extern void intra_pred_chroma_mbaff(CMacroblock *currMB);
 
 
 void CDecoderH264::set_intra_prediction_modes(CSlice *currSlice) { 
@@ -13086,7 +13042,7 @@ int CDecoderH264::intra4x4_dc_pred(CMacroblock *currMB, ColorPlane pl,PIXEL_COOR
 
   for(j=joff; j<joff+BLOCK_SIZE; j++) {
     // store DC prediction
-    mb_pred[j][ioff    ] =(imgpel)s0;
+    mb_pred[j][ioff  ] =(imgpel)s0;
     mb_pred[j][ioff+1] =(imgpel)s0;
     mb_pred[j][ioff+2] =(imgpel)s0;
     mb_pred[j][ioff+3] =(imgpel)s0;
@@ -13130,7 +13086,7 @@ int CDecoderH264::intra4x4_vert_pred(CMacroblock *currMB,    //!< current macrob
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
 		}
   return DECODING_OK;
 	}
@@ -13197,7 +13153,7 @@ int CDecoderH264::intra4x4_hor_pred(CMacroblock *currMB, ColorPlane pl,
       predrow=mb_pred[j];
       prediction=imgY[pos_y++][pos_x];
       /* store predicted 4x4 block */
-      predrow[ioff  ]= prediction; 
+      predrow[ioff ]= prediction; 
       predrow[ioff+1]= prediction; 
       predrow[ioff+2]= prediction; 
       predrow[ioff+3]= prediction; 
@@ -13268,8 +13224,8 @@ int CDecoderH264::intra4x4_diag_down_right_pred(CMacroblock *currMB,    //!< cur
 
   imgpel **mb_pred=currSlice->mb_pred[pl];    
 
-  getNonAffNeighbour(currMB, ioff -1, joff    , p_Vid->mb_size[IS_LUMA], &pix_a);
-  getNonAffNeighbour(currMB, ioff    , joff -1, p_Vid->mb_size[IS_LUMA], &pix_b);
+  getNonAffNeighbour(currMB, ioff -1, joff   , p_Vid->mb_size[IS_LUMA], &pix_a);
+  getNonAffNeighbour(currMB, ioff   , joff -1, p_Vid->mb_size[IS_LUMA], &pix_b);
   getNonAffNeighbour(currMB, ioff -1, joff -1, p_Vid->mb_size[IS_LUMA], &pix_d);
 
   if(p_Vid->active_pps->constrained_intra_pred_flag) {
@@ -13313,7 +13269,7 @@ int CDecoderH264::intra4x4_diag_down_right_pred(CMacroblock *currMB,    //!< cur
     memcpy(&mb_pred[joff++][ioff], &PredPixel[3], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[0], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[0], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -13392,7 +13348,7 @@ int CDecoderH264::intra4x4_diag_down_left_pred(CMacroblock *currMB,    //!< curr
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[3], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[3], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -13475,7 +13431,7 @@ int CDecoderH264::intra4x4_vert_right_pred(CMacroblock *currMB,    //!< current 
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[6], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[5], 4*sizeof(imgpel));    
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[5], 4*sizeof(imgpel));    
     }
 
   return DECODING_OK;
@@ -13559,7 +13515,7 @@ int CDecoderH264::intra4x4_vert_left_pred(CMacroblock *currMB,    //!< current m
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[5], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[6], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[6], 4*sizeof(imgpel));
 		}
   return DECODING_OK;
 	}
@@ -13706,7 +13662,7 @@ int CDecoderH264::intra4x4_hor_down_pred(CMacroblock *currMB,    //!< current ma
     memcpy(&mb_pred[joff++][ioff], &PredPixel[6], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[4], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[0], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[0], 4*sizeof(imgpel));
 	  }
 
   return DECODING_OK;
@@ -13768,18 +13724,6 @@ int CDecoderH264::intra_pred_4x4_normal(CMacroblock *currMB,    //!< current mac
 		}
 	}
 
-
-
-// Notation for comments regarding prediction and predictors.
-// The pels of the 4x4 block are labelled a..p. The predictor pels above
-// are labelled A..H, from the left I..L, and from above left X, as follows:
-//
-//  X A B C D E F G H
-//  I a b c d
-//  J e f g h
-//  K i j k l
-//  L m n o p
-//
 
 
 /*!
@@ -13858,7 +13802,7 @@ int CDecoderH264::intra4x4_dc_pred_mbaff(CMacroblock *currMB, ColorPlane pl,
 
   for(j=joff; j<joff+BLOCK_SIZE; j++) {
     // store DC prediction
-    mb_pred[j][ioff    ] =(imgpel)s0;
+    mb_pred[j][ioff   ] =(imgpel)s0;
     mb_pred[j][ioff+1] =(imgpel)s0;
     mb_pred[j][ioff+2] =(imgpel)s0;
     mb_pred[j][ioff+3] =(imgpel)s0;
@@ -13902,7 +13846,7 @@ int CDecoderH264::intra4x4_vert_pred_mbaff(CMacroblock *currMB,    //!< current 
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], imgY, BLOCK_SIZE*sizeof(imgpel));
 		}
   return DECODING_OK;
 	}
@@ -14039,7 +13983,7 @@ int CDecoderH264::intra4x4_diag_down_right_pred_mbaff(CMacroblock *currMB,    //
     memcpy(&mb_pred[joff++][ioff], &PredPixel[3], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[0], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[0], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -14112,7 +14056,7 @@ int CDecoderH264::intra4x4_diag_down_left_pred_mbaff(CMacroblock *currMB,    //!
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[3], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[3], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -14198,7 +14142,7 @@ int CDecoderH264::intra4x4_vert_right_pred_mbaff(CMacroblock *currMB,    //!< cu
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[6], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[5], 4*sizeof(imgpel));    
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[5], 4*sizeof(imgpel));    
 		}
 
   return DECODING_OK;
@@ -14277,7 +14221,7 @@ int CDecoderH264::intra4x4_vert_left_pred_mbaff(CMacroblock *currMB,    //!< cur
     memcpy(&mb_pred[joff++][ioff], &PredPixel[0], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[5], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[1], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[6], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[6], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -14431,7 +14375,7 @@ int CDecoderH264::intra4x4_hor_down_pred_mbaff(CMacroblock *currMB,    //!< curr
     memcpy(&mb_pred[joff++][ioff], &PredPixel[6], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[4], 4*sizeof(imgpel));
     memcpy(&mb_pred[joff++][ioff], &PredPixel[2], 4*sizeof(imgpel));
-    memcpy(&mb_pred[joff  ][ioff], &PredPixel[0], 4*sizeof(imgpel));
+    memcpy(&mb_pred[joff ][ioff], &PredPixel[0], 4*sizeof(imgpel));
 		}
 
   return DECODING_OK;
@@ -15078,16 +15022,16 @@ inline int CDecoderH264::intra8x8_diag_down_right_pred(CMacroblock *currMB,    /
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
   // Mode DIAG_DOWN_RIGHT_PRED
-  PredArray[ 0] =(imgpel)((P_X+P_V +((P_W) << 1)+2) >> 2);
-  PredArray[ 1] =(imgpel)((P_W+P_U +((P_V) << 1)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_V+P_T +((P_U) << 1)+2) >> 2);
-  PredArray[ 3] =(imgpel)((P_U+P_S +((P_T) << 1)+2) >> 2);
-  PredArray[ 4] =(imgpel)((P_T+P_R +((P_S) << 1)+2) >> 2);
-  PredArray[ 5] =(imgpel)((P_S+P_Q +((P_R) << 1)+2) >> 2);
-  PredArray[ 6] =(imgpel)((P_R+P_Z +((P_Q) << 1)+2) >> 2);
-  PredArray[ 7] =(imgpel)((P_Q+P_A +((P_Z) << 1)+2) >> 2);
-  PredArray[ 8] =(imgpel)((P_Z+P_B +((P_A) << 1)+2) >> 2);
-  PredArray[ 9] =(imgpel)((P_A+P_C +((P_B) << 1)+2) >> 2);
+  PredArray[0] =(imgpel)((P_X+P_V +((P_W) << 1)+2) >> 2);
+  PredArray[1] =(imgpel)((P_W+P_U +((P_V) << 1)+2) >> 2);
+  PredArray[2] =(imgpel)((P_V+P_T +((P_U) << 1)+2) >> 2);
+  PredArray[3] =(imgpel)((P_U+P_S +((P_T) << 1)+2) >> 2);
+  PredArray[4] =(imgpel)((P_T+P_R +((P_S) << 1)+2) >> 2);
+  PredArray[5] =(imgpel)((P_S+P_Q +((P_R) << 1)+2) >> 2);
+  PredArray[6] =(imgpel)((P_R+P_Z +((P_Q) << 1)+2) >> 2);
+  PredArray[7] =(imgpel)((P_Q+P_A +((P_Z) << 1)+2) >> 2);
+  PredArray[8] =(imgpel)((P_Z+P_B +((P_A) << 1)+2) >> 2);
+  PredArray[9] =(imgpel)((P_A+P_C +((P_B) << 1)+2) >> 2);
   PredArray[10] =(imgpel)((P_B+P_D +((P_C) << 1)+2) >> 2);
   PredArray[11] =(imgpel)((P_C+P_E +((P_D) << 1)+2) >> 2);
   PredArray[12] =(imgpel)((P_D+P_F +((P_E) << 1)+2) >> 2);
@@ -15225,7 +15169,7 @@ inline int CDecoderH264::intra8x8_diag_down_left_pred(CMacroblock *currMB,    //
   *Pred++ =(imgpel)((P_N+P_P +((P_O) << 1)+2) >> 2);
   *Pred   =(imgpel)((P_O+P_P +((P_P) << 1)+2) >> 2);
 
-  Pred=&PredArray[ 0];
+  Pred=&PredArray[0];
 
   memcpy((*mb_pred++)+ioff, Pred++, 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, Pred++, 8*sizeof(imgpel));
@@ -15364,13 +15308,13 @@ inline int CDecoderH264::intra8x8_vert_right_pred(CMacroblock *currMB,    //!< c
   *pred_pels++ =(imgpel)((P_E+P_G +((P_F) << 1)+2) >> 2);
   *pred_pels   =(imgpel)((P_F+P_H +((P_G) << 1)+2) >> 2);
 
-  memcpy((*mb_pred++)+ioff, &PredArray[ 3], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[3], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[14], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 2], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[2], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[13], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 1], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[1], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[12], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 0], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[0], 8*sizeof(imgpel));
   memcpy((*mb_pred )+ioff, &PredArray[11], 8*sizeof(imgpel));
 
   return DECODING_OK;
@@ -15500,13 +15444,13 @@ inline int CDecoderH264::intra8x8_vert_left_pred(CMacroblock *currMB,    //!< cu
   *pred_pel++ =(imgpel)((P_J+P_L +((P_K) << 1)+2) >> 2);
   *pred_pel   =(imgpel)((P_K+P_M +((P_L) << 1)+2) >> 2);
 
-  memcpy((*mb_pred++)+ioff, &PredArray[ 0], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[0], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[11], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 1], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[1], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[12], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 2], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[2], 8*sizeof(imgpel));
   memcpy((*mb_pred++)+ioff, &PredArray[13], 8*sizeof(imgpel));
-  memcpy((*mb_pred++)+ioff, &PredArray[ 3], 8*sizeof(imgpel));
+  memcpy((*mb_pred++)+ioff, &PredArray[3], 8*sizeof(imgpel));
   memcpy((*mb_pred )+ioff, &PredArray[14], 8*sizeof(imgpel));
 
   return DECODING_OK;
@@ -15613,16 +15557,16 @@ inline int CDecoderH264::intra8x8_hor_up_pred(CMacroblock *currMB,    //!< curre
 
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
-  PredArray[ 0] =(imgpel)((P_Q+P_R+1) >> 1);
-  PredArray[ 1] =(imgpel)((P_S+P_Q +((P_R) << 1)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_R+P_S+1) >> 1);
-  PredArray[ 3] =(imgpel)((P_T+P_R +((P_S) << 1)+2) >> 2);
-  PredArray[ 4] =(imgpel)((P_S+P_T+1) >> 1);
-  PredArray[ 5] =(imgpel)((P_U+P_S +((P_T) << 1)+2) >> 2);
-  PredArray[ 6] =(imgpel)((P_T+P_U+1) >> 1);
-  PredArray[ 7] =(imgpel)((P_V+P_T +((P_U) << 1)+2) >> 2);
-  PredArray[ 8] =(imgpel)((P_U+P_V+1) >> 1);
-  PredArray[ 9] =(imgpel)((P_W+P_U +((P_V) << 1)+2) >> 2);
+  PredArray[0] =(imgpel)((P_Q+P_R+1) >> 1);
+  PredArray[1] =(imgpel)((P_S+P_Q +((P_R) << 1)+2) >> 2);
+  PredArray[2] =(imgpel)((P_R+P_S+1) >> 1);
+  PredArray[3] =(imgpel)((P_T+P_R +((P_S) << 1)+2) >> 2);
+  PredArray[4] =(imgpel)((P_S+P_T+1) >> 1);
+  PredArray[5] =(imgpel)((P_U+P_S +((P_T) << 1)+2) >> 2);
+  PredArray[6] =(imgpel)((P_T+P_U+1) >> 1);
+  PredArray[7] =(imgpel)((P_V+P_T +((P_U) << 1)+2) >> 2);
+  PredArray[8] =(imgpel)((P_U+P_V+1) >> 1);
+  PredArray[9] =(imgpel)((P_W+P_U +((P_V) << 1)+2) >> 2);
   PredArray[10] =(imgpel)((P_V+P_W+1) >> 1);
   PredArray[11] =(imgpel)((P_X+P_V +((P_W) << 1)+2) >> 2);
   PredArray[12] =(imgpel)((P_W+P_X+1) >> 1);
@@ -16276,16 +16220,16 @@ inline int CDecoderH264::intra8x8_diag_down_right_pred_mbaff(CMacroblock *currMB
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
   // Mode DIAG_DOWN_RIGHT_PRED
-  PredArray[ 0] =(imgpel)((P_X+P_V+2*(P_W)+2) >> 2);
-  PredArray[ 1] =(imgpel)((P_W+P_U+2*(P_V)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_V+P_T+2*(P_U)+2) >> 2);
-  PredArray[ 3] =(imgpel)((P_U+P_S+2*(P_T)+2) >> 2);
-  PredArray[ 4] =(imgpel)((P_T+P_R+2*(P_S)+2) >> 2);
-  PredArray[ 5] =(imgpel)((P_S+P_Q+2*(P_R)+2) >> 2);
-  PredArray[ 6] =(imgpel)((P_R+P_Z+2*(P_Q)+2) >> 2);
-  PredArray[ 7] =(imgpel)((P_Q+P_A+2*(P_Z)+2) >> 2);
-  PredArray[ 8] =(imgpel)((P_Z+P_B+2*(P_A)+2) >> 2);
-  PredArray[ 9] =(imgpel)((P_A+P_C+2*(P_B)+2) >> 2);
+  PredArray[0] =(imgpel)((P_X+P_V+2*(P_W)+2) >> 2);
+  PredArray[1] =(imgpel)((P_W+P_U+2*(P_V)+2) >> 2);
+  PredArray[2] =(imgpel)((P_V+P_T+2*(P_U)+2) >> 2);
+  PredArray[3] =(imgpel)((P_U+P_S+2*(P_T)+2) >> 2);
+  PredArray[4] =(imgpel)((P_T+P_R+2*(P_S)+2) >> 2);
+  PredArray[5] =(imgpel)((P_S+P_Q+2*(P_R)+2) >> 2);
+  PredArray[6] =(imgpel)((P_R+P_Z+2*(P_Q)+2) >> 2);
+  PredArray[7] =(imgpel)((P_Q+P_A+2*(P_Z)+2) >> 2);
+  PredArray[8] =(imgpel)((P_Z+P_B+2*(P_A)+2) >> 2);
+  PredArray[9] =(imgpel)((P_A+P_C+2*(P_B)+2) >> 2);
   PredArray[10] =(imgpel)((P_B+P_D+2*(P_C)+2) >> 2);
   PredArray[11] =(imgpel)((P_C+P_E+2*(P_D)+2) >> 2);
   PredArray[12] =(imgpel)((P_D+P_F+2*(P_E)+2) >> 2);
@@ -16299,7 +16243,7 @@ inline int CDecoderH264::intra8x8_diag_down_right_pred_mbaff(CMacroblock *currMB
   memcpy(&mpr[joff++][ioff], &PredArray[3], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[2], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[1], 8*sizeof(imgpel));
-  memcpy(&mpr[joff  ][ioff], &PredArray[0], 8*sizeof(imgpel));
+  memcpy(&mpr[joff ][ioff], &PredArray[0], 8*sizeof(imgpel));
  
   return DECODING_OK;
 	}
@@ -16423,7 +16367,7 @@ inline int CDecoderH264::intra8x8_diag_down_left_pred_mbaff(CMacroblock *currMB,
   *Pred++ =(imgpel)((P_N+P_P+2*(P_O)+2) >> 2);
   *Pred   =(imgpel)((P_O+3*(P_P)+2) >> 2);
 
-  Pred=&PredArray[ 0];
+  Pred=&PredArray[0];
 
   memcpy(&mpr[joff++][ioff], Pred++, 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], Pred++, 8*sizeof(imgpel));
@@ -16432,7 +16376,7 @@ inline int CDecoderH264::intra8x8_diag_down_left_pred_mbaff(CMacroblock *currMB,
   memcpy(&mpr[joff++][ioff], Pred++, 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], Pred++, 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], Pred++, 8*sizeof(imgpel));
-  memcpy(&mpr[joff  ][ioff], Pred  , 8*sizeof(imgpel));
+  memcpy(&mpr[joff ][ioff], Pred  , 8*sizeof(imgpel));
 
   return DECODING_OK;
 	}
@@ -16537,16 +16481,16 @@ inline int CDecoderH264::intra8x8_vert_right_pred_mbaff(CMacroblock *currMB,    
 
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
-  PredArray[ 0] =(imgpel)((P_V+P_T +(P_U << 1)+2) >> 2);
-  PredArray[ 1] =(imgpel)((P_T+P_R +(P_S << 1)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_R+P_Z +(P_Q << 1)+2) >> 2);
-  PredArray[ 3] =(imgpel)((P_Z+P_A+1) >> 1);
-  PredArray[ 4] =(imgpel)((P_A+P_B+1) >> 1);
-  PredArray[ 5] =(imgpel)((P_B+P_C+1) >> 1);
-  PredArray[ 6] =(imgpel)((P_C+P_D+1) >> 1);
-  PredArray[ 7] =(imgpel)((P_D+P_E+1) >> 1);
-  PredArray[ 8] =(imgpel)((P_E+P_F+1) >> 1);
-  PredArray[ 9] =(imgpel)((P_F+P_G+1) >> 1);
+  PredArray[0] =(imgpel)((P_V+P_T +(P_U << 1)+2) >> 2);
+  PredArray[1] =(imgpel)((P_T+P_R +(P_S << 1)+2) >> 2);
+  PredArray[2] =(imgpel)((P_R+P_Z +(P_Q << 1)+2) >> 2);
+  PredArray[3] =(imgpel)((P_Z+P_A+1) >> 1);
+  PredArray[4] =(imgpel)((P_A+P_B+1) >> 1);
+  PredArray[5] =(imgpel)((P_B+P_C+1) >> 1);
+  PredArray[6] =(imgpel)((P_C+P_D+1) >> 1);
+  PredArray[7] =(imgpel)((P_D+P_E+1) >> 1);
+  PredArray[8] =(imgpel)((P_E+P_F+1) >> 1);
+  PredArray[9] =(imgpel)((P_F+P_G+1) >> 1);
   PredArray[10] =(imgpel)((P_G+P_H+1) >> 1);
 
   PredArray[11] =(imgpel)((P_W+P_U +(P_V << 1)+2) >> 2);
@@ -16561,14 +16505,14 @@ inline int CDecoderH264::intra8x8_vert_right_pred_mbaff(CMacroblock *currMB,    
   PredArray[20] =(imgpel)((P_E+P_G+2*P_F+2) >> 2);
   PredArray[21] =(imgpel)((P_F+P_H+2*P_G+2) >> 2);
 
-  memcpy(&mpr[joff++][ioff], &PredArray[ 3], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[3], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[14], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 2], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[2], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[13], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 1], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[1], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[12], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 0], 8*sizeof(imgpel));
-  memcpy(&mpr[joff  ][ioff], &PredArray[11], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[0], 8*sizeof(imgpel));
+  memcpy(&mpr[joff ][ioff], &PredArray[11], 8*sizeof(imgpel));
 
   return DECODING_OK;
 	}
@@ -16698,14 +16642,14 @@ inline int CDecoderH264::intra8x8_vert_left_pred_mbaff(CMacroblock *currMB,    /
   *pred_pel++ =(imgpel)((P_J+P_L +(P_K << 1)+2) >> 2);
   *pred_pel   =(imgpel)((P_K+P_M +(P_L << 1)+2) >> 2);
 
-  memcpy(&mpr[joff++][ioff], &PredArray[ 0], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[0], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[11], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 1], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[1], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[12], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 2], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[2], 8*sizeof(imgpel));
   memcpy(&mpr[joff++][ioff], &PredArray[13], 8*sizeof(imgpel));
-  memcpy(&mpr[joff++][ioff], &PredArray[ 3], 8*sizeof(imgpel));
-  memcpy(&mpr[joff  ][ioff], &PredArray[14], 8*sizeof(imgpel));
+  memcpy(&mpr[joff++][ioff], &PredArray[3], 8*sizeof(imgpel));
+  memcpy(&mpr[joff ][ioff], &PredArray[14], 8*sizeof(imgpel));
 
   return DECODING_OK;
 	}
@@ -16813,16 +16757,16 @@ inline int CDecoderH264::intra8x8_hor_up_pred_mbaff(CMacroblock *currMB,    //!<
 
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
-  PredArray[ 0] =(imgpel)((P_Q+P_R+1) >> 1);
-  PredArray[ 1] =(imgpel)((P_S+P_Q +(P_R << 1)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_R+P_S+1) >> 1);
-  PredArray[ 3] =(imgpel)((P_T+P_R +(P_S << 1)+2) >> 2);
-  PredArray[ 4] =(imgpel)((P_S+P_T+1) >> 1);
-  PredArray[ 5] =(imgpel)((P_U+P_S +(P_T << 1)+2) >> 2);
-  PredArray[ 6] =(imgpel)((P_T+P_U+1) >> 1);
-  PredArray[ 7] =(imgpel)((P_V+P_T +(P_U << 1)+2) >> 2);
-  PredArray[ 8] =(imgpel)((P_U+P_V+1) >> 1);
-  PredArray[ 9] =(imgpel)((P_W+P_U +(P_V << 1)+2) >> 2);
+  PredArray[0] =(imgpel)((P_Q+P_R+1) >> 1);
+  PredArray[1] =(imgpel)((P_S+P_Q +(P_R << 1)+2) >> 2);
+  PredArray[2] =(imgpel)((P_R+P_S+1) >> 1);
+  PredArray[3] =(imgpel)((P_T+P_R +(P_S << 1)+2) >> 2);
+  PredArray[4] =(imgpel)((P_S+P_T+1) >> 1);
+  PredArray[5] =(imgpel)((P_U+P_S +(P_T << 1)+2) >> 2);
+  PredArray[6] =(imgpel)((P_T+P_U+1) >> 1);
+  PredArray[7] =(imgpel)((P_V+P_T +(P_U << 1)+2) >> 2);
+  PredArray[8] =(imgpel)((P_U+P_V+1) >> 1);
+  PredArray[9] =(imgpel)((P_W+P_U +(P_V << 1)+2) >> 2);
   PredArray[10] =(imgpel)((P_V+P_W+1) >> 1);
   PredArray[11] =(imgpel)((P_X+P_V +(P_W << 1)+2) >> 2);
   PredArray[12] =(imgpel)((P_W+P_X+1) >> 1);
@@ -16950,16 +16894,16 @@ inline int CDecoderH264::intra8x8_hor_down_pred_mbaff(CMacroblock *currMB,    //
 
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 
-  PredArray[ 0] =(imgpel)((P_X+P_W+1) >> 1);
-  PredArray[ 1] =(imgpel)((P_V+P_X +(P_W << 1)+2) >> 2);
-  PredArray[ 2] =(imgpel)((P_W+P_V+1) >> 1);
-  PredArray[ 3] =(imgpel)((P_U+P_W +(P_V << 1)+2) >> 2);
-  PredArray[ 4] =(imgpel)((P_V+P_U+1) >> 1);
-  PredArray[ 5] =(imgpel)((P_T+P_V +(P_U << 1)+2) >> 2);
-  PredArray[ 6] =(imgpel)((P_U+P_T+1) >> 1);
-  PredArray[ 7] =(imgpel)((P_S+P_U +(P_T << 1)+2) >> 2);
-  PredArray[ 8] =(imgpel)((P_T+P_S+1) >> 1);
-  PredArray[ 9] =(imgpel)((P_R+P_T +(P_S << 1)+2) >> 2);
+  PredArray[0] =(imgpel)((P_X+P_W+1) >> 1);
+  PredArray[1] =(imgpel)((P_V+P_X +(P_W << 1)+2) >> 2);
+  PredArray[2] =(imgpel)((P_W+P_V+1) >> 1);
+  PredArray[3] =(imgpel)((P_U+P_W +(P_V << 1)+2) >> 2);
+  PredArray[4] =(imgpel)((P_V+P_U+1) >> 1);
+  PredArray[5] =(imgpel)((P_T+P_V +(P_U << 1)+2) >> 2);
+  PredArray[6] =(imgpel)((P_U+P_T+1) >> 1);
+  PredArray[7] =(imgpel)((P_S+P_U +(P_T << 1)+2) >> 2);
+  PredArray[8] =(imgpel)((P_T+P_S+1) >> 1);
+  PredArray[9] =(imgpel)((P_R+P_T +(P_S << 1)+2) >> 2);
   PredArray[10] =(imgpel)((P_S+P_R+1) >> 1);
   PredArray[11] =(imgpel)((P_Q+P_S +(P_R << 1)+2) >> 2);
   PredArray[12] =(imgpel)((P_R+P_Q+1) >> 1);
@@ -16976,11 +16920,11 @@ inline int CDecoderH264::intra8x8_hor_down_pred_mbaff(CMacroblock *currMB,    //
   memcpy(&mpr[jpos0][ioff], &PredArray[14], 8*sizeof(imgpel));
   memcpy(&mpr[jpos1][ioff], &PredArray[12], 8*sizeof(imgpel));
   memcpy(&mpr[jpos2][ioff], &PredArray[10], 8*sizeof(imgpel));
-  memcpy(&mpr[jpos3][ioff], &PredArray[ 8], 8*sizeof(imgpel));
-  memcpy(&mpr[jpos4][ioff], &PredArray[ 6], 8*sizeof(imgpel));
-  memcpy(&mpr[jpos5][ioff], &PredArray[ 4], 8*sizeof(imgpel));
-  memcpy(&mpr[jpos6][ioff], &PredArray[ 2], 8*sizeof(imgpel));
-  memcpy(&mpr[jpos7][ioff], &PredArray[ 0], 8*sizeof(imgpel));
+  memcpy(&mpr[jpos3][ioff], &PredArray[8], 8*sizeof(imgpel));
+  memcpy(&mpr[jpos4][ioff], &PredArray[6], 8*sizeof(imgpel));
+  memcpy(&mpr[jpos5][ioff], &PredArray[4], 8*sizeof(imgpel));
+  memcpy(&mpr[jpos6][ioff], &PredArray[2], 8*sizeof(imgpel));
+  memcpy(&mpr[jpos7][ioff], &PredArray[0], 8*sizeof(imgpel));
 
   return DECODING_OK;
 	}
@@ -17172,7 +17116,7 @@ int CDecoderH264::intra16x16_dc_pred(CMacroblock *currMB, ColorPlane pl) {
     memset(mb_pred[j], s0, MB_BLOCK_SIZE*sizeof(imgpel));
 #else
     for(i=0; i<MB_BLOCK_SIZE; i += 4) {
-      mb_pred[j][i  ]=(imgpel)s0;
+      mb_pred[j][i ]=(imgpel)s0;
       mb_pred[j][i+1]=(imgpel)s0;
       mb_pred[j][i+2]=(imgpel)s0;
       mb_pred[j][i+3]=(imgpel)s0;
@@ -18633,7 +18577,8 @@ int CDecoderH264::OpenDecoder(InputParameters *pInp) {
   init_time();
 
   //Configure(p_Vid, p_Inp, argc, argv);
-  memcpy(p_Inp, pInp,sizeof(InputParameters));
+	if(pInp)
+		memcpy(p_Inp,pInp,sizeof(InputParameters));
   p_Vid->conceal_mode=p_Inp->conceal_mode;
   p_Vid->ref_poc_gap=p_Inp->ref_poc_gap;
   p_Vid->poc_gap=p_Inp->poc_gap;
@@ -18738,15 +18683,16 @@ int CDecoderH264::DecodeOneFrame(DecodedPicList **ppDecPicList) {
   int iRet;
 
   ClearDecPicList(p_Vid);
-    __try
+  __try
     {
 	  iRet=decode_one_frame();
     }
     __except(EXCEPTION_EXECUTE_HANDLER)
     {
-        iRet=-1;
+      iRet=-1;
 			theApp.FileSpool->print(CLogFile::flagError,"ECCEZIONE memoria");
-			longjmp(mark, -2);
+//			longjmp(mark, -2);
+//		throw -2;
     }
   if(iRet == SOP)
     iRet=DEC_SUCCEED;
@@ -18869,11 +18815,11 @@ void CDecoderH264::set_global_coding_par(CVideoParameters *p_Vid, CodingParamete
 /*!
  ***********************************************************************
 *\brief
-*  Function to get unsigned long word from a file.
+*  Function to get uint32_t word from a file.
 *\param fp
 *   Filepointer
 *\return
-*   unsigned long double word
+*   uint32_t double word
 *\par SideEffects
 *    None.
 * \par Notes
@@ -18917,11 +18863,11 @@ uint32_t GetBigDoubleWord(FILE *fp) {
 
 /* Main Routine to verify HRD compliance */
 void CDecoderH26::calc_buffer(InputParameters *p_Inp) {
-  unsigned long NumberLeakyBuckets, *Rmin, *Bmin, *Fmin;
+  uint32_t NumberLeakyBuckets, *Rmin, *Bmin, *Fmin;
   float B_interp,  F_interp;
-  unsigned long iBucket;
+  uint32_t iBucket;
   float dnr, frac1, frac2;
-  unsigned long R_decoder, B_decoder, F_decoder;
+  uint32_t R_decoder, B_decoder, F_decoder;
   FILE *outf;
 
   if((outf=fopen(p_Inp->LeakyBucketParamFile,"rb"))==NULL) {
@@ -18931,9 +18877,9 @@ void CDecoderH26::calc_buffer(InputParameters *p_Inp) {
 
   NumberLeakyBuckets=GetBigDoubleWord(outf);
   printf(" Number Leaky Buckets: %8ld \n\n", NumberLeakyBuckets);
-  Rmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(unsigned long));
-  Bmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(unsigned long));
-  Fmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(unsigned long));
+  Rmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(uint32_t));
+  Bmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(uint32_t));
+  Fmin=p_Memory->H264CALLOC(NumberLeakyBuckets,sizeof(uint32_t));
 
   for(iBucket =0; iBucket<NumberLeakyBuckets; iBucket++) {
     Rmin[iBucket]=GetBigDoubleWord(outf);
@@ -19087,7 +19033,7 @@ void CDecoderH264::get_strength_ver_MBAff(uint8_t *Strength, CMacroblock *MbQ, u
             int blk_y2 =(pixP.pos_y >> 2);
             int blk_x2 =(pixP.pos_x >> 2);
 
-            PicMotionParams *mv_info_p=&p->mv_info[blk_y ][blk_x ];
+            PicMotionParams *mv_info_p=&p->mv_info[blk_y][blk_x];
             PicMotionParams *mv_info_q=&p->mv_info[blk_y2][blk_x2];
             StorablePicturePtr ref_p0=mv_info_p->ref_pic[LIST_0];
             StorablePicturePtr ref_q0=mv_info_q->ref_pic[LIST_0];
@@ -19164,7 +19110,7 @@ void CDecoderH264::get_strength_ver_MBAff(uint8_t *Strength, CMacroblock *MbQ, u
                 int blk_y2 =(pixP.pos_y >> 2);
                 int blk_x2 =(pixP.pos_x >> 2);
 
-                PicMotionParams *mv_info_p=&p->mv_info[blk_y ][blk_x ];
+                PicMotionParams *mv_info_p=&p->mv_info[blk_y][blk_x];
                 PicMotionParams *mv_info_q=&p->mv_info[blk_y2][blk_x2];
                 StorablePicturePtr ref_p0=mv_info_p->ref_pic[LIST_0];
                 StorablePicturePtr ref_q0=mv_info_q->ref_pic[LIST_0];
@@ -19180,7 +19126,7 @@ void CDecoderH264::get_strength_ver_MBAff(uint8_t *Strength, CMacroblock *MbQ, u
                       Strength[idx]=(uint8_t)(
                         compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_0], mvlimit) ||
                         compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_1], mvlimit));
-                    }
+	                    }
                     else {
                       Strength[idx]=(uint8_t)(
                         compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_1], mvlimit) ||
@@ -19282,7 +19228,7 @@ void CDecoderH264::get_strength_hor_MBAff(uint8_t *Strength, CMacroblock *MbQ, u
             blk_x2 =(int16_t)(pixP.pos_x >> 2);
 
 					 {
-              PicMotionParams *mv_info_p=&p->mv_info[blk_y ][blk_x ];
+              PicMotionParams *mv_info_p=&p->mv_info[blk_y][blk_x];
               PicMotionParams *mv_info_q=&p->mv_info[blk_y2][blk_x2];
               StorablePicturePtr ref_p0=mv_info_p->ref_pic[LIST_0];
               StorablePicturePtr ref_q0=mv_info_q->ref_pic[LIST_0];
@@ -19365,7 +19311,7 @@ void CDecoderH264::edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t
         SrcPtrP=&Img[pixP.pos_y][pixP.pos_x];
 
         // Average QP of the two blocks
-        QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) :(MbP->qp+MbQ->qp+1) >> 1;
+        QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) : (MbP->qp+MbQ->qp+1) >> 1;
 
         indexA=iClip3(0, MAX_QP, QP+AlphaC0Offset);
         indexB=iClip3(0, MAX_QP, QP+BetaOffset);
@@ -19374,59 +19320,58 @@ void CDecoderH264::edge_loop_luma_ver_MBAff(ColorPlane pl, imgpel** Img, uint8_t
         Beta   =BETA_TABLE [indexB]*bitdepth_scale;
         ClipTab=CLIP_TAB[indexA];
 
-        L0 =SrcPtrP[ 0] ;
-        R0 =SrcPtrQ[ 0] ;      
+        L0 =SrcPtrP[0];
+        R0 =SrcPtrQ[0];      
 
         if(iabs(R0-L0)<Alpha) {          
           L1 =SrcPtrP[-1];
-          R1 =SrcPtrQ[ 1];                
+          R1 =SrcPtrQ[1];                
 
           if((iabs(R0-R1)<Beta)   && (iabs(L0-L1)<Beta)) {
             L2 =SrcPtrP[-2];
-            R2 =SrcPtrQ[ 2];
+            R2 =SrcPtrQ[2];
             if(Strng == 4) {    // INTRA strong filtering
               int RL0=L0+R0;
               int small_gap =(iabs(R0-L0) <((Alpha >> 2)+2));
-              int aq  =(iabs(R0-R2)<Beta) & small_gap;               
-              int ap  =(iabs(L0-L2)<Beta) & small_gap;
+              int8_t aq  =(iabs(R0-R2) < Beta) & small_gap;               
+              int8_t ap  =(iabs(L0-L2) < Beta) & small_gap;
 
               if(ap) {
                 int L3 =SrcPtrP[-3];
-                SrcPtrP[-2 ] =(imgpel)((((L3+L2) << 1)+L2+L1+RL0+4) >> 3);
-                SrcPtrP[-1 ] =(imgpel)((L2+L1+L0+R0+2) >> 2);
-                SrcPtrP[ 0 ] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
-              }
-              else
-                SrcPtrP[ 0 ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
-
-              if(aq) {
-                imgpel R3 =SrcPtrQ[ 3];
-                SrcPtrQ[ 0 ] =(imgpel)((L1 +((R1+RL0) << 1)+ R2+4) >> 3);
-                SrcPtrQ[ 1 ] =(imgpel)((R2+R0+R1+L0+2) >> 2);
-                SrcPtrQ[ 2 ] =(imgpel)((((R3+R2) << 1)+R2+R1+RL0+4) >> 3);
+                SrcPtrP[-2] =(imgpel)((((L3+L2) << 1)+L2+L1+RL0+4) >> 3);
+                SrcPtrP[-1] =(imgpel)((L2+L1+L0+R0+2) >> 2);
+                SrcPtrP[0] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
 								}
               else
-                SrcPtrQ[ 0 ] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
-							}
-            else   // normal filtering
-						 {              
-              int RL0 =(L0+R0+1) >> 1;
-              int aq  =(iabs(R0-R2)<Beta);
-              int ap  =(iabs(L0-L2)<Beta);
+                SrcPtrP[0] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
 
-              int C0 =ClipTab[ Strng ]*bitdepth_scale;
+              if(aq) {
+                imgpel R3 =SrcPtrQ[3];
+                SrcPtrQ[0] =(imgpel)((L1 +((R1+RL0) << 1)+ R2+4) >> 3);
+                SrcPtrQ[1] =(imgpel)((R2+R0+R1+L0+2) >> 2);
+                SrcPtrQ[2] =(imgpel)((((R3+R2) << 1)+R2+R1+RL0+4) >> 3);
+								}
+              else
+                SrcPtrQ[0] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
+							}
+            else {  // normal filtering
+              int RL0 =(L0+R0+1) >> 1;
+              int8_t aq  = iabs(R0-R2) < Beta;
+              int8_t ap  = iabs(L0-L2) < Beta;
+
+              int C0 =ClipTab[Strng]*bitdepth_scale;
               int tc0 = C0+ap+aq;
               int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
 
-              if(ap && (C0))
+              if(ap && C0)
                 *(SrcPtrP-1) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1);
 
               if(dif) {
                 *SrcPtrP  =(imgpel)iClip1(max_imgpel_value, L0+dif);
                 *SrcPtrQ  =(imgpel)iClip1(max_imgpel_value, R0-dif);
-              }
+	              }
 
-              if(aq  && (C0))
+              if(aq && C0)
                 *(SrcPtrQ+1) += iClip3(-C0,  C0,(R2+RL0 -(R1 << 1)) >> 1);
 							}            
 						}
@@ -19464,7 +19409,7 @@ void CDecoderH264::edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t
     int incP   =(MbQ->mb_field && !MbP->mb_field) ? 2*width : width;
 
     // Average QP of the two blocks
-    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) :(MbP->qp+MbQ->qp+1) >> 1;
+    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) : (MbP->qp+MbQ->qp+1) >> 1;
     int indexA=iClip3(0, MAX_QP, QP+AlphaC0Offset);
     int indexB=iClip3(0, MAX_QP, QP+BetaOffset);
     int Alpha  =ALPHA_TABLE[indexA]*bitdepth_scale;
@@ -19484,44 +19429,43 @@ void CDecoderH264::edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t
 
           if(iabs(R0-L0)<Alpha) {
             imgpel L1 =SrcPtrP[-incP];
-            imgpel R1 =SrcPtrQ[ incQ];      
+            imgpel R1 =SrcPtrQ[incQ];      
 
             if((iabs(R0-R1)<Beta)   && (iabs(L0-L1)<Beta)) {
               imgpel L2 =SrcPtrP[-incP*2];
-              imgpel R2 =SrcPtrQ[ incQ*2];
+              imgpel R2 =SrcPtrQ[incQ*2];
               if(Strng == 4) {    // INTRA strong filtering
                 int RL0=L0+R0;
                 int small_gap =(iabs(R0-L0) <((Alpha >> 2)+2));
-                int aq  =(iabs(R0-R2)<Beta) & small_gap;               
-                int ap  =(iabs(L0-L2)<Beta) & small_gap;
+                int8_t aq = (iabs(R0-R2) < Beta) & small_gap;               
+                int8_t ap = (iabs(L0-L2) < Beta) & small_gap;
 
                 if(ap) {
                   imgpel L3 =SrcPtrP[-incP*3];
                   SrcPtrP[-incP*2] =(imgpel)((((L3+L2) << 1)+L2+L1+RL0+4) >> 3);
-                  SrcPtrP[-incP    ] =(imgpel)((L2+L1+L0+R0+2) >> 2);
-                  SrcPtrP[    0    ] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
+                  SrcPtrP[-incP   ] =(imgpel)((L2+L1+L0+R0+2) >> 2);
+                  SrcPtrP[   0   ] =(imgpel)((R1 +((L1+RL0) << 1)+ L2+4) >> 3);
 			            }
                 else
-                  SrcPtrP[     0     ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
+                  SrcPtrP[    0    ] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
 
                 if(aq) {
-                  imgpel R3=SrcPtrQ[ incQ*3];
-                  SrcPtrQ[    0     ] =(imgpel)((L1 +((R1+RL0) << 1)+ R2+4) >> 3);
-                  SrcPtrQ[ incQ     ] =(imgpel)((R2+R0+R1+L0+2) >> 2);
-                  SrcPtrQ[ incQ*2 ] =(imgpel)((((R3+R2) << 1)+R2+R1+RL0+4) >> 3);
+                  imgpel R3=SrcPtrQ[incQ*3];
+                  SrcPtrQ[  0   ] =(imgpel)((L1 +((R1+RL0) << 1)+ R2+4) >> 3);
+                  SrcPtrQ[incQ  ] =(imgpel)((R2+R0+R1+L0+2) >> 2);
+                  SrcPtrQ[incQ*2] =(imgpel)((((R3+R2) << 1)+R2+R1+RL0+4) >> 3);
 		              }
                 else
-                  SrcPtrQ[    0     ] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
+                  SrcPtrQ[  0   ] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
 	              }
-              else   // normal filtering
- {              
+              else {  // normal filtering
                 int RL0 =(L0+R0+1) >> 1;
-                int aq  =(iabs(R0-R2)<Beta);
-                int ap  =(iabs(L0-L2)<Beta);
+                int8_t aq = iabs(R0-R2)<Beta;
+                int8_t ap = iabs(L0-L2)<Beta;
 
-                int C0 =ClipTab[ Strng ]*bitdepth_scale;
+                int C0 =ClipTab[Strng]*bitdepth_scale;
                 int tc0 = C0+ap+aq;
-                int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
+                int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) + (L1-R1)+4) >> 3);
 
                 if(ap && C0)
                   *(SrcPtrP-incP) += iClip3(-C0,  C0,(L2+RL0 -(L1 << 1)) >> 1);
@@ -19554,7 +19498,6 @@ void CDecoderH264::edge_loop_luma_hor_MBAff(ColorPlane pl, imgpel** Img, uint8_t
  */
 void CDecoderH264::edge_loop_chroma_ver_MBAff(imgpel** Img, uint8_t *Strength, CMacroblock *MbQ, uint8_t edge, int uv, StorablePicture *p) {
   int      pel, Strng;
-
   imgpel   L1, L0, R0, R1;
   int      Alpha=0, Beta=0;
   const uint8_t* ClipTab=NULL;
@@ -19579,7 +19522,7 @@ void CDecoderH264::edge_loop_chroma_ver_MBAff(imgpel** Img, uint8_t *Strength, C
     getAffNeighbour(MbQ, xQ, yQ, p_Vid->mb_size[IS_CHROMA], &pixQ);
     getAffNeighbour(MbQ, xQ-1, yQ, p_Vid->mb_size[IS_CHROMA], &pixP);    
     MbP=&p_Vid->mb_data[pixP.mb_addr];
-    StrengthIdx = PelNum == 8 ? ((MbQ->mb_field && !MbP->mb_field) ? pel << 1 :((pel >> 1) << 2) +(pel & 0x01)) : pel;
+    StrengthIdx = PelNum == 8 ? ((MbQ->mb_field && !MbP->mb_field) ? pel << 1 : ((pel >> 1) << 2) +(pel & 0x01)) : pel;
 
     if(pixP.available || (MbQ->DFDisableIdc == 0)) {
       if((Strng=Strength[StrengthIdx])) {
@@ -19601,14 +19544,14 @@ void CDecoderH264::edge_loop_chroma_ver_MBAff(imgpel** Img, uint8_t *Strength, C
 
         if(iabs(R0-L0)<Alpha) {
           L1 =SrcPtrP[-1];
-          R1 =SrcPtrQ[ 1];      
-          if(((iabs(R0-R1)-Beta<0)  && (iabs(L0-L1)-Beta<0)) )					{
+          R1 =SrcPtrQ[1];      
+          if(((iabs(R0-R1)-Beta<0) && (iabs(L0-L1)-Beta<0)) )	{
             if(Strng == 4) {    // INTRA strong filtering
               SrcPtrQ[0] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
               SrcPtrP[0] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
 							}
             else {
-              int C0 =ClipTab[ Strng ]*bitdepth_scale;
+              int C0 =ClipTab[Strng]*bitdepth_scale;
               int tc0  =(C0+1);
               int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
 
@@ -19660,12 +19603,12 @@ void CDecoderH264::edge_loop_chroma_hor_MBAff(imgpel** Img, uint8_t *Strength, C
     int Alpha  =ALPHA_TABLE[indexA]*bitdepth_scale;
     int Beta   =BETA_TABLE [indexB]*bitdepth_scale;    
 
-    if((Alpha | Beta)) {
+    if(Alpha | Beta) {
       const uint8_t* ClipTab=CLIP_TAB[indexA];
       int      pel, Strng ; 
       int      StrengthIdx;
       for(pel=0; pel<PelNum; pel++) {
-        StrengthIdx =(PelNum == 8) ? ((MbQ->mb_field && !MbP->mb_field) ? pel << 1 :((pel >> 1) << 2) +(pel & 0x01)) : pel;
+        StrengthIdx =(PelNum == 8) ? ((MbQ->mb_field && !MbP->mb_field) ? pel << 1 : ((pel >> 1) << 2) +(pel & 0x01)) : pel;
 
         if((Strng=Strength[StrengthIdx])) {
           imgpel *SrcPtrQ=&Img[pixQ.pos_y][pixQ.pos_x];
@@ -19676,14 +19619,14 @@ void CDecoderH264::edge_loop_chroma_hor_MBAff(imgpel** Img, uint8_t *Strength, C
 
           if(iabs(R0-L0)<Alpha) {
             imgpel L1 =SrcPtrP[-incP];
-            imgpel R1 =SrcPtrQ[ incQ];      
+            imgpel R1 =SrcPtrQ[incQ];      
             if(((iabs(R0-R1)-Beta<0)  && (iabs(L0-L1)-Beta<0)) )						{
               if(Strng == 4) {    // INTRA strong filtering
                 SrcPtrQ[0] =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
                 SrcPtrP[0] =(imgpel)(((L1 << 1)+L0+R1+2) >> 2);
-              }
+								}
               else {
-                int C0 =ClipTab[ Strng ]*bitdepth_scale;
+                int C0 =ClipTab[Strng]*bitdepth_scale;
                 int tc0  =(C0+1);
                 int dif=iClip3(-tc0, tc0,(((R0-L0) << 2) +(L1-R1)+4) >> 3);
 
@@ -19768,10 +19711,8 @@ void CDecoderH264::get_db_strength_mbaff(CVideoParameters *p_Vid, StorablePictur
 					}
 				}
 
-      if(edge || filterLeftMbEdgeFlag) {      
-        // Strength for 4 blks in 1 stripe
+      if(edge || filterLeftMbEdgeFlag)         // Strength for 4 blks in 1 stripe
         (this->*p_Vid->GetStrengthVer)(MbQ, edge, mvlimit, p);
-				}
 			}//end edge
 
     // horizontal deblocking  
@@ -19908,8 +19849,7 @@ void CDecoderH264::perform_db_mbaff(CVideoParameters *p_Vid, StorablePicture *p,
       if(edge || filterTopMbEdgeFlag) {
         uint8_t *Strength=MbQ->strength_hor[edge];
 
-        if((*((INT64T *) Strength)) || ((*(((INT64T *) Strength)+1)))) // only if one of the 16 Strength bytes is != 0
- {
+        if((*((INT64T *) Strength)) || ((*(((INT64T *) Strength)+1)))) { // only if one of the 16 Strength bytes is != 0
           if(filterNon8x8LumaEdgesFlag[edge]) {
             (this->*p_Vid->EdgeLoopLumaHor)(PLANE_Y, imgY, Strength, MbQ, edge << 2, p);
             if(currSlice->chroma444_not_separate) {
@@ -20006,7 +19946,7 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
 
       if(edge || !MbP->is_intra_block) {
         if(edge && (currSlice->slice_type == P_SLICE && MbQ->mb_type == PSKIP)) {
-          for(i=0; i<BLOCK_SIZE; i ++) 
+          for(i=0; i<BLOCK_SIZE; i++) 
 						Strength[i]=0;
 					}
         else  if(edge && ((MbQ->mb_type == P16x16)  || (MbQ->mb_type == P16x8))) {
@@ -20025,7 +19965,7 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
 					}
         else {
           int      blkP, blkQ, idx;
-          BlockPos mb=PicPos[ MbQ->mbAddrX ];
+          BlockPos mb=PicPos[MbQ->mbAddrX];
           mb.x <<= BLOCK_SHIFT;
           mb.y <<= BLOCK_SHIFT;
 
@@ -20040,7 +19980,7 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
               int blk_x =mb.x +(blkQ  & 3);
               int blk_y2 =(int16_t)(get_pos_y_luma(neighbor,  0)+idx) >> 2;
               int blk_x2 =(int16_t)(get_pos_x_luma(neighbor, xQ)    ) >> 2;
-              PicMotionParams *mv_info_p=&p->mv_info[blk_y ][blk_x ];            
+              PicMotionParams *mv_info_p=&p->mv_info[blk_y][blk_x];            
               PicMotionParams *mv_info_q=&p->mv_info[blk_y2][blk_x2];            
               StorablePicturePtr ref_p0=mv_info_p->ref_pic[LIST_0];
               StorablePicturePtr ref_q0=mv_info_q->ref_pic[LIST_0];            
@@ -20055,13 +19995,13 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
                     StrValue=
                       compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_0], mvlimit) |
                       compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_1], mvlimit);
-                  }
+										}
                   else {
                     StrValue=
                       compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_1], mvlimit) |
                       compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_0], mvlimit);
-                  }
-                }
+										}
+									}
                 else { // L0 and L1 reference pictures of p0 are the same; q0 as well
                   StrValue =((
                     compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_0], mvlimit) |
@@ -20069,7 +20009,7 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
                     && (
                     compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_1], mvlimit) |
                     compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_0], mvlimit)
-                   ));
+                    ));
 									}
 								}
               else
@@ -20082,7 +20022,7 @@ void CDecoderH264::get_strength_ver(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
 				}
       else {
         // Start with Strength=3. or Strength=4 for Mb-edge
-        StrValue =(edge == 0) ? 4 : 3;
+        StrValue = edge == 0 ? 4 : 3;
         for(i=0; i<BLOCK_SIZE; i++) 
 					Strength[i]=StrValue;
 				}      
@@ -20122,7 +20062,6 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
       CMacroblock *neighbor=get_non_aff_neighbor_luma(MbQ, 0, yQ);
 
       MbP = edge ? MbQ : neighbor;
-
       if(edge || !MbP->is_intra_block) {       
         if(edge && (currSlice->slice_type == P_SLICE && MbQ->mb_type == PSKIP)) {
           for(i=0; i<BLOCK_SIZE; i++) 
@@ -20145,7 +20084,7 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
 					}
         else {
           int      blkP, blkQ, idx;
-          BlockPos mb=PicPos[ MbQ->mbAddrX ];
+          BlockPos mb=PicPos[MbQ->mbAddrX];
           mb.x <<= 2;
           mb.y <<= 2;
 
@@ -20155,14 +20094,13 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
 
             if(((MbQ->s_cbp[0].blk & i64_power2(blkQ))) || ((MbP->s_cbp[0].blk & i64_power2(blkP))))
               StrValue=2;
-            else // for everything else, if no coefs, but vector difference >= 1 set Strength=1
- {
+            else {	// for everything else, if no coefs, but vector difference >= 1 set Strength=1
               int blk_y =mb.y +(blkQ >> 2);
               int blk_x =mb.x +(blkQ  & 3);
               int blk_y2=get_pos_y_luma(neighbor,yQ) >> 2;
               int blk_x2 =((int16_t)(get_pos_x_luma(neighbor,0)) >> 2)+idx;
 
-              PicMotionParams *mv_info_p=&p->mv_info[blk_y ][blk_x ];
+              PicMotionParams *mv_info_p=&p->mv_info[blk_y][blk_x];
               PicMotionParams *mv_info_q=&p->mv_info[blk_y2][blk_x2];
 
               StorablePicturePtr ref_p0=mv_info_p->ref_pic[LIST_0];
@@ -20183,10 +20121,9 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
                     StrValue=
                       compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_1], mvlimit) |
                       compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_0], mvlimit);
-                  }
-                }
-                else
- { // L0 and L1 reference pictures of p0 are the same; q0 as well
+										}
+									}
+                else	// L0 and L1 reference pictures of p0 are the same; q0 as well
                   StrValue =((
                     compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_0], mvlimit) |
                     compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_1], mvlimit))
@@ -20194,7 +20131,6 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
                     compare_mvs(&mv_info_p->mv[LIST_0], &mv_info_q->mv[LIST_1], mvlimit) |
                     compare_mvs(&mv_info_p->mv[LIST_1], &mv_info_q->mv[LIST_0], mvlimit)
                    ));
-									}
 								}
               else
                 StrValue=1;
@@ -20213,7 +20149,7 @@ void CDecoderH264::get_strength_hor(CMacroblock *MbQ, uint8_t edge, uint8_t mvli
     else {
       // Start with Strength=3. or Strength=4 for Mb-edge
       StrValue =(edge == 0 && (p->structure == FRAME)) ? 4 : 3;
-      for(i=0; i<BLOCK_SIZE; i ++) 
+      for(i=0; i<BLOCK_SIZE; i++) 
 				Strength[i]=StrValue;
 			}      
 		}
@@ -20235,12 +20171,12 @@ void CDecoderH264::luma_ver_deblock_strong(imgpel **cur_img, PIXEL_COORD pos_x1,
     imgpel  R0=*SrcPtrQ;
 
     if(iabs(R0-L0)<Alpha) {
-      imgpel  R1=*(SrcPtrQ+1);
-      imgpel  L1=*(SrcPtrP-1);
+      imgpel R1=*(SrcPtrQ+1);
+      imgpel L1=*(SrcPtrP-1);
       if((iabs(R0-R1)<Beta)  && (iabs(L0-L1)<Beta)) {
-        if((iabs(R0-L0) <((Alpha >> 2)+2))) {
-          imgpel  R2=*(SrcPtrQ+2);
-          imgpel  L2=*(SrcPtrP-2);                  
+        if((iabs(R0-L0) < ((Alpha >> 2)+2))) {
+          imgpel R2=*(SrcPtrQ+2);
+          imgpel L2=*(SrcPtrP-2);                  
           int RL0=L0+R0;
 
           if((iabs(L0-L2)<Beta)) {
@@ -20256,7 +20192,7 @@ void CDecoderH264::luma_ver_deblock_strong(imgpel **cur_img, PIXEL_COORD pos_x1,
             imgpel  R3=*(SrcPtrQ+3);
             *(SrcPtrQ++) =(imgpel)((L1 +((R1+RL0) << 1)+ R2+4) >> 3);
             *(SrcPtrQ++) =(imgpel)((R2+R0+L0+R1+2) >> 2);
-            *(SrcPtrQ ) =(imgpel)((((R3+R2) <<1)+R2+R1+RL0+4) >> 3);
+            *SrcPtrQ  =(imgpel)((((R3+R2) <<1)+R2+R1+RL0+4) >> 3);
 		        }
           else
             *SrcPtrQ =(imgpel)(((R1 << 1)+R0+L1+2) >> 2);
@@ -20295,8 +20231,8 @@ void CDecoderH264::luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1,
           imgpel  R2=*(SrcPtrQ1+1);
           imgpel  L2=*(SrcPtrP1-1);
 
-          int aq  =(iabs(*SrcPtrQ-R2)<Beta);
-          int ap  =(iabs(*SrcPtrP-L2)<Beta);
+          int8_t aq = iabs(*SrcPtrQ-R2) < Beta;
+          int8_t ap = iabs(*SrcPtrP-L2) < Beta;
 
           int tc0 = ap+aq;
           int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
@@ -20316,16 +20252,16 @@ void CDecoderH264::luma_ver_deblock_normal(imgpel **cur_img, PIXEL_COORD pos_x1,
       edge_diff=*SrcPtrQ-*SrcPtrP;
 
       if(iabs(edge_diff)<Alpha) {          
-        imgpel  *SrcPtrQ1=SrcPtrQ+1;
-        imgpel  *SrcPtrP1=SrcPtrP-1;
+        imgpel *SrcPtrQ1=SrcPtrQ+1;
+        imgpel *SrcPtrP1=SrcPtrP-1;
 
         if((iabs(*SrcPtrQ-*SrcPtrQ1)<Beta)  && (iabs(*SrcPtrP-*SrcPtrP1)<Beta)) {                          
           int RL0 =(*SrcPtrP+*SrcPtrQ+1) >> 1;
           imgpel R2=*(SrcPtrQ1+1);
           imgpel L2=*(SrcPtrP1-1);
 
-          int aq =(iabs(*SrcPtrQ-R2)<Beta);
-          int ap =(iabs(*SrcPtrP-L2)<Beta);
+          int8_t aq = iabs(*SrcPtrQ-R2) < Beta;
+          int8_t ap = iabs(*SrcPtrP-L2) < Beta;
 
           int tc0 = C0+ap+aq;
           int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
@@ -20360,7 +20296,7 @@ void CDecoderH264::edge_loop_luma_ver(ColorPlane pl, imgpel** Img, uint8_t *Stre
     int bitdepth_scale  =pl ? p_Vid->bitdepth_scale[IS_CHROMA] : p_Vid->bitdepth_scale[IS_LUMA];
 
     // Average QP of the two blocks
-    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) :(MbP->qp+MbQ->qp+1) >> 1;
+    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) : (MbP->qp+MbQ->qp+1) >> 1;
 
     int indexA=iClip3(0, MAX_QP, QP+MbQ->DFAlphaC0Offset);
     int indexB=iClip3(0, MAX_QP, QP+MbQ->DFBetaOffset);
@@ -20380,7 +20316,7 @@ void CDecoderH264::edge_loop_luma_ver(ColorPlane pl, imgpel** Img, uint8_t *Stre
         if(*Strength == 4)    // INTRA strong filtering
           luma_ver_deblock_strong(cur_img, pos_x1, Alpha, Beta);
         else if(*Strength) // normal filtering
-          luma_ver_deblock_normal(cur_img, pos_x1, Alpha, Beta, ClipTab[ *Strength ]*bitdepth_scale, max_imgpel_value);
+          luma_ver_deblock_normal(cur_img, pos_x1, Alpha, Beta, ClipTab[*Strength]*bitdepth_scale, max_imgpel_value);
         cur_img += 4;
         Strength ++;
 				}
@@ -20451,7 +20387,8 @@ void CDecoderH264::luma_hor_deblock_strong(imgpel *imgP, imgpel *imgQ, uint8_t w
 void CDecoderH264::luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COORD width, int Alpha, int Beta, int C0, imgpel max_imgpel_value) {
   int i;
   int edge_diff;
-  int tc0, dif, aq, ap;
+  int tc0, dif;
+	int8_t aq, ap;
 
   if(C0 == 0) {
     for(i= 0 ; i<BLOCK_SIZE ; i++) {
@@ -20465,8 +20402,8 @@ void CDecoderH264::luma_hor_deblock_normal(imgpel *imgP, imgpel *imgQ, PIXEL_COO
           imgpel  R2=*(SrcPtrQ1+width);
           imgpel  L2=*(SrcPtrP1-width);
 
-          aq  =(iabs(*imgQ-R2)<Beta);
-          ap  =(iabs(*imgP-L2)<Beta);
+          aq = iabs(*imgQ-R2) < Beta;
+          ap = iabs(*imgP-L2) < Beta;
 
           tc0 = ap+aq;
           dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(*SrcPtrP1-*SrcPtrQ1)+4) >> 3);
@@ -20533,7 +20470,7 @@ void CDecoderH264::edge_loop_luma_hor(ColorPlane pl, imgpel** Img, uint8_t *Stre
     int bitdepth_scale  =pl ? p_Vid->bitdepth_scale[IS_CHROMA] : p_Vid->bitdepth_scale[IS_LUMA];
 
     // Average QP of the two blocks
-    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) :(MbP->qp+MbQ->qp+1) >> 1;
+    int QP=pl ? ((MbP->qpc[pl-1]+MbQ->qpc[pl-1]+1) >> 1) : (MbP->qp+MbQ->qp+1) >> 1;
 
     int indexA=iClip3(0, MAX_QP, QP+MbQ->DFAlphaC0Offset);
     int indexB=iClip3(0, MAX_QP, QP+MbQ->DFBetaOffset);
@@ -20554,7 +20491,7 @@ void CDecoderH264::edge_loop_luma_hor(ColorPlane pl, imgpel** Img, uint8_t *Stre
         if(*Strength == 4)    // INTRA strong filtering
           luma_hor_deblock_strong(imgP, imgQ, width, Alpha, Beta);
         else if(*Strength) // normal filtering
-          luma_hor_deblock_normal(imgP, imgQ, width, Alpha, Beta, ClipTab[ *Strength ]*bitdepth_scale, max_imgpel_value);
+          luma_hor_deblock_normal(imgP, imgQ, width, Alpha, Beta, ClipTab[*Strength]*bitdepth_scale, max_imgpel_value);
         imgP += 4;
         imgQ += 4;
         Strength ++;
@@ -20621,7 +20558,7 @@ void CDecoderH264::edge_loop_chroma_ver(imgpel** Img, uint8_t *Strength, CMacrob
                   *SrcPtrQ =(imgpel)(((R1 << 1)+*SrcPtrQ+L1+2) >> 2);
 	                }
                 else {
-                  int tc0 =ClipTab[ Strng ]*bitdepth_scale+1;
+                  int tc0 =ClipTab[Strng]*bitdepth_scale+1;
                   int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(L1-R1)+4) >> 3);
 
                   if(dif) {
@@ -20698,7 +20635,7 @@ void CDecoderH264::edge_loop_chroma_hor(imgpel** Img, uint8_t *Strength, CMacrob
                   *SrcPtrQ =(imgpel)(((R1 << 1)+*SrcPtrQ+L1+2) >> 2);
 									}
                 else {
-                  int tc0 =ClipTab[ Strng ]*bitdepth_scale+1;
+                  int tc0 =ClipTab[Strng]*bitdepth_scale+1;
                   int dif=iClip3(-tc0, tc0,(((edge_diff) << 2) +(L1-R1)+4) >> 3);
 
                   if(dif) {
@@ -21156,7 +21093,7 @@ void CDecoderH264::get_db_strength_normal(CVideoParameters *p_Vid, StorablePictu
   if(MbQ->DFDisableIdc == 1) 
     MbQ->DeblockCall=0;
   else {
-    *piCnt =(*piCnt<0)? MbQAddr:(*piCnt);
+    *piCnt = *piCnt<0 ? MbQAddr : (*piCnt);
     if(MbQ->luma_transform_size_8x8_flag) {
       int  filterLeftMbEdgeFlag =(MbQ->pix_x != 0);
       int  filterTopMbEdgeFlag  =(MbQ->pix_y != 0);
@@ -21277,7 +21214,7 @@ void CDecoderH264::deblock_normal(CVideoParameters *p_Vid, StorablePicture *p) {
 
 
 
-#if(JM_PARALLEL_DEBLOCK == 0)
+#if JM_PARALLEL_DEBLOCK == 0
 /*!
  *****************************************************************************************
 *\brief
@@ -21321,8 +21258,9 @@ void CDecoderH264::DeblockParallel(CVideoParameters *p_Vid, StorablePicture *p, 
  *****************************************************************************************
  */
 void CDecoderH264::DeblockPicture(CVideoParameters *p_Vid, StorablePicture *p) {
-  int iheightMBs =(p_Vid->PicSizeInMbs/p_Vid->PicWidthInMbs);
+  int iheightMBs = p_Vid->PicSizeInMbs / p_Vid->PicWidthInMbs;
   unsigned int i, k=p->PicWidthInMbs+2 *(iheightMBs-1);
+	int j;		// boh
 
 #if defined(OPENMP)
   int j;
@@ -21334,7 +21272,7 @@ void CDecoderH264::DeblockPicture(CVideoParameters *p_Vid, StorablePicture *p) {
   for(i=0; i<k; i++) {
     int nn;    
     int n_last=imin(iheightMBs,(i >> 1)+1);
-    int n_start =(i<p->PicWidthInMbs) ? 0 :((i-p->PicWidthInMbs) >> 1)+1;
+    int n_start =(i<p->PicWidthInMbs) ? 0 : ((i-p->PicWidthInMbs) >> 1)+1;
 
 #if defined(OPENMP)
     #pragma omp parallel for
@@ -21668,7 +21606,7 @@ void CDecoderH264::DeblockMb(CVideoParameters *p_Vid, StorablePicture *p, int Mb
 		}
 	}
 
- void CDecoderH264::perform_db(CVideoParameters *p_Vid, StorablePicture *p, int MbQAddr) {
+void CDecoderH264::perform_db(CVideoParameters *p_Vid, StorablePicture *p, int MbQAddr) {
   CMacroblock *MbQ=&p_Vid->mb_data[MbQAddr]; // current Mb
 
   // return, if filter is disabled
@@ -21842,7 +21780,6 @@ void CDecoderH264::DeblockMb(CVideoParameters *p_Vid, StorablePicture *p, int Mb
 #endif
 
 //! look up tables for FRExt_chroma support
-void dectracebitcnt(int count);
 
 
 /*!
@@ -21851,7 +21788,7 @@ void dectracebitcnt(int count);
 *   Function for reading the reference picture indices using VLC
  ************************************************************************
  */
-int8_t CDecoderH264::readRefPictureIdx_VLC(CMacroblock *currMB, SyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
+int8_t CDecoderH264::readRefPictureIdx_VLC(CMacroblock *currMB, CSyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
 
 #if JTRACE
   trace_info(currSE, "ref_idx_l", list);
@@ -21868,7 +21805,7 @@ int8_t CDecoderH264::readRefPictureIdx_VLC(CMacroblock *currMB, SyntaxElement *c
 *   Function for reading the reference picture indices using FLC
  ************************************************************************
  */
-int8_t CDecoderH264::readRefPictureIdx_FLC(CMacroblock *currMB, SyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
+int8_t CDecoderH264::readRefPictureIdx_FLC(CMacroblock *currMB, CSyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
 
 #if JTRACE
   trace_info(currSE, "ref_idx_l", list);
@@ -21887,7 +21824,7 @@ int8_t CDecoderH264::readRefPictureIdx_FLC(CMacroblock *currMB, SyntaxElement *c
 *   Dummy Function for reading the reference picture indices
  ************************************************************************
  */
-int8_t CDecoderH264::readRefPictureIdx_Null(CMacroblock *currMB, SyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
+int8_t CDecoderH264::readRefPictureIdx_Null(CMacroblock *currMB, CSyntaxElement *currSE, DataPartition *dP, int8_t b8mode, int list) {
   return 0;
 	}
 
@@ -21897,7 +21834,7 @@ int8_t CDecoderH264::readRefPictureIdx_Null(CMacroblock *currMB, SyntaxElement *
 *   Function to prepare reference picture indice function pointer
  ************************************************************************
  */
-void CDecoderH264::prepareListforRefIdx(CMacroblock *currMB, SyntaxElement *currSE, DataPartition *dP, int num_ref_idx_active, int refidx_present) {
+void CDecoderH264::prepareListforRefIdx(CMacroblock *currMB, CSyntaxElement *currSE, DataPartition *dP, int num_ref_idx_active, int refidx_present) {
 
   if(num_ref_idx_active>1) {
     if(currMB->p_Vid->active_pps->entropy_coding_mode_flag == (bool)CAVLC || dP->bitstream->ei_flag) {
@@ -21945,7 +21882,7 @@ void CDecoderH264::update_qp(CMacroblock *currMB, int8_t qp) {
   set_read_comp_coeff_cabac(currMB);
 	}
 
-void CDecoderH264::read_delta_quant(SyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, const uint8_t *partMap, int type) {
+void CDecoderH264::read_delta_quant(CSyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, const uint8_t *partMap, int type) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
  
@@ -21979,7 +21916,7 @@ void CDecoderH264::read_delta_quant(SyntaxElement *currSE, DataPartition *dP, CM
 *   Function to read reference picture indice values
  ************************************************************************
  */
-void CDecoderH264::readMBRefPictureIdx(SyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, PicMotionParams **mv_info, int list, int step_v0, int step_h0) {
+void CDecoderH264::readMBRefPictureIdx(CSyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, PicMotionParams **mv_info, int list, int step_v0, int step_h0) {
 
   switch(currMB->mb_type) {
 		case 1:
@@ -22087,7 +22024,7 @@ void CDecoderH264::readMBRefPictureIdx(SyntaxElement *currSE, DataPartition *dP,
 *   Function to read reference picture indice values
  ************************************************************************
  */
-void CDecoderH264::readMBMotionVectors(SyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, int list, int step_h0, int step_v0) {
+void CDecoderH264::readMBMotionVectors(CSyntaxElement *currSE, DataPartition *dP, CMacroblock *currMB, int list, int step_h0, int step_v0) {
 
   if(currMB->mb_type == 1) {
     if((currMB->b8pdir[0] == list || currMB->b8pdir[0]== BI_PRED)) {		//has forward vector
@@ -22361,7 +22298,7 @@ bool CDecoderH264::exit_macroblock(CSlice *currSlice, int eos_bit) {
   // ask for last mb in the slice  CAVLC
   else {
 
-    currSlice->current_mb_nr=FmoGetNextMBNr(p_Vid, currSlice->current_mb_nr);
+    currSlice->current_mb_nr=p_Vid->FmoGetNextMBNr(currSlice->current_mb_nr);
 
     if(currSlice->current_mb_nr == -1)     // End of CSlice group, MUST be end of slice
  {
@@ -22725,7 +22662,7 @@ void CDecoderH264::get_neighbors(CMacroblock *currMB,       // <--  current CMac
 void CDecoderH264::read_motion_info_from_NAL_p_slice(CMacroblock *currMB) {
   CVideoParameters *p_Vid=currMB->p_Vid;
   CSlice *currSlice=currMB->p_Slice;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   const uint8_t *partMap  =assignSE2partition[currSlice->dp_mode];
   uint8_t partmode        =((currMB->mb_type == P8x8) ? 4 : currMB->mb_type);
@@ -22784,7 +22721,7 @@ void CDecoderH264::read_motion_info_from_NAL_b_slice(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
   StorablePicture *dec_picture=currSlice->dec_picture;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
   int partmode        =((currMB->mb_type == P8x8) ? 4 : currMB->mb_type);
@@ -23053,7 +22990,7 @@ void CDecoderH264::init_cur_imgy(CVideoParameters *p_Vid,CSlice *currSlice,Color
     if(pl==PLANE_Y)  {
       for(j=0; j<6; j++)    // for(j=0; j <(currSlice->slice_type==B_SLICE?2:1); j++) 
  {
-        for(i=0; i<currSlice->listXsize[j] ; i++)  {
+        for(i=0; i<currSlice->listXsize[j]; i++)  {
           StorablePicture *curr_ref=currSlice->listX[j][i];
           if(curr_ref) {
             curr_ref->no_ref=noref && (curr_ref == vidref);
@@ -23212,10 +23149,10 @@ void CDecoderH264::CheckAvailabilityOfNeighbors(CMacroblock *currMB) {
     currMB->mbAddrC=2 *(cur_mb_pair-dec_picture->PicWidthInMbs+1);
     currMB->mbAddrD=2 *(cur_mb_pair-dec_picture->PicWidthInMbs-1);
 
-    currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
+    currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair ].x) != 0));
     currMB->mbAvailB =(bool)(mb_is_available(currMB->mbAddrB, currMB));
     currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x) != 0));
-    currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
+    currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair ].x) != 0));
 		}
   else {
     BlockPos *p_pic_pos=&PicPos[mb_nr];
@@ -23247,7 +23184,7 @@ void CDecoderH264::CheckAvailabilityOfNeighborsNormal(CMacroblock *currMB) {
   const int mb_nr=currMB->mbAddrX;
   BlockPos *PicPos=currMB->p_Vid->PicPos;
 
-  BlockPos *p_pic_pos=&PicPos[mb_nr    ];
+  BlockPos *p_pic_pos=&PicPos[mb_nr   ];
   currMB->mbAddrA=mb_nr-1;
   currMB->mbAddrD=currMB->mbAddrA-dec_picture->PicWidthInMbs;
   currMB->mbAddrB=currMB->mbAddrD+1;
@@ -23282,10 +23219,10 @@ void CDecoderH264::CheckAvailabilityOfNeighborsMBAFF(CMacroblock *currMB) {
   currMB->mbAddrC=2 *(cur_mb_pair-dec_picture->PicWidthInMbs+1);
   currMB->mbAddrD=2 *(cur_mb_pair-dec_picture->PicWidthInMbs-1);
 
-  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
+  currMB->mbAvailA =(bool)(mb_is_available(currMB->mbAddrA, currMB) && ((PicPos[cur_mb_pair ].x) != 0));
   currMB->mbAvailB =(bool)(mb_is_available(currMB->mbAddrB, currMB));
   currMB->mbAvailC =(bool)(mb_is_available(currMB->mbAddrC, currMB) && ((PicPos[cur_mb_pair+1].x) != 0));
-  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair  ].x) != 0));
+  currMB->mbAvailD =(bool)(mb_is_available(currMB->mbAddrD, currMB) && ((PicPos[cur_mb_pair ].x) != 0));
 
   currMB->mb_left = currMB->mbAvailA ? &currSlice->mb_data[currMB->mbAddrA] : NULL;
   currMB->mb_up   = currMB->mbAvailB ? &currSlice->mb_data[currMB->mbAddrB] : NULL;
@@ -23300,7 +23237,7 @@ void CDecoderH264::CheckAvailabilityOfNeighborsMBAFF(CMacroblock *currMB) {
  */
 void CDecoderH264::get_mb_block_pos_normal(BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y) {
 
-  BlockPos *pPos=&PicPos[ mb_addr ];
+  BlockPos *pPos=&PicPos[mb_addr];
   *x =(BLOCK_COORD)pPos->x;
   *y =(BLOCK_COORD)pPos->y;
 	}
@@ -23314,7 +23251,7 @@ void CDecoderH264::get_mb_block_pos_normal(BlockPos *PicPos, int mb_addr, BLOCK_
  */
 void CDecoderH264::get_mb_block_pos_mbaff(BlockPos *PicPos, int mb_addr, BLOCK_COORD *x, BLOCK_COORD *y) {
 
-  BlockPos *pPos=&PicPos[ mb_addr >> 1 ];
+  BlockPos *pPos=&PicPos[mb_addr >> 1];
   *x =(BLOCK_COORD)  pPos->x;
   *y =(BLOCK_COORD)((pPos->y << 1) +(mb_addr & 0x01));
 	}
@@ -23385,7 +23322,7 @@ void CDecoderH264::getNonAffNeighbour(CMacroblock *currMB, BLOCK_COORD xN, BLOCK
 		}
 
   if(pix->available || currMB->DeblockCall) {
-    BlockPos *CurPos=&currMB->p_Vid->PicPos[ pix->mb_addr];
+    BlockPos *CurPos=&currMB->p_Vid->PicPos[pix->mb_addr];
     pix->x     =(int16_t)(xN & (maxW-1));
     pix->y     =(int16_t)(yN & (maxH-1));    
     pix->pos_x =(int16_t)(pix->x+CurPos->x*maxW);
@@ -23697,8 +23634,6 @@ void CDecoderH264::get4x4NeighbourBase(CMacroblock *currMB, BLOCK_COORD block_x,
 	}
 
 
-
-
 int CDecoderH264::mb_pred_intra4x4(CMacroblock *currMB, ColorPlane curr_plane, imgpel **currImg, StorablePicture *dec_picture) {
   CSlice *currSlice=currMB->p_Slice;
   int8_t yuv=dec_picture->chroma_format_idc-1;
@@ -23899,7 +23834,7 @@ int CDecoderH264::mb_pred_p_inter8x8(CMacroblock *currMB, ColorPlane curr_plane,
 
     int k_start =(block8x8 << 2);
     int k_inc =(mv_mode == SMB8x4) ? 2 : 1;
-    int k_end =(mv_mode == SMB8x8) ? k_start+1 :((mv_mode == SMB4x4) ? k_start+4 : k_start+k_inc+1);
+    int k_end =(mv_mode == SMB8x8) ? k_start+1 : ((mv_mode == SMB4x4) ? k_start+4 : k_start+k_inc+1);
 
     BLOCK_COORD block_size_x =(mv_mode == SMB8x4 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
     BLOCK_COORD block_size_y =(mv_mode == SMB4x8 || mv_mode == SMB8x8) ? SMB_BLOCK_SIZE : BLOCK_SIZE;
@@ -23964,7 +23899,7 @@ int CDecoderH264::mb_pred_p_inter8x16(CMacroblock *currMB, ColorPlane curr_plane
 inline void CDecoderH264::update_neighbor_mvs(PicMotionParams **motion, const PicMotionParams *mv_info, int i4) {
 
   (*motion++)[i4+1]=*mv_info;
-  (*motion )[i4    ]=*mv_info;
+  (*motion )[i4   ]=*mv_info;
   (*motion )[i4+1]=*mv_info;
 	}
 
@@ -24770,7 +24705,7 @@ inline void CDecoderH264::update_pixel_pos8(PixelPos *pos_block, const PixelPos 
  */
 void CDecoderH264::read_ipred_8x8_modes_mbaff(CMacroblock *currMB) {
   int b8, bi, bj, bx, by, dec;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -24814,7 +24749,7 @@ void CDecoderH264::read_ipred_8x8_modes_mbaff(CMacroblock *currMB) {
       top_block.available =top_block.available  ? currSlice->intra_block[top_block.mb_addr]  : 0;
 			}
 
-    upIntraPredMode           = top_block.available ? currSlice->ipredmode[top_block.pos_y ][top_block.pos_x ] : -1;
+    upIntraPredMode           = top_block.available ? currSlice->ipredmode[top_block.pos_y][top_block.pos_x] : -1;
     leftIntraPredMode         = left_block.available ? currSlice->ipredmode[left_block.pos_y][left_block.pos_x] : -1;
 
     mostProbableIntraPredMode = (upIntraPredMode<0 || leftIntraPredMode<0) ? DC_PRED : upIntraPredMode<leftIntraPredMode ? upIntraPredMode : leftIntraPredMode;
@@ -24823,9 +24758,9 @@ void CDecoderH264::read_ipred_8x8_modes_mbaff(CMacroblock *currMB) {
 
     //set
     //loop 4x4s in the subblock for 8x8 prediction setting
-    currSlice->ipredmode[bj    ][bi    ]=(uint8_t)dec;
-    currSlice->ipredmode[bj    ][bi+1]=(uint8_t)dec;
-    currSlice->ipredmode[bj+1][bi    ]=(uint8_t)dec;
+    currSlice->ipredmode[bj   ][bi   ]=(uint8_t)dec;
+    currSlice->ipredmode[bj   ][bi+1]=(uint8_t)dec;
+    currSlice->ipredmode[bj+1][bi   ]=(uint8_t)dec;
     currSlice->ipredmode[bj+1][bi+1]=(uint8_t)dec;             
 		}
 	}
@@ -24839,7 +24774,7 @@ void CDecoderH264::read_ipred_8x8_modes_mbaff(CMacroblock *currMB) {
  */
 void CDecoderH264::read_ipred_8x8_modes(CMacroblock *currMB) {
   int b8, bi, bj, bx, by, dec;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -24888,7 +24823,7 @@ void CDecoderH264::read_ipred_8x8_modes(CMacroblock *currMB) {
       top_block.available =top_block.available  ? currSlice->intra_block[top_block.mb_addr]  : 0;
 			}
 
-    upIntraPredMode           = top_block.available ? currSlice->ipredmode[top_block.pos_y ][top_block.pos_x ] : -1;
+    upIntraPredMode           = top_block.available ? currSlice->ipredmode[top_block.pos_y][top_block.pos_x] : -1;
     leftIntraPredMode         = left_block.available ? currSlice->ipredmode[left_block.pos_y][left_block.pos_x] : -1;
 
     mostProbableIntraPredMode = (upIntraPredMode<0 || leftIntraPredMode<0) ? DC_PRED : upIntraPredMode<leftIntraPredMode ? upIntraPredMode : leftIntraPredMode;
@@ -24897,9 +24832,9 @@ void CDecoderH264::read_ipred_8x8_modes(CMacroblock *currMB) {
 
     //set
     //loop 4x4s in the subblock for 8x8 prediction setting
-    currSlice->ipredmode[bj    ][bi    ]=(uint8_t)dec;
-    currSlice->ipredmode[bj    ][bi+1]=(uint8_t)dec;
-    currSlice->ipredmode[bj+1][bi    ]=(uint8_t)dec;
+    currSlice->ipredmode[bj   ][bi   ]=(uint8_t)dec;
+    currSlice->ipredmode[bj   ][bi+1]=(uint8_t)dec;
+    currSlice->ipredmode[bj+1][bi   ]=(uint8_t)dec;
     currSlice->ipredmode[bj+1][bi+1]=(uint8_t)dec;             
 		}
 	}
@@ -24913,7 +24848,7 @@ void CDecoderH264::read_ipred_8x8_modes(CMacroblock *currMB) {
  */
 void CDecoderH264::read_ipred_4x4_modes_mbaff(CMacroblock *currMB) {
   int b8,i,j,bi,bj,bx,by;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -24973,7 +24908,7 @@ void CDecoderH264::read_ipred_4x4_modes_mbaff(CMacroblock *currMB) {
               ts=1;
 	        }
 
-        upIntraPredMode           = (top_block.available  && (ts == 0)) ? currSlice->ipredmode[top_block.pos_y ][top_block.pos_x ] : -1;
+        upIntraPredMode           = (top_block.available  && (ts == 0)) ? currSlice->ipredmode[top_block.pos_y][top_block.pos_x] : -1;
         leftIntraPredMode         = (left_block.available && (ls == 0)) ? currSlice->ipredmode[left_block.pos_y][left_block.pos_x] : -1;
 
         mostProbableIntraPredMode = (upIntraPredMode<0 || leftIntraPredMode<0) ? DC_PRED : upIntraPredMode<leftIntraPredMode ? 
@@ -24996,7 +24931,7 @@ void CDecoderH264::read_ipred_4x4_modes_mbaff(CMacroblock *currMB) {
  */
 void CDecoderH264::read_ipred_4x4_modes(CMacroblock *currMB) {
   int b8,i,j,bi,bj,bx,by;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -25060,7 +24995,7 @@ void CDecoderH264::read_ipred_4x4_modes(CMacroblock *currMB) {
               ts=1;
 					}
 
-        upIntraPredMode           = (top_block.available  && (ts == 0)) ? currSlice->ipredmode[top_block.pos_y ][top_block.pos_x ] : -1;
+        upIntraPredMode           = (top_block.available  && (ts == 0)) ? currSlice->ipredmode[top_block.pos_y][top_block.pos_x] : -1;
         leftIntraPredMode         = (left_block.available && (ls == 0)) ? currSlice->ipredmode[left_block.pos_y][left_block.pos_x] : -1;
 
         mostProbableIntraPredMode = (upIntraPredMode<0 || leftIntraPredMode<0) ? DC_PRED : upIntraPredMode<leftIntraPredMode ? upIntraPredMode : leftIntraPredMode;
@@ -25098,7 +25033,7 @@ void CDecoderH264::read_ipred_modes(CMacroblock *currMB) {
 		}
 
   if((dec_picture->chroma_format_idc != YUV400) && (dec_picture->chroma_format_idc != YUV444)) {
-    SyntaxElement currSE;
+    CSyntaxElement currSE;
     DataPartition *dP;
     const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
     CVideoParameters *p_Vid=currMB->p_Vid;
@@ -25281,7 +25216,7 @@ void CDecoderH264::read_IPCM_coeffs_from_NAL(CSlice *currSlice, struct dataparti
   CVideoParameters *p_Vid=currSlice->p_Vid;
 
   StorablePicture *dec_picture=currSlice->dec_picture;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   int i,j;
 
   //For CABAC, we don't need to read bits to let stream uint8_t aligned
@@ -25340,8 +25275,8 @@ void CDecoderH264::read_IPCM_coeffs_from_NAL(CSlice *currSlice, struct dataparti
  */
 inline void CDecoderH264::SetB8Mode(CMacroblock* currMB, int value, int i) {
   CSlice* currSlice=currMB->p_Slice;
-  static const int8_t p_v2b8[ 5]={4, 5, 6, 7, IBLOCK};
-  static const int8_t p_v2pd[ 5]={0, 0, 0, 0, -1};
+  static const int8_t p_v2b8[5]={4, 5, 6, 7, IBLOCK};
+  static const int8_t p_v2pd[5]={0, 0, 0, 0, -1};
   static const int8_t b_v2b8[14]={0, 4, 4, 4, 5, 6, 5, 6, 5, 6, 7, 7, 7, IBLOCK};
   static const int8_t b_v2pd[14]={2, 0, 1, 2, 0, 0, 1, 1, 2, 2, 0, 1, 2, -1};
 
@@ -25533,7 +25468,7 @@ void CDecoderH264::read_intra4x4_macroblock_cavlc(CMacroblock *currMB, const uin
   //-------------------------------------------------------------
   //transform size flag for INTRA_4x4 and INTRA_8x8 modes
   if(currSlice->Transform8x8Mode) {    
-    SyntaxElement currSE;
+    CSyntaxElement currSE;
     DataPartition *dP=&currSlice->partArr[partMap[SE_HEADER]];
     currSE.type =SE_HEADER;
     TRACE_STRING("transform_size_8x8_flag");
@@ -25575,7 +25510,7 @@ void CDecoderH264::read_intra4x4_macroblock_cabac(CMacroblock *currMB, const uin
   //-------------------------------------------------------------
   //transform size flag for INTRA_4x4 and INTRA_8x8 modes
   if(currSlice->Transform8x8Mode) {
-   SyntaxElement currSE;
+    CSyntaxElement currSE;
     DataPartition *dP=&currSlice->partArr[partMap[SE_HEADER]];
     currSE.type =SE_HEADER;
     currSE.reading=readMB_transform_size_flag_CABAC;
@@ -25668,7 +25603,7 @@ void CDecoderH264::read_i_pcm_macroblock(CMacroblock *currMB, const uint8_t *par
 *  read and set P8x8 mode macroblock information
  ************************************************************************
  */
-void CDecoderH264::read_P8x8_macroblock(CMacroblock *currMB, DataPartition *dP, SyntaxElement *currSE) {
+void CDecoderH264::read_P8x8_macroblock(CMacroblock *currMB, DataPartition *dP, CSyntaxElement *currSE) {
   int i;
   CSlice *currSlice=currMB->p_Slice;
   //====== READ 8x8 SUB-PARTITION MODES (modes of 8x8 blocks) and Intra VBST block modes ======
@@ -25704,8 +25639,7 @@ void CDecoderH264::read_P8x8_macroblock(CMacroblock *currMB, DataPartition *dP, 
  */
 void CDecoderH264::read_one_macroblock_i_slice_cavlc(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
-
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   int mb_nr=currMB->mbAddrX; 
 
   DataPartition *dP;
@@ -25765,8 +25699,7 @@ void CDecoderH264::read_one_macroblock_i_slice_cavlc(CMacroblock *currMB) {
  */
 void CDecoderH264::read_one_macroblock_i_slice_cabac(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
-
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   int mb_nr=currMB->mbAddrX; 
 
   DataPartition *dP;
@@ -25873,7 +25806,7 @@ void CDecoderH264::read_one_macroblock_i_slice_cabac(CMacroblock *currMB) {
  */
 void CDecoderH264::read_one_macroblock_p_slice_cavlc(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   int mb_nr=currMB->mbAddrX; 
 
   DataPartition *dP;
@@ -26054,7 +25987,7 @@ void CDecoderH264::read_one_macroblock_p_slice_cabac(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;  
   CVideoParameters *p_Vid=currMB->p_Vid;
   int mb_nr=currMB->mbAddrX; 
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
 
@@ -26140,7 +26073,7 @@ void CDecoderH264::read_one_macroblock_p_slice_cabac(CMacroblock *currMB) {
 
     // read MB AFF
     check_bottom=read_bottom=read_top=0;
-    if((mb_nr&0x01)==0) {
+    if((mb_nr &0x01)==0) {
       check_bottom= currMB->skip_flag;
       read_top=!check_bottom;
 	    }
@@ -26226,7 +26159,7 @@ void CDecoderH264::read_one_macroblock_b_slice_cavlc(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
   int mb_nr=currMB->mbAddrX; 
   DataPartition *dP;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
 
   if(!currSlice->mb_aff_frame_flag) {
@@ -26413,7 +26346,7 @@ void CDecoderH264::read_one_macroblock_b_slice_cabac(CMacroblock *currMB) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
   int mb_nr=currMB->mbAddrX; 
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
 
   DataPartition *dP;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -27109,7 +27042,7 @@ StorablePicture *CDecoderH264::alloc_storable_picture(CVideoParameters *p_Vid, P
   StorablePicture *s;
   int   nplane;
 
-  //printf ("Allocating (%s) picture (x=%d, y=%d, x_cr=%d, y_cr=%d)\n", (type == FRAME)?"FRAME":(type == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", size_x, size_y, size_x_cr, size_y_cr);
+  //printf ("Allocating (%s) picture (x=%d, y=%d, x_cr=%d, y_cr=%d)\n", (type == FRAME)?"FRAME" : (type == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", size_x, size_y, size_x_cr, size_y_cr);
 
   s=(StorablePicture*)p_Memory->H264CALLOC(1,sizeof(StorablePicture));
   if(!s)
@@ -27631,7 +27564,7 @@ void CDecoderH264::init_lists_p_slice(CSlice *currSlice) {
   if((p_Vid->profile_idc == MVC_HIGH || p_Vid->profile_idc == STEREO_HIGH) && currSlice->current_slice_nr==0) {
     if(currSlice->listXsize[0]>0) {
       printf("\n");
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 	    }
@@ -27814,12 +27747,12 @@ void CDecoderH264::init_lists_b_slice(CSlice *currSlice) {
     if((currSlice->listXsize[0]>0) || (currSlice->listXsize[1]>0))
       printf("\n");
     if(currSlice->listXsize[0]>0) {
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 			}
     if(currSlice->listXsize[1]>0) {
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[1]); i++)  //ref list 1
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[1][i]->poc, currSlice->listX[1][i]->pic_num, currSlice->listX[1][i]->view_id);
 			}
@@ -27850,17 +27783,17 @@ void CDecoderH264::init_mbaff_lists(CVideoParameters *p_Vid, CSlice *currSlice) 
 		}
 
   for(i=0; i<currSlice->listXsize[0]; i++) {
-    currSlice->listX[2][2*i  ]=currSlice->listX[0][i]->top_field;
+    currSlice->listX[2][2*i ]=currSlice->listX[0][i]->top_field;
     currSlice->listX[2][2*i+1]=currSlice->listX[0][i]->bottom_field;
-    currSlice->listX[4][2*i  ]=currSlice->listX[0][i]->bottom_field;
+    currSlice->listX[4][2*i ]=currSlice->listX[0][i]->bottom_field;
     currSlice->listX[4][2*i+1]=currSlice->listX[0][i]->top_field;
 		}
   currSlice->listXsize[2]=currSlice->listXsize[4]=currSlice->listXsize[0]*2;
 
   for(i=0; i<currSlice->listXsize[1]; i++) {
-    currSlice->listX[3][2*i  ]=currSlice->listX[1][i]->top_field;
+    currSlice->listX[3][2*i ]=currSlice->listX[1][i]->top_field;
     currSlice->listX[3][2*i+1]=currSlice->listX[1][i]->bottom_field;
-    currSlice->listX[5][2*i  ]=currSlice->listX[1][i]->bottom_field;
+    currSlice->listX[5][2*i ]=currSlice->listX[1][i]->bottom_field;
     currSlice->listX[5][2*i+1]=currSlice->listX[1][i]->top_field;
 		}
   currSlice->listXsize[3]=currSlice->listXsize[5]=currSlice->listXsize[1]*2;
@@ -27913,15 +27846,15 @@ void CDecoderH264::reorder_short_term(CSlice *currSlice, int cur_list, int16_t n
   picLX=get_short_term_pic(currSlice, currSlice->p_Dpb, picNumLX);
 
   for(cIdx=num_ref_idx_lX_active_minus1+1; cIdx>*refIdxLX; cIdx--)
-    RefPicListX[ cIdx ]=RefPicListX[ cIdx-1];
+    RefPicListX[cIdx]=RefPicListX[cIdx-1];
 
-  RefPicListX[ (*refIdxLX)++ ]=picLX;
+  RefPicListX[(*refIdxLX)++]=picLX;
   nIdx=*refIdxLX;
 
   for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
-    if(RefPicListX[ cIdx ])
-      if((RefPicListX[ cIdx ]->is_long_term) || (RefPicListX[ cIdx ]->pic_num != picNumLX))
-        RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
+    if(RefPicListX[cIdx])
+      if((RefPicListX[cIdx]->is_long_term) || (RefPicListX[cIdx]->pic_num != picNumLX))
+        RefPicListX[nIdx++]=RefPicListX[cIdx];
 		}
 	}
 
@@ -27941,15 +27874,15 @@ void CDecoderH264::reorder_long_term(CSlice *currSlice, StorablePicture **RefPic
   picLX=get_long_term_pic(currSlice, currSlice->p_Dpb, LongTermPicNum);
 
   for(cIdx=num_ref_idx_lX_active_minus1+1; cIdx>*refIdxLX; cIdx--)
-    RefPicListX[ cIdx ]=RefPicListX[ cIdx-1];
+    RefPicListX[cIdx]=RefPicListX[cIdx-1];
 
-  RefPicListX[ (*refIdxLX)++ ]=picLX;
+  RefPicListX[(*refIdxLX)++]=picLX;
   nIdx=*refIdxLX;
 
   for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
-    if(RefPicListX[ cIdx ]) {
-      if((!RefPicListX[ cIdx ]->is_long_term) || (RefPicListX[ cIdx ]->long_term_pic_num != LongTermPicNum))
-        RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
+    if(RefPicListX[cIdx]) {
+      if((!RefPicListX[cIdx]->is_long_term) || (RefPicListX[cIdx]->long_term_pic_num != LongTermPicNum))
+        RefPicListX[nIdx++]=RefPicListX[cIdx];
 			}
 		}
 	}
@@ -28224,7 +28157,7 @@ void CDecoderH264::store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePic
   // picture error concealment
   
   // diagnostics
-  //printf ("Storing (%s) non-ref pic with frame_num #%d\n", (p->type == FRAME)?"FRAME":(p->type == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num);
+  //printf ("Storing (%s) non-ref pic with frame_num #%d\n", (p->type == FRAME)?"FRAME" : (p->type == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num);
   // if frame, check for new store,
   assert(p!=NULL);
 
@@ -28358,7 +28291,7 @@ void CDecoderH264::store_picture_in_dpb(DecodedPictureBuffer *p_Dpb, StorablePic
  */
 void CDecoderH264::insert_picture_in_dpb(CVideoParameters *p_Vid, FrameStore *fs, StorablePicture *p) {
 
-//  printf ("insert (%s) pic with frame_num #%d, poc %d\n", (p->structure == FRAME)?"FRAME":(p->structure == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num, p->poc);
+//  printf ("insert (%s) pic with frame_num #%d, poc %d\n", (p->structure == FRAME)?"FRAME" : (p->structure == TOP_FIELD)?"TOP_FIELD":"BOTTOM_FIELD", p->pic_num, p->poc);
   assert(p!=NULL);
   assert(fs!=NULL);
 
@@ -28756,7 +28689,7 @@ void CDecoderH264::dpb_split_field(CVideoParameters *p_Vid, FrameStore *fs) {
   if(!frame->frame_mbs_only_flag) {
     if(frame->mb_aff_frame_flag) {
       PicMotionParamsOld *frm_motion=&frame->motion;
-      for(j=0 ; j< (frame->size_y >> 3); j++) {
+      for(j=0; j< (frame->size_y >> 3); j++) {
         jj=(j >> 2)*8+(j & 0x03);
         jj4=jj+4;
         jdiv= j >> 1;
@@ -28806,7 +28739,7 @@ void CDecoderH264::dpb_split_field(CVideoParameters *p_Vid, FrameStore *fs) {
       jdiv=(j >> 1);
       for(i=0; i<(frame->size_x >> 2); i++) {
         ii=RSD(i);
-        idiv=(i >> 2);
+        idiv= i >> 2;
 
         currentmb=twosz16*(jdiv >> 1)+ (idiv)*2+(jdiv & 0x01);
 
@@ -28927,7 +28860,7 @@ void CDecoderH264::dpb_combine_field(CVideoParameters *p_Vid, FrameStore *fs) {
    //! Use inference flag to remap mvs/references
 
   //! Generate Frame parameters from field information.
-  for(j=0 ; j<(fs->top_field->size_y >> 2); j++) {
+  for(j=0; j<(fs->top_field->size_y >> 2); j++) {
     jj=j << 1;
     jj4=jj+1;
     for(i=0; i< (fs->top_field->size_x >> 2); i++) {
@@ -29665,17 +29598,17 @@ void CDecoderH264::reorder_short_term(CSlice *currSlice, int cur_list, int16_t n
   picLX=get_short_term_pic(currSlice, currSlice->p_Dpb, picNumLX);
 
   for(cIdx=num_ref_idx_lX_active_minus1+1; cIdx>*refIdxLX; cIdx--)
-    RefPicListX[ cIdx ]=RefPicListX[ cIdx-1];
+    RefPicListX[cIdx]=RefPicListX[cIdx-1];
 
-  RefPicListX[ (*refIdxLX)++ ]=picLX;
+  RefPicListX[(*refIdxLX)++]=picLX;
 
   nIdx=*refIdxLX;
 
   for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
-    if(RefPicListX[ cIdx ]) {
-      if((RefPicListX[ cIdx ]->is_long_term) ||  (RefPicListX[ cIdx ]->pic_num != picNumLX) ||  
-        (currViewID != -1 && RefPicListX[ cIdx ]->layer_id  != currViewID) )
-        RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
+    if(RefPicListX[cIdx]) {
+      if((RefPicListX[cIdx]->is_long_term) ||  (RefPicListX[cIdx]->pic_num != picNumLX) ||  
+        (currViewID != -1 && RefPicListX[cIdx]->layer_id  != currViewID) )
+        RefPicListX[nIdx++]=RefPicListX[cIdx];
 			}
 		}
 	}
@@ -29696,17 +29629,17 @@ void CDecoderH264::reorder_long_term(CSlice *currSlice, StorablePicture **RefPic
   picLX=get_long_term_pic(currSlice, currSlice->p_Dpb, LongTermPicNum);
 
   for(cIdx=num_ref_idx_lX_active_minus1+1; cIdx>*refIdxLX; cIdx--)
-    RefPicListX[ cIdx ]=RefPicListX[ cIdx-1];
+    RefPicListX[cIdx]=RefPicListX[cIdx-1];
 
-  RefPicListX[ (*refIdxLX)++ ]=picLX;
+  RefPicListX[(*refIdxLX)++]=picLX;
 
   nIdx=*refIdxLX;
 
   for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
-    if(RefPicListX[ cIdx ]) {
-      if((!RefPicListX[ cIdx ]->is_long_term) ||  (RefPicListX[ cIdx ]->long_term_pic_num != LongTermPicNum) ||  
-        (currViewID != -1 && RefPicListX[ cIdx ]->layer_id  != currViewID) )
-        RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
+    if(RefPicListX[cIdx]) {
+      if((!RefPicListX[cIdx]->is_long_term) ||  (RefPicListX[cIdx]->long_term_pic_num != LongTermPicNum) ||  
+        (currViewID != -1 && RefPicListX[cIdx]->layer_id  != currViewID) )
+        RefPicListX[nIdx++]=RefPicListX[cIdx];
 			}
 		}
 	}
@@ -29912,7 +29845,7 @@ void CDecoderH264::init_lists_p_slice_mvc(CSlice *currSlice) {
   if((p_Vid->profile_idc == MVC_HIGH || p_Vid->profile_idc == STEREO_HIGH) && currSlice->current_slice_nr==0) {
     if(currSlice->listXsize[0]>0) {
       printf("\n");
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 			}
@@ -30127,12 +30060,12 @@ void CDecoderH264::init_lists_b_slice_mvc(CSlice *currSlice) {
     if((currSlice->listXsize[0]>0) || (currSlice->listXsize[1]>0))
       printf("\n");
     if(currSlice->listXsize[0]>0) {
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 		  }
     if(currSlice->listXsize[1]>0) {
-      printf(" ** (CurViewID:%d %d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+      printf(" ** (CurViewID:%d %d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
       for(i=0; i<(unsigned int)(currSlice->listXsize[1]); i++)  //ref list 1
         printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[1][i]->poc, currSlice->listX[1][i]->pic_num, currSlice->listX[1][i]->view_id);
 			}
@@ -30157,15 +30090,15 @@ void CDecoderH264::reorder_interview(CVideoParameters *p_Vid, CSlice *currSlice,
 
   if(picLX) {
     for(cIdx=num_ref_idx_lX_active_minus1+1; cIdx>*refIdxLX; cIdx--)
-      RefPicListX[ cIdx ]=RefPicListX[ cIdx-1];
+      RefPicListX[cIdx]=RefPicListX[cIdx-1];
 
-    RefPicListX[ (*refIdxLX)++ ]=picLX;
+    RefPicListX[(*refIdxLX)++]=picLX;
 
     nIdx=*refIdxLX;
 
     for(cIdx=*refIdxLX; cIdx <= num_ref_idx_lX_active_minus1+1; cIdx++) {
       if((GetViewIdx(p_Vid, RefPicListX[cIdx]->view_id) != targetViewID) || (RefPicListX[cIdx]->poc != currPOC))
-        RefPicListX[ nIdx++ ]=RefPicListX[ cIdx ];
+        RefPicListX[nIdx++]=RefPicListX[cIdx];
 			}
 		}
 	}
@@ -30276,9 +30209,9 @@ void CDecoderH264::reorder_lists_mvc(CSlice*currSlice, PocType currPOC) {
 		  }
     if(p_Vid->no_reference_picture == currSlice->listX[0][currSlice->num_ref_idx_active[LIST_0]-1]) {
       if(p_Vid->non_conforming_stream)
-        printf("RefPicList0[ %d ] is equal to 'no reference picture'\n", currSlice->num_ref_idx_active[LIST_0]-1);
+        printf("RefPicList0[%d] is equal to 'no reference picture'\n", currSlice->num_ref_idx_active[LIST_0]-1);
       else
-        error("RefPicList0[ num_ref_idx_l0_active_minus1 ] in MVC layer is equal to 'no reference picture', invalid bitstream",500);
+        error("RefPicList0[num_ref_idx_l0_active_minus1] in MVC layer is equal to 'no reference picture', invalid bitstream",500);
 			}
     // that's a definition
     currSlice->listXsize[0]=(int8_t)currSlice->num_ref_idx_active[LIST_0];
@@ -30291,9 +30224,9 @@ void CDecoderH264::reorder_lists_mvc(CSlice*currSlice, PocType currPOC) {
 			}
     if(p_Vid->no_reference_picture == currSlice->listX[1][currSlice->num_ref_idx_active[LIST_1]-1]) {
       if(p_Vid->non_conforming_stream)
-        printf("RefPicList1[ %d ] is equal to 'no reference picture'\n", currSlice->num_ref_idx_active[LIST_1]-1);
+        printf("RefPicList1[%d] is equal to 'no reference picture'\n", currSlice->num_ref_idx_active[LIST_1]-1);
       else
-        error("RefPicList1[ num_ref_idx_l1_active_minus1 ] is equal to 'no reference picture', invalid bitstream",500);
+        error("RefPicList1[num_ref_idx_l1_active_minus1] is equal to 'no reference picture', invalid bitstream",500);
 	    }
     // that's a definition
     currSlice->listXsize[1]=(int8_t)currSlice->num_ref_idx_active[LIST_1];
@@ -30308,7 +30241,7 @@ void CDecoderH264::reorder_lists_mvc(CSlice*currSlice, PocType currPOC) {
     if((p_Vid->profile_idc == MVC_HIGH || p_Vid->profile_idc == STEREO_HIGH) && currSlice->current_slice_nr==0) {
       if(currSlice->listXsize[0]>0) {
         printf("\n");
-        printf(" ** (FinalViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" ** (FinalViewID:%d %d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->ThisPOC, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 				}
@@ -30323,12 +30256,12 @@ void CDecoderH264::reorder_lists_mvc(CSlice*currSlice, PocType currPOC) {
       if((currSlice->listXsize[0]>0) || (currSlice->listXsize[1]>0))
         printf("\n");
       if(currSlice->listXsize[0]>0) {
-        printf(" ** (FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" ** (FinalViewID:%d) %s Ref Pic List 0 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[0]); i++)  //ref list 0
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[0][i]->poc, currSlice->listX[0][i]->pic_num, currSlice->listX[0][i]->view_id);
 				}
       if(currSlice->listXsize[1]>0) {
-        printf(" ** (FinalViewID:%d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM":(currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
+        printf(" ** (FinalViewID:%d) %s Ref Pic List 1 ****\n", currSlice->view_id, currSlice->structure==FRAME ? "FRM" : (currSlice->structure==TOP_FIELD ? "TOP":"BOT"));
         for(i=0; i<(unsigned int)(currSlice->listXsize[1]); i++)  //ref list 1
           printf("   %2d -> POC: %4d PicNum: %4d ViewID: %d\n", i, currSlice->listX[1][i]->poc, currSlice->listX[1][i]->pic_num, currSlice->listX[1][i]->view_id);
 				}
@@ -30404,7 +30337,7 @@ void CDecoderH264::update_direct_mv_info_temporal(CMacroblock *currMB) {
                   &list1[0]->frame->bottom_field->mv_info[RSD(currMB->block_y_aff+j0)][RSD(i0)] : &list1[0]->frame->bottom_field->mv_info[currMB->block_y_aff+j0][i0];
 	            }
 
-            refList=colocated->ref_idx[LIST_0 ]== -1 ? LIST_1 : LIST_0;
+            refList=colocated->ref_idx[LIST_0]== -1 ? LIST_1 : LIST_0;
             ref_idx=colocated->ref_idx[refList];
 
             if(ref_idx == -1) {
@@ -31214,7 +31147,7 @@ void CDecoderH264::get_luma_03(imgpel **block, imgpel **cur_imgY, BLOCK_COORD bl
   int result;
   int jj=1;
 
-  p0=&cur_imgY[ -2][x_pos];
+  p0=&cur_imgY[-2][x_pos];
   for(j=0; j<block_size_y; j++) {                  
     p1=p0+shift_x;          
     p2=p1+shift_x;
@@ -31268,7 +31201,7 @@ void CDecoderH264::get_luma_21(imgpel **block, imgpel **cur_imgY, int **tmp_res,
   jj=2;
   for(j=0; j<block_size_y; j++) {
     tmp_line =tmp_res[jj++];
-    x0=tmp_res[j  ];
+    x0=tmp_res[j ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31318,7 +31251,7 @@ void CDecoderH264::get_luma_22(imgpel **block, imgpel **cur_imgY, int **tmp_res,
 	  }
 
   for(j=0; j<block_size_y; j++) {
-    x0=tmp_res[j  ];
+    x0=tmp_res[j ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31367,7 +31300,7 @@ void CDecoderH264::get_luma_23(imgpel **block, imgpel **cur_imgY, int **tmp_res,
   jj=3;
   for(j=0; j<block_size_y; j++) {
     tmp_line =tmp_res[jj++];
-    x0=tmp_res[j  ];
+    x0=tmp_res[j ];
     x1=tmp_res[j+1];
     x2=tmp_res[j+2];
     x3=tmp_res[j+3];
@@ -31399,7 +31332,7 @@ void CDecoderH264::get_luma_12(imgpel **block, imgpel **cur_imgY, int **tmp_res,
   imgpel *orig_line;  
   int result;      
 
-  p0=&cur_imgY[ -2][x_pos-2];
+  p0=&cur_imgY[-2][x_pos-2];
   for(j=0; j<block_size_y; j++) {                    
     p1=p0+shift_x;
     p2=p1+shift_x;
@@ -31448,7 +31381,7 @@ void CDecoderH264::get_luma_32(imgpel **block, imgpel **cur_imgY, int **tmp_res,
   imgpel *orig_line;  
   int result;      
 
-  p0=&cur_imgY[ -2][x_pos-2];
+  p0=&cur_imgY[-2][x_pos-2];
   for(j=0; j<block_size_y; j++) {                    
     p1=p0+shift_x;
     p2=p1+shift_x;
@@ -31713,46 +31646,46 @@ void CDecoderH264::get_block_luma(StorablePicture *curr_ref, BLOCK_COORD x_pos, 
     else { /* other positions */
       if(dy == 0) { /* No vertical interpolation */
         if(dx == 1)
-          get_luma_10(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_10(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
         else if(dx == 2)
-          get_luma_20(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_20(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
         else
-          get_luma_30(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_30(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, max_imgpel_value);
 				}
       else if(dx == 0) {	/* No horizontal interpolation */        
         if(dy == 1)
           get_luma_01(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
         else if(dy == 2)
-          get_luma_02(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+          get_luma_02(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
         else
-          get_luma_03(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+          get_luma_03(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
 				}
       else if(dx == 2) {  /* Vertical & horizontal interpolation */
         if(dy == 1)
-          get_luma_21(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_21(block, &cur_imgY[y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
         else if(dy == 2)
-          get_luma_22(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_22(block, &cur_imgY[y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
         else
-          get_luma_23(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
+          get_luma_23(block, &cur_imgY[y_pos], tmp_res, block_size_y, block_size_x, x_pos, max_imgpel_value);
 	      }
       else if(dy == 2) {
         if(dx == 1)
-          get_luma_12(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+          get_luma_12(block, &cur_imgY[y_pos], tmp_res, block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
         else
-          get_luma_32(block, &cur_imgY[ y_pos], tmp_res, block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+          get_luma_32(block, &cur_imgY[y_pos], tmp_res, block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
 		    }
       else {
         if(dx == 1) {
           if(dy == 1)
-            get_luma_11(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+            get_luma_11(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
           else
-            get_luma_13(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+            get_luma_13(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
 			    }
         else {
           if(dy == 1)
-            get_luma_31(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+            get_luma_31(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
           else
-            get_luma_33(block, &cur_imgY[ y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
+            get_luma_33(block, &cur_imgY[y_pos], block_size_y, block_size_x, x_pos, shift_x, max_imgpel_value);
 					}
 				}
 			}
@@ -31922,11 +31855,12 @@ void CDecoderH264::intra_cr_decoding(CMacroblock *currMB, int8_t yuv) {
     curUV=dec_picture->imgUV[uv];
     if(currMB->is_lossless) {
       if(currMB->c_ipred_mode == VERT_PRED_8 || currMB->c_ipred_mode == HOR_PRED_8)
-        Inv_Residual_trans_Chroma(currMB, uv);
+        currMB->Inv_Residual_trans_Chroma(uv);
       else {
-        for(j=0; j<p_Vid->mb_cr_size_y; j++)
+        for(j=0; j<p_Vid->mb_cr_size_y; j++) {
           for(i=0; i<p_Vid->mb_cr_size_x; i++)
             currSlice->mb_rres [uv+1][j][i]=currSlice->cof[uv+1][j][i];
+					}
 				}
 			}
 
@@ -31936,7 +31870,7 @@ void CDecoderH264::intra_cr_decoding(CMacroblock *currMB, int8_t yuv) {
           joff=subblk_offset_y[yuv][b8][b4];          
           ioff=subblk_offset_x[yuv][b8][b4];          
 
-          (this->*currMB->itrans_4x4)(currMB, (ColorPlane) (uv+1), ioff, joff);
+          (this->*currMB->itrans_4x4)(currMB, (ColorPlane)(uv+1), ioff, joff);
           copy_image_data_4x4(&curUV[currMB->pix_c_y+joff], &currSlice->mb_rec[uv+1][joff], currMB->pix_c_x+ioff, ioff);
 					}
 				}
@@ -31947,7 +31881,7 @@ void CDecoderH264::intra_cr_decoding(CMacroblock *currMB, int8_t yuv) {
 
       for(joff =0; joff<8; joff += 4) {
         for(ioff=0; ioff<8; ioff+=4) {          
-          (this->*currMB->itrans_4x4)(currMB, (ColorPlane) (uv+1), ioff, joff);
+          (this->*currMB->itrans_4x4)(currMB, (ColorPlane)(uv+1), ioff, joff);
           copy_image_data_4x4(&curUV[currMB->pix_c_y+joff], &currSlice->mb_rec[uv+1][joff], currMB->pix_c_x+ioff, ioff);
 					}
 				}
@@ -32540,7 +32474,7 @@ int CDecoderH264::RBSPtoSODB(uint8_t *streamBuffer, int last_byte_pos) {
       return(last_byte_pos);
   }
 */
-  return(last_byte_pos);
+  return last_byte_pos;
 	}
 
 
@@ -32622,13 +32556,13 @@ int CDecoderH264::read_next_nalu(CVideoParameters *p_Vid, NALU_t *nalu) {
 
   switch(p_Inp->FileFormat) {
 		case PAR_OF_ANNEXB:
-			ret=get_annex_b_NALU(p_Vid, nalu, p_Vid->annex_b);
+			ret=get_annex_b_NALU(nalu, p_Vid->annex_b);
 			break;
 		case PAR_OF_RTP:
-			ret=GetRTPNALU(p_Vid, nalu, p_Vid->BitStreamFile);
+			ret=GetRTPNALU(nalu, p_Vid->BitStreamFile);
 			break;   
 		case PAR_OF_GDRTP:
-			ret=GetRTSPClientNALU(p_Vid, nalu, (CRTSPClientSocket*)p_Vid->BitStreamFile);
+			ret=GetRTSPClientNALU(nalu, (CRTSPClientSocket*)p_Vid->BitStreamFile);
 			break;   
 		}
 
@@ -32912,7 +32846,7 @@ void CDecoderH264::img2buf_endian(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_
   PIXEL_COORD i,j;
   uint8_t  ui8;
   uint16_t tmp16, ui16;
-  unsigned long  tmp32, ui32;
+  uint32_t  tmp32, ui32;
 
   //int twidth =size_x-crop_left-crop_right;
 
@@ -32938,8 +32872,8 @@ void CDecoderH264::img2buf_endian(imgpel** imgX, uint8_t* buf, PIXEL_COORD size_
 		case 4:
 			for(i=crop_top; i<size_y-crop_bottom; i++) {
 				for(j=crop_left; j<size_x-crop_right; j++)					{
-					tmp32=(unsigned long) (imgX[i][j]);
-					ui32 =(unsigned long) (((tmp32&0xFF00)<<8) | ((tmp32&0xFF)<<24) | ((tmp32&0xFF0000)>>8) | ((tmp32&0xFF000000)>> 24));
+					tmp32=(uint32_t) (imgX[i][j]);
+					ui32 =(uint32_t) (((tmp32&0xFF00)<<8) | ((tmp32&0xFF)<<24) | ((tmp32&0xFF0000)>>8) | ((tmp32&0xFF000000)>> 24));
 					memcpy(buf+((j-crop_left+((i-crop_top)*iOutStride))*4),&ui32, 4);
 					}
 				}
@@ -33638,8 +33572,6 @@ void CDecoderH264::direct_output(CVideoParameters *p_Vid, StorablePicture *p, in
 
 
 
-extern void init_frext(CVideoParameters *p_Vid);
-
 // syntax for scaling list matrix values
 void CDecoderH264::Scaling_List(int16_t *scalingList, int16_t sizeOfScalingList, bool *UseDefaultScalingMatrix, Bitstream *s) {
   int j, scanj;
@@ -33663,7 +33595,7 @@ void CDecoderH264::Scaling_List(int16_t *scalingList, int16_t sizeOfScalingList,
 	}
 
 // fill sps with content of p
-int CDecoderH264::InterpretSPS(CVideoParameters *p_Vid, DataPartition *p, seq_parameter_set_rbsp_t *sps) {
+int CDecoderH264::InterpretSPS(DataPartition *p, seq_parameter_set_rbsp_t *sps) {
   unsigned i;
   unsigned n_ScalingList;
   int8_t reserved_zero;
@@ -33805,7 +33737,7 @@ int CDecoderH264::InterpretSubsetSPS(CVideoParameters *p_Vid, DataPartition *p, 
   assert(p->bitstream != NULL);
   assert(p->bitstream->streamBuffer != 0);
 
-  InterpretSPS(p_Vid, p, sps);
+  InterpretSPS(p, sps);
   get_max_dec_frame_buf_size(sps);
 
   *curr_seq_set_id=sps->seq_parameter_set_id;
@@ -33932,9 +33864,9 @@ int CDecoderH264::ReadHRDParameters(DataPartition *p, hrd_parameters_t *hrd) {
   hrd->cpb_size_scale                                     =read_u_v  (4,"VUI: cpb_size_scale"                       , s, &UsedBits);
 
   for(SchedSelIdx=0; SchedSelIdx <= hrd->cpb_cnt_minus1; SchedSelIdx++) {
-    hrd->bit_rate_value_minus1[ SchedSelIdx ]            =read_ue_v  ("VUI: bit_rate_value_minus1"                  , s, &UsedBits);
-    hrd->cpb_size_value_minus1[ SchedSelIdx ]            =read_ue_v  ("VUI: cpb_size_value_minus1"                  , s, &UsedBits);
-    hrd->cbr_flag[ SchedSelIdx ]                         =read_u_1   ("VUI: cbr_flag"                               , s, &UsedBits);
+    hrd->bit_rate_value_minus1[SchedSelIdx]            =read_ue_v  ("VUI: bit_rate_value_minus1"                  , s, &UsedBits);
+    hrd->cpb_size_value_minus1[SchedSelIdx]            =read_ue_v  ("VUI: cpb_size_value_minus1"                  , s, &UsedBits);
+    hrd->cbr_flag[SchedSelIdx]                         =read_u_1   ("VUI: cbr_flag"                               , s, &UsedBits);
 		}
 
   hrd->initial_cpb_removal_delay_length_minus1           =read_u_v  (5,"VUI: initial_cpb_removal_delay_length_minus1" , s, &UsedBits);
@@ -33946,7 +33878,7 @@ int CDecoderH264::ReadHRDParameters(DataPartition *p, hrd_parameters_t *hrd) {
 	}
 
 
-int CDecoderH264::InterpretPPS(CVideoParameters *p_Vid, DataPartition *p, pic_parameter_set_rbsp_t *pps) {
+int CDecoderH264::InterpretPPS(DataPartition *p, pic_parameter_set_rbsp_t *pps) {
   int i;
   unsigned n_ScalingList;
   ColorFormat chroma_format_idc;
@@ -34055,17 +33987,17 @@ int CDecoderH264::InterpretPPS(CVideoParameters *p_Vid, DataPartition *p, pic_pa
 	}
 
 
-void PPSConsistencyCheck (pic_parameter_set_rbsp_t *pps) {
+void CDecoderH264::PPSConsistencyCheck(pic_parameter_set_rbsp_t *pps) {
   printf ("Consistency checking a picture parset, to be implemented\n");
 //  if(pps->seq_parameter_set_id invalid then do something)
 	}
 
-void SPSConsistencyCheck (seq_parameter_set_rbsp_t *sps) {
+void CDecoderH264::SPSConsistencyCheck(seq_parameter_set_rbsp_t *sps) {
   printf ("Consistency checking a sequence parset, to be implemented\n");
 	}
 
 #if MVC_EXTENSION_ENABLE
-void SubsetSPSConsistencyCheck (subset_seq_parameter_set_rbsp_t *subset_sps) {
+void CDecoderH264::SubsetSPSConsistencyCheck(subset_seq_parameter_set_rbsp_t *subset_sps) {
   printf("Consistency checking a subset sequence parset, to be implemented\n");
 	}
 #endif
@@ -34112,7 +34044,7 @@ void CDecoderH264::ProcessSPS(CVideoParameters *p_Vid, NALU_t *nalu) {
   dp->bitstream->ei_flag=FALSE;
   dp->bitstream->read_len=dp->bitstream->frame_bitoffset=0;
 
-  InterpretSPS(p_Vid, dp, sps);
+  InterpretSPS(dp, sps);
 #if MVC_EXTENSION_ENABLE
   get_max_dec_frame_buf_size(sps);
 #endif
@@ -34194,7 +34126,7 @@ void CDecoderH264::ProcessPPS(CVideoParameters *p_Vid, NALU_t *nalu) {
   dp->bitstream->code_len=dp->bitstream->bitstream_length=RBSPtoSODB(dp->bitstream->streamBuffer, nalu->len-1);
   dp->bitstream->ei_flag=FALSE;
   dp->bitstream->read_len=dp->bitstream->frame_bitoffset=0;
-  InterpretPPS(p_Vid, dp, pps);
+  InterpretPPS(dp, pps);
   // PPSConsistencyCheck(pps);
 
   if(p_Vid->active_pps) {
@@ -35063,7 +34995,7 @@ const int16_t CDecoderH264::quant8_inter_default[64]={
 	24,25,27,28,30,32,33,35
 	};
 
-const int16_t CDecoderH264::quant_org[16]={ //to be use if no q matrix is chosen
+const int16_t CDecoderH264::quant_org[16]={ //to be used if no q matrix is chosen
 	16,16,16,16,
 	16,16,16,16,
 	16,16,16,16,
@@ -35237,7 +35169,7 @@ void CDecoderH264::set_dequant4x4(int16_t(*InvLevelScale4x4)[4], const int16_t(*
   int8_t j;
 
   for(j=0; j<4; j++) {
-    *(*InvLevelScale4x4     )=*(*dequant     )**qmatrix++;
+    *(*InvLevelScale4x4    )=*(*dequant    )**qmatrix++;
     *(*InvLevelScale4x4  +1)=*(*dequant  +1)**qmatrix++;
     *(*InvLevelScale4x4  +2)=*(*dequant  +2)**qmatrix++;
     *(*InvLevelScale4x4++ +3)=*(*dequant++ +3)**qmatrix++;
@@ -35248,7 +35180,7 @@ void CDecoderH264::set_dequant8x8(int16_t(*InvLevelScale8x8)[8], const int16_t(*
   int8_t j;
 
   for(j=0; j<8; j++) {
-    *(*InvLevelScale8x8     )=*(*dequant     )**qmatrix++;
+    *(*InvLevelScale8x8    )=*(*dequant    )**qmatrix++;
     *(*InvLevelScale8x8  +1)=*(*dequant  +1)**qmatrix++;
     *(*InvLevelScale8x8  +2)=*(*dequant  +2)**qmatrix++;
     *(*InvLevelScale8x8  +3)=*(*dequant  +3)**qmatrix++;
@@ -35330,7 +35262,7 @@ void CDecoderH264::CalculateQuant8x8Param(CSlice *currSlice) {
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::read_comp_coeff_4x4_smb_CABAC(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl, BLOCK_COORD block_y, BLOCK_COORD block_x, 
+void CDecoderH264::read_comp_coeff_4x4_smb_CABAC(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl, BLOCK_COORD block_y, BLOCK_COORD block_x, 
 																					int start_scan, INT64T *cbp_blk) {
   int i,j,k;
   int i0,j0;
@@ -35434,7 +35366,7 @@ void CDecoderH264::read_comp_coeff_4x4_smb_CABAC(CMacroblock *currMB, SyntaxElem
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::read_comp_coeff_4x4_CABAC(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl, 
+void CDecoderH264::read_comp_coeff_4x4_CABAC(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl, 
 																						int16_t(*InvLevelScale4x4)[4], int8_t qp_per, int8_t cbp) {
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
@@ -35509,7 +35441,7 @@ void CDecoderH264::read_comp_coeff_4x4_CABAC(CMacroblock *currMB, SyntaxElement 
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::read_comp_coeff_4x4_CABAC_ls(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl, 
+void CDecoderH264::read_comp_coeff_4x4_CABAC_ls(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl, 
 																				 int16_t(*InvLevelScale4x4)[4], int8_t qp_per, int8_t cbp) {
   CVideoParameters *p_Vid=currMB->p_Vid;
   int start_scan=IS_I16MB(currMB)? 1 : 0; 
@@ -35539,7 +35471,7 @@ void CDecoderH264::read_comp_coeff_4x4_CABAC_ls(CMacroblock *currMB, SyntaxEleme
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl, int b8) {
+void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl, int b8) {
 
   if(currMB->cbp & (1<<b8)) {	 // are there any coefficients in the current block
     CVideoParameters *p_Vid=currMB->p_Vid;
@@ -35560,8 +35492,8 @@ void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, SyntaxElement *cu
     // select scan type
     const uint8_t(*pos_scan8x8) =((currSlice->structure == FRAME) && !currMB->mb_field) ? SNGL_SCAN8x8[0] : FIELD_SCAN8x8[0];
 
-    int8_t qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[pl] ];
-    int8_t qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[pl] ];
+    int8_t qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[pl]];
+    int8_t qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[pl]];
     
     int16_t(*InvLevelScale8x8)[8] = currMB->is_intra_block ? 
 			currSlice->InvLevelScale8x8_Intra[transform_pl][qp_rem] : currSlice->InvLevelScale8x8_Inter[transform_pl][qp_rem];
@@ -35609,7 +35541,7 @@ void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, SyntaxElement *cu
       j=*pos_scan8x8++;
 
       tcoeffs[j][boff_x+i]=rshift_rnd_sf((level*InvLevelScale8x8[j][i]) << qp_per, 6); // dequantization
-      //tcoeffs[ j][boff_x+i]=level;
+      //tcoeffs[j][boff_x+i]=level;
 
       // AC coefficients
       currSE->type    = currMB->is_intra_block ? SE_LUM_AC_INTRA : SE_LUM_AC_INTER;
@@ -35635,15 +35567,15 @@ void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, SyntaxElement *cu
           i=*pos_scan8x8++;
           j=*pos_scan8x8++;
 
-          tcoeffs[ j][boff_x+i]=rshift_rnd_sf((level*InvLevelScale8x8[j][i]) << qp_per, 6); // dequantization
-          //tcoeffs[ j][boff_x+i]=level;
+          tcoeffs[j][boff_x+i]=rshift_rnd_sf((level*InvLevelScale8x8[j][i]) << qp_per, 6); // dequantization
+          //tcoeffs[j][boff_x+i]=level;
 					}
 				}
       /*
       for(j=0; j<8; j++) {
       for(i=0; i<8; i++) {
-      if(tcoeffs[ j][boff_x+i])
-      tcoeffs[ j][boff_x+i]=rshift_rnd_sf((tcoeffs[ j][boff_x+i]*InvLevelScale8x8[j][i]) << qp_per, 6); // dequantization
+      if(tcoeffs[j][boff_x+i])
+      tcoeffs[j][boff_x+i]=rshift_rnd_sf((tcoeffs[j][boff_x+i]*InvLevelScale8x8[j][i]) << qp_per, 6); // dequantization
       }
       }
       */
@@ -35658,7 +35590,7 @@ void CDecoderH264::readCompCoeff8x8_CABAC(CMacroblock *currMB, SyntaxElement *cu
 *    from the NAL(CABAC Mode-lossless)
 ************************************************************************
 */
-void CDecoderH264::readCompCoeff8x8_CABAC_lossless(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl, int b8) {
+void CDecoderH264::readCompCoeff8x8_CABAC_lossless(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl, int b8) {
 
   if(currMB->cbp & (1<<b8)) {	 // are there any coefficients in the current block
     CVideoParameters *p_Vid=currMB->p_Vid;
@@ -35695,7 +35627,7 @@ void CDecoderH264::readCompCoeff8x8_CABAC_lossless(CMacroblock *currMB, SyntaxEl
 
     currSE->reading=readRunLevel_CABAC;
 
-    for(k=0;(k<65) && (level != 0);k++) {
+    for(k=0; (k<65) && (level != 0); k++) {
       //============ read =============
       /*
      *make distinction between INTRA and INTER coded
@@ -35742,7 +35674,7 @@ void CDecoderH264::readCompCoeff8x8_CABAC_lossless(CMacroblock *currMB, SyntaxEl
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::read_comp_coeff_8x8_MB_CABAC(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl) {
+void CDecoderH264::read_comp_coeff_8x8_MB_CABAC(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl) {
 
   //======= 8x8 transform size & CABAC ========
   readCompCoeff8x8_CABAC(currMB, currSE, pl, 0); 
@@ -35759,7 +35691,7 @@ void CDecoderH264::read_comp_coeff_8x8_MB_CABAC(CMacroblock *currMB, SyntaxEleme
 *    from the NAL(CABAC Mode)
 ************************************************************************
 */
-void CDecoderH264::read_comp_coeff_8x8_MB_CABAC_ls(CMacroblock *currMB, SyntaxElement *currSE, ColorPlane pl) {
+void CDecoderH264::read_comp_coeff_8x8_MB_CABAC_ls(CMacroblock *currMB, CSyntaxElement *currSE, ColorPlane pl) {
 
   //======= 8x8 transform size & CABAC ========
   readCompCoeff8x8_CABAC_lossless(currMB, currSE, pl, 0); 
@@ -35780,7 +35712,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_420(CMacroblock *currMB) {
   int i,j;
   int level;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -35910,10 +35842,10 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_420(CMacroblock *currMB) {
         level=currSE.value1;
 
         if(level != 0) {   /* leave if level == 0 */
-          pos_scan_4x4 +=(2*currSE.value2);
+          pos_scan_4x4 += 2*currSE.value2;
 
-          i0 =((*pos_scan_4x4++) << 2);
-          j0 =((*pos_scan_4x4++) << 2);
+          i0 = *pos_scan_4x4++ << 2;
+          j0 = *pos_scan_4x4++ << 2;
 
           cof[j0][i0]=level;// add new intra DC coeff
           //currSlice->fcf[0][j0][i0]=level;// add new intra DC coeff
@@ -35921,14 +35853,14 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_420(CMacroblock *currMB) {
 				}
 
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   // luma coefficients
   //======= Other Modes & CABAC ========
@@ -35947,8 +35879,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_420(CMacroblock *currMB) {
 
   //init quant parameters for chroma 
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 	  }
 
   //========================== CHROMA DC ============================
@@ -36144,7 +36076,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_400(CMacroblock *currMB) {
   int k;
   int level;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -36280,14 +36212,14 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_400(CMacroblock *currMB) {
 				}
 
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[PLANE_Y] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[PLANE_Y] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[PLANE_Y]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[PLANE_Y]];
 
   //======= Other Modes & CABAC ========
   //------------------------------------          
@@ -36315,7 +36247,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_444(CMacroblock *currMB) {
   int i, k;
   int level;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -36339,8 +36271,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_444(CMacroblock *currMB) {
   // QPI
   //init constants for every chroma qp offset
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 	  }
 
 
@@ -36462,21 +36394,20 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_444(CMacroblock *currMB) {
 				}
 
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   //init quant parameters for chroma 
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 		}
-
 
   InvLevelScale4x4=intra? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : 
 		currSlice->InvLevelScale4x4_Inter[currSlice->colour_plane_id][qp_rem];
@@ -36542,12 +36473,12 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_444(CMacroblock *currMB) {
 
     update_qp(currMB, currSlice->qp);
 
-    qp_per=p_Vid->qp_per_matrix[(currSlice->qp+p_Vid->bitdepth_luma_qp_scale) ];
-    qp_rem=p_Vid->qp_rem_matrix[(currSlice->qp+p_Vid->bitdepth_luma_qp_scale) ];
+    qp_per=p_Vid->qp_per_matrix[(currSlice->qp+p_Vid->bitdepth_luma_qp_scale)];
+    qp_rem=p_Vid->qp_rem_matrix[(currSlice->qp+p_Vid->bitdepth_luma_qp_scale)];
 
     //init constants for every chroma qp offset
-    qp_per_uv[uv]=p_Vid->qp_per_matrix[(currMB->qpc[uv]+p_Vid->bitdepth_chroma_qp_scale) ];
-    qp_rem_uv[uv]=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+p_Vid->bitdepth_chroma_qp_scale) ];
+    qp_per_uv[uv]=p_Vid->qp_per_matrix[(currMB->qpc[uv]+p_Vid->bitdepth_chroma_qp_scale)];
+    qp_rem_uv[uv]=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+p_Vid->bitdepth_chroma_qp_scale)];
 
     InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[uv+1][qp_rem_uv[uv]] : currSlice->InvLevelScale4x4_Inter[uv+1][qp_rem_uv[uv]];
 
@@ -36573,7 +36504,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
   int i,j,k;
   int level;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -36604,8 +36535,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
   // QPI
   //init constants for every chroma qp offset
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 		}
 
   // read CBP if not new intra mode
@@ -36727,19 +36658,19 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
 				}
 
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   //init quant parameters for chroma 
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 		}	
 
   InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : currSlice->InvLevelScale4x4_Inter[currSlice->colour_plane_id][qp_rem];
@@ -36767,8 +36698,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
         int **imgcof=currSlice->cof[uv+1];
         int m3[2][4]={{0,0,0,0},{0,0,0,0}};
         int m4[2][4]={{0,0,0,0},{0,0,0,0}};
-        int8_t qp_per_uv_dc=p_Vid->qp_per_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale) ];       //for YUV422 only
-        int8_t qp_rem_uv_dc=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale) ];       //for YUV422 only
+        int8_t qp_per_uv_dc=p_Vid->qp_per_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale)];       //for YUV422 only
+        int8_t qp_rem_uv_dc=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale)];       //for YUV422 only
         if(intra)
           InvLevelScale4x4=currSlice->InvLevelScale4x4_Intra[uv+1][qp_rem_uv_dc];
         else 
@@ -36829,9 +36760,9 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
             m6[2]=m4[i][1]-m4[i][3];
             m6[3]=m4[i][1]+m4[i][3];
 
-            imgcof[ 0][i<<2]=m6[0]+m6[3];
-            imgcof[ 4][i<<2]=m6[1]+m6[2];
-            imgcof[ 8][i<<2]=m6[1]-m6[2];
+            imgcof[0][i<<2]=m6[0]+m6[3];
+            imgcof[4][i<<2]=m6[1]+m6[2];
+            imgcof[8][i<<2]=m6[1]-m6[2];
             imgcof[12][i<<2]=m6[0]-m6[3];
 						} //for(i=0;i<2;i++)
 
@@ -36912,7 +36843,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CABAC_422(CMacroblock *currMB) {
       for(b8=0; b8<p_Vid->num_blk8x8_uv; b8++) {
         currMB->is_v_block=uv = (b8 > ((p_Vid->num_uv_blocks)-1));
 
-        for(b4=0; b4<4; ++b4) {
+        for(b4=0; b4<4; b4++) {
           i=cofuv_blk_x[yuv][b8][b4];
           j=cofuv_blk_y[yuv][b8][b4];
 
@@ -37023,15 +36954,15 @@ int CDecoderH264::predict_nnz(CMacroblock *currMB, CAVLCBlockTypes block_type, i
   if(pix.available) { 
     switch(block_type) {
 			case LUMA:
-				pred_nnz=p_Vid->nz_coeff [pix.mb_addr ][0][pix.y][pix.x];
+				pred_nnz=p_Vid->nz_coeff [pix.mb_addr][0][pix.y][pix.x];
 	      cnt++;
 				break;
 			case CB:
-				pred_nnz=p_Vid->nz_coeff [pix.mb_addr ][1][pix.y][pix.x];
+				pred_nnz=p_Vid->nz_coeff [pix.mb_addr][1][pix.y][pix.x];
 	      cnt++;
 				break;
 			case CR:
-				pred_nnz=p_Vid->nz_coeff [pix.mb_addr ][2][pix.y][pix.x];
+				pred_nnz=p_Vid->nz_coeff [pix.mb_addr][2][pix.y][pix.x];
 	      cnt++;
 				break;
 			default:
@@ -37052,15 +36983,15 @@ int CDecoderH264::predict_nnz(CMacroblock *currMB, CAVLCBlockTypes block_type, i
   if(pix.available) {
     switch(block_type) {
 			case LUMA:
-				pred_nnz += p_Vid->nz_coeff [pix.mb_addr ][0][pix.y][pix.x];
+				pred_nnz += p_Vid->nz_coeff [pix.mb_addr][0][pix.y][pix.x];
 				cnt++;
 				break;
 			case CB:
-				pred_nnz += p_Vid->nz_coeff [pix.mb_addr ][1][pix.y][pix.x];
+				pred_nnz += p_Vid->nz_coeff [pix.mb_addr][1][pix.y][pix.x];
 				cnt++;
 				break;
 			case CR:
-				pred_nnz += p_Vid->nz_coeff [pix.mb_addr ][2][pix.y][pix.x];
+				pred_nnz += p_Vid->nz_coeff [pix.mb_addr][2][pix.y][pix.x];
 				cnt++;
 				break;
 			default:
@@ -37108,7 +37039,7 @@ int CDecoderH264::predict_nnz_chroma(CMacroblock *currMB, int i,int j) {
 		  }
 
     if(pix.available) {
-      pred_nnz=p_Vid->nz_coeff [pix.mb_addr ][1][pix.y][2 *(i>>1)+pix.x];
+      pred_nnz=p_Vid->nz_coeff [pix.mb_addr][1][pix.y][2 *(i>>1)+pix.x];
       cnt++;
 			}
 
@@ -37122,7 +37053,7 @@ int CDecoderH264::predict_nnz_chroma(CMacroblock *currMB, int i,int j) {
 			}
 
     if(pix.available) {
-      pred_nnz += p_Vid->nz_coeff [pix.mb_addr ][1][pix.y][2 *(i>>1)+pix.x];
+      pred_nnz += p_Vid->nz_coeff [pix.mb_addr][1][pix.y][2 *(i>>1)+pix.x];
       cnt++;
 			}
 
@@ -37153,7 +37084,7 @@ void CDecoderH264::read_coeff_4x4_CAVLC(CMacroblock *currMB, CAVLCBlockTypes blo
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
   int mb_nr=currMB->mbAddrX;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
   Bitstream *currStream;
@@ -37213,7 +37144,7 @@ void CDecoderH264::read_coeff_4x4_CAVLC(CMacroblock *currMB, CAVLCBlockTypes blo
     // luma or chroma AC    
     nnz = !cac ? predict_nnz(currMB, LUMA, i<<2, j<<2) : predict_nnz_chroma(currMB, i,((j-4)<<2));
 
-    currSE.value1 =(nnz<2) ? 0 :((nnz<4) ? 1 :((nnz<8) ? 2 : 3));
+    currSE.value1 =(nnz<2) ? 0 : ((nnz<4) ? 1 : ((nnz<8) ? 2 : 3));
 
     readSyntaxElement_NumCoeffTrailingOnes(&currSE, currStream, type);
     numcoeff      =currSE.value1;
@@ -37348,7 +37279,7 @@ void CDecoderH264::read_coeff_4x4_CAVLC_444(CMacroblock *currMB, CAVLCBlockTypes
   CSlice *currSlice=currMB->p_Slice;
   CVideoParameters *p_Vid=currMB->p_Vid;
   int mb_nr=currMB->mbAddrX;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
   Bitstream *currStream;
@@ -37449,7 +37380,7 @@ void CDecoderH264::read_coeff_4x4_CAVLC_444(CMacroblock *currMB, CAVLCBlockTypes
     else
       nnz=predict_nnz(currMB, CR, i<<2, j<<2);
 
-    currSE.value1 = nnz<2 ? 0 : ((nnz<4) ? 1 :((nnz<8) ? 2 : 3));
+    currSE.value1 = nnz<2 ? 0 : ((nnz<4) ? 1 : ((nnz<8) ? 2 : 3));
 
     readSyntaxElement_NumCoeffTrailingOnes(&currSE, currStream, type);
 
@@ -37643,9 +37574,9 @@ void CDecoderH264::read_comp_coeff_4x4_CAVLC(CMacroblock *currMB, ColorPlane pl,
 					}
 				}
       else {
-        nzcoeff[block_y    ][block_x    ]=0;
-        nzcoeff[block_y    ][block_x+1]=0;
-        nzcoeff[block_y+1][block_x    ]=0;
+        nzcoeff[block_y   ][block_x   ]=0;
+        nzcoeff[block_y   ][block_x+1]=0;
+        nzcoeff[block_y+1][block_x   ]=0;
         nzcoeff[block_y+1][block_x+1]=0;
 				}
 			}
@@ -37717,9 +37648,9 @@ void CDecoderH264::read_comp_coeff_4x4_CAVLC_ls(CMacroblock *currMB, ColorPlane 
 					}
 				}
       else {
-        nzcoeff[block_y    ][block_x    ]=0;
-        nzcoeff[block_y    ][block_x+1]=0;
-        nzcoeff[block_y+1][block_x    ]=0;
+        nzcoeff[block_y   ][block_x   ]=0;
+        nzcoeff[block_y   ][block_x+1]=0;
+        nzcoeff[block_y+1][block_x   ]=0;
         nzcoeff[block_y+1][block_x+1]=0;
 				}
 			}
@@ -37798,9 +37729,9 @@ void CDecoderH264::read_comp_coeff_8x8_CAVLC(CMacroblock *currMB, ColorPlane pl,
 					}
 				}
       else {
-        nzcoeff[block_y    ][block_x    ]=0;
-        nzcoeff[block_y    ][block_x+1]=0;
-        nzcoeff[block_y+1][block_x    ]=0;
+        nzcoeff[block_y ][block_x ]=0;
+        nzcoeff[block_y ][block_x+1]=0;
+        nzcoeff[block_y+1][block_x ]=0;
         nzcoeff[block_y+1][block_x+1]=0;
 				}
 			}
@@ -37876,9 +37807,9 @@ void CDecoderH264::read_comp_coeff_8x8_CAVLC_ls(CMacroblock *currMB, ColorPlane 
 					}
 				}
       else {
-        nzcoeff[block_y    ][block_x    ]=0;
-        nzcoeff[block_y    ][block_x+1]=0;
-        nzcoeff[block_y+1][block_x    ]=0;
+        nzcoeff[block_y   ][block_x   ]=0;
+        nzcoeff[block_y   ][block_x+1]=0;
+        nzcoeff[block_y+1][block_x   ]=0;
         nzcoeff[block_y+1][block_x+1]=0;
 				}
 			}
@@ -37896,7 +37827,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_400(CMacroblock *currMB) {
   int k;
   int mb_nr=currMB->mbAddrX;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -38006,16 +37937,15 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_400(CMacroblock *currMB) {
 					}
 				}
 
-
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[PLANE_Y] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[PLANE_Y] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[PLANE_Y]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[PLANE_Y]];
 
   InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : 
 		currSlice->InvLevelScale4x4_Inter[currSlice->colour_plane_id][qp_rem];
@@ -38046,7 +37976,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
   int i,j,k;
   int mb_nr=currMB->mbAddrX;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -38114,7 +38044,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
     //=====   DQUANT   =====
     //----------------------
     // Delta quant only if nonzero coeffs
-    if(cbp !=0) {
+    if(cbp != 0) {
       read_delta_quant(&currSE, dP, currMB, partMap,!currMB->is_intra_block ? SE_DELTA_QUANT_INTER : SE_DELTA_QUANT_INTRA);
 
       if(currSlice->dp_mode) {
@@ -38164,19 +38094,19 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
 				}
 
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   //init quant parameters for chroma 
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 	  }
 
   InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : 
@@ -38205,8 +38135,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
         int **imgcof=currSlice->cof[PLANE_U+uv];
         int m3[2][4]={{0,0,0,0},{0,0,0,0}};
         int m4[2][4]={{0,0,0,0},{0,0,0,0}};
-        int8_t qp_per_uv_dc=p_Vid->qp_per_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale) ];       //for YUV422 only
-        int8_t qp_rem_uv_dc=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale) ];       //for YUV422 only
+        int8_t qp_per_uv_dc=p_Vid->qp_per_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale)];       //for YUV422 only
+        int8_t qp_rem_uv_dc=p_Vid->qp_rem_matrix[(currMB->qpc[uv]+3+p_Vid->bitdepth_chroma_qp_scale)];       //for YUV422 only
         if(intra)
           InvLevelScale4x4=currSlice->InvLevelScale4x4_Intra[PLANE_U+uv][qp_rem_uv_dc];
         else 
@@ -38247,9 +38177,9 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
             m6[2]=m4[i][1]-m4[i][3];
             m6[3]=m4[i][1]+m4[i][3];
 
-            imgcof[ 0][i<<2]=m6[0]+m6[3];
-            imgcof[ 4][i<<2]=m6[1]+m6[2];
-            imgcof[ 8][i<<2]=m6[1]-m6[2];
+            imgcof[0][i<<2]=m6[0]+m6[3];
+            imgcof[4][i<<2]=m6[1]+m6[2];
+            imgcof[8][i<<2]=m6[1]-m6[2];
             imgcof[12][i<<2]=m6[0]-m6[3];
 	          }//for(i=0;i<2;i++)
 
@@ -38273,7 +38203,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_422(CMacroblock *currMB) {
   //-----------------------------------------------------------------
   // chroma AC coeff, all zero fram start_scan
   if(cbp<=31)
-    fast_memset(p_Vid->nz_coeff [mb_nr ][1][0], 0, 2*BLOCK_PIXELS*sizeof(uint8_t));
+    fast_memset(p_Vid->nz_coeff [mb_nr][1][0], 0, 2*BLOCK_PIXELS*sizeof(uint8_t));
   else {
     if(!currMB->is_lossless) {
       for(b8=0; b8<p_Vid->num_blk8x8_uv; b8++) {
@@ -38341,7 +38271,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_444(CMacroblock *currMB) {
   int i,k;
   int mb_nr=currMB->mbAddrX;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -38454,21 +38384,20 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_444(CMacroblock *currMB) {
 					}
 				}
 
-
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   //init quant parameters for chroma 
   for(i=PLANE_U; i <= PLANE_V; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i]];
 	  }
 
   InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : 
@@ -38514,8 +38443,8 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_444(CMacroblock *currMB) {
     update_qp(currMB, currSlice->qp);
 
     //init constants for every chroma qp offset
-    qp_per_uv[uv]=p_Vid->qp_per_matrix[ currMB->qp_scaled[uv] ];
-    qp_rem_uv[uv]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[uv] ];
+    qp_per_uv[uv]=p_Vid->qp_per_matrix[currMB->qp_scaled[uv]];
+    qp_rem_uv[uv]=p_Vid->qp_rem_matrix[currMB->qp_scaled[uv]];
 
     InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[uv][qp_rem_uv[uv]] : currSlice->InvLevelScale4x4_Inter[uv][qp_rem_uv[uv]];
     InvLevelScale8x8=intra ? currSlice->InvLevelScale8x8_Intra[uv][qp_rem_uv[uv]] : currSlice->InvLevelScale8x8_Inter[uv][qp_rem_uv[uv]];
@@ -38538,7 +38467,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_420(CMacroblock *currMB) {
   int i,j,k;
   int mb_nr=currMB->mbAddrX;
   int cbp;
-  SyntaxElement currSE;
+  CSyntaxElement currSE;
   DataPartition *dP=NULL;
   CSlice *currSlice=currMB->p_Slice;
   const uint8_t *partMap=assignSE2partition[currSlice->dp_mode];
@@ -38658,21 +38587,20 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_420(CMacroblock *currMB) {
 					}
 				}
 
-
       if(!currMB->is_lossless)
-        itrans_2(currMB,(ColorPlane) currSlice->colour_plane_id);// transform new intra DC
+        itrans_2(currMB,(ColorPlane)currSlice->colour_plane_id);// transform new intra DC
 			}
 		}
 
   update_qp(currMB, currSlice->qp);
 
-  qp_per=p_Vid->qp_per_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
-  qp_rem=p_Vid->qp_rem_matrix[ currMB->qp_scaled[currSlice->colour_plane_id] ];
+  qp_per=p_Vid->qp_per_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
+  qp_rem=p_Vid->qp_rem_matrix[currMB->qp_scaled[currSlice->colour_plane_id]];
 
   //init quant parameters for chroma 
   for(i=0; i<2; i++) {
-    qp_per_uv[i]=p_Vid->qp_per_matrix[ currMB->qp_scaled[i+1] ];
-    qp_rem_uv[i]=p_Vid->qp_rem_matrix[ currMB->qp_scaled[i+1] ];
+    qp_per_uv[i]=p_Vid->qp_per_matrix[currMB->qp_scaled[i+1]];
+    qp_rem_uv[i]=p_Vid->qp_rem_matrix[currMB->qp_scaled[i+1]];
 	  }
 
   InvLevelScale4x4=intra ? currSlice->InvLevelScale4x4_Intra[currSlice->colour_plane_id][qp_rem] : 
@@ -38742,7 +38670,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_420(CMacroblock *currMB) {
   //-----------------------------------------------------------------
   // chroma AC coeff, all zero fram start_scan
   if(cbp<=31)
-    fast_memset(p_Vid->nz_coeff [mb_nr ][1][0], 0, 2*BLOCK_PIXELS*sizeof(uint8_t));
+    fast_memset(p_Vid->nz_coeff [mb_nr][1][0], 0, 2*BLOCK_PIXELS*sizeof(uint8_t));
   else {
     if(!currMB->is_lossless) {
       for(b8=0; b8<p_Vid->num_blk8x8_uv; b8++) {
@@ -38777,7 +38705,7 @@ void CDecoderH264::read_CBP_and_coeffs_from_NAL_CAVLC_420(CMacroblock *currMB) {
       for(b8=0; b8<p_Vid->num_blk8x8_uv; b8++) {
         currMB->is_v_block=uv = (b8 > ((p_Vid->num_uv_blocks)-1));
 
-        for(b4=0; b4<4; ++b4) {
+        for(b4=0; b4<4; b4++) {
           i=cofuv_blk_x[0][b8][b4];
           j=cofuv_blk_y[0][b8][b4];
 
@@ -38848,9 +38776,6 @@ void CDecoderH264::set_read_CBP_and_coeffs_cavlc(CSlice *currSlice) {
 	}
 
 
-
-int RTPReadPacket(RTPpacket_t *p, int bitstream);
-
 /*!
  ************************************************************************
 *\brief
@@ -38896,7 +38821,7 @@ void CDecoderH264::CloseRTPFile(int *p_BitStreamFile) {
  *
  ************************************************************************
  */
-int CDecoderH264::GetRTPNALU(CVideoParameters *p_Vid, NALU_t *nalu, int BitStreamFile) {
+int CDecoderH264::GetRTPNALU(NALU_t *nalu, int BitStreamFile) {
   static uint16_t first_call=1;  //!< triggers sequence number initialization on first call
   static uint16_t old_seq=0;     //!< store the last RTP sequence number for loss detection
 
@@ -38949,7 +38874,7 @@ int CDecoderH264::GetRTPNALU(CVideoParameters *p_Vid, NALU_t *nalu, int BitStrea
     return ret;
 	}
 
-int CDecoderH264::GetRTSPClientNALU(CVideoParameters *p_Vid, NALU_t *nalu, CRTSPClientSocket *BitStreamFile) {
+int CDecoderH264::GetRTSPClientNALU(NALU_t *nalu, CRTSPClientSocket *BitStreamFile) {
 	size_t size=0;
   int ret;
 	uint32_t timestamp;
@@ -39077,17 +39002,17 @@ int CDecoderH264::DecomposeRTPpacket(RTPpacket_t *p) {
 void CDecoderH264::DumpRTPHeader(RTPpacket_t *p) {
   int i;
 
-  for(i=0; i< 30; i++)
-    printf("%02x ", p->packet[i]);
-  printf("Version(V): %d\n",(int) p->v);
-  printf("Padding(P): %d\n",(int) p->p);
-  printf("Extension(X): %d\n",(int) p->x);
-  printf("CSRC count(CC): %d\n",(int) p->cc);
-  printf("Marker bit(M): %d\n",(int) p->m);
-  printf("Payload Type(PT): %d\n",(int) p->pt);
-  printf("Sequence Number: %d\n",(int) p->seq);
-  printf("Timestamp: %d\n",(int) p->timestamp);
-  theApp.FileSpool->print(CLogFile::flagError,"SSRC: %d\n",(int) p->ssrc);
+  for(i=0; i < 30; i++)
+    theApp.FileSpool->print(CLogFile::flagInfo,"%02x ", p->packet[i]);		// togliere a-capo...
+  theApp.FileSpool->print(CLogFile::flagInfo,"Version(V): %d\n",(int)p->v);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Padding(P): %d\n",(int)p->p);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Extension(X): %d\n",(int)p->x);
+  theApp.FileSpool->print(CLogFile::flagInfo,"CSRC count(CC): %d\n",(int)p->cc);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Marker bit(M): %d\n",(int)p->m);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Payload Type(PT): %d\n",(int)p->pt);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Sequence Number: %d\n",(int)p->seq);
+  theApp.FileSpool->print(CLogFile::flagInfo,"Timestamp: %d\n",(int)p->timestamp);
+  theApp.FileSpool->print(CLogFile::flagInfo,"SSRC: %d\n",(int)p->ssrc);
 	}
 
 
@@ -39668,7 +39593,7 @@ void CDecoderH264::interpret_subsequence_characteristics_info(uint8_t *payload, 
   int i;
   int sub_seq_layer_num, sub_seq_id;
 	bool duration_flag, average_rate_flag, accurate_statistics_flag;
-  unsigned long sub_seq_duration, average_bit_rate, average_frame_rate;
+  uint32_t sub_seq_duration, average_bit_rate, average_frame_rate;
   int num_referenced_subseqs, ref_sub_seq_layer_num, ref_sub_seq_id, ref_sub_seq_direction;
 
   buf =(Bitstream*)p_Memory->H264MALLOC(sizeof(Bitstream));
@@ -39733,9 +39658,6 @@ void CDecoderH264::interpret_subsequence_characteristics_info(uint8_t *payload, 
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_SUBSEQUENCE_CHAR
-#undef PRINT_SUBSEQUENCE_CHAR
-#endif
 	}
 
 
@@ -39776,9 +39698,6 @@ void CDecoderH264::interpret_scene_information(uint8_t *payload, int16_t size, C
     theApp.FileSpool->print(CLogFile::flagInfo,"second_scene_id      =%d", second_scene_id);
 #endif
   p_Memory->H264FREE(buf);
-#ifdef PRINT_SCENE_INFORMATION
-#undef PRINT_SCENE_INFORMATION
-#endif
 	}
 
 
@@ -39809,10 +39728,6 @@ void CDecoderH264::interpret_filler_payload_info(uint8_t *payload, int16_t size,
     theApp.FileSpool->print(CLogFile::flagInfo,"read %d bytes of filler payload", payload_cnt);
   else
     theApp.FileSpool->print(CLogFile::flagInfo,"error reading filler payload: not all bytes are 0xFF(%d of %d)", payload_cnt, size);
-#endif
-
-#ifdef PRINT_FILLER_PAYLOAD_INFO
-#undef PRINT_FILLER_PAYLOAD_INFO
 #endif
 	}
 
@@ -39857,9 +39772,6 @@ void CDecoderH264::interpret_user_data_unregistered_info(uint8_t *payload, int16
     theApp.FileSpool->print(CLogFile::flagInfo,"Unreg data payload_byte=%d", payload_byte);
 #endif
 		}
-#ifdef PRINT_USER_DATA_UNREGISTERED_INFO
-#undef PRINT_USER_DATA_UNREGISTERED_INFO
-#endif
 	}
 
 
@@ -39900,9 +39812,6 @@ void CDecoderH264::interpret_user_data_registered_itu_t_t35_info(uint8_t *payloa
     theApp.FileSpool->print(CLogFile::flagInfo,"itu_t_t35 payload_byte=%d", payload_byte);
 #endif
 		}
-#ifdef PRINT_USER_DATA_REGISTERED_ITU_T_T35_INFO
-#undef PRINT_USER_DATA_REGISTERED_ITU_T_T35_INFO
-#endif
 	}
 
 
@@ -39958,9 +39867,6 @@ void CDecoderH264::interpret_pan_scan_rect_info(uint8_t *payload, int16_t size, 
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_PAN_SCAN_RECT
-#undef PRINT_PAN_SCAN_RECT
-#endif
 	}
 
 
@@ -40007,9 +39913,6 @@ void CDecoderH264::interpret_recovery_point_info(uint8_t *payload, int16_t size,
   theApp.FileSpool->print(CLogFile::flagInfo,"changing_slice_group_idc=%d", changing_slice_group_idc);
 #endif
   p_Memory->H264FREE(buf);
-#ifdef PRINT_RECOVERY_POINT
-#undef PRINT_RECOVERY_POINT
-#endif
 	}
 
 
@@ -40123,9 +40026,6 @@ void CDecoderH264::interpret_dec_ref_pic_marking_repetition_info(uint8_t *payloa
   pSlice->adaptive_ref_pic_buffering_flag=old_adaptive_ref_pic_buffering_flag;
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_DEC_REF_PIC_MARKING
-#undef PRINT_DEC_REF_PIC_MARKING
-#endif
 	}
 
 /*!
@@ -40157,9 +40057,6 @@ void CDecoderH264::interpret_full_frame_freeze_info(uint8_t *payload, int16_t si
 #endif
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_FULL_FRAME_FREEZE_INFO
-#undef PRINT_FULL_FRAME_FREEZE_INFO
-#endif
 }
 
 
@@ -40185,9 +40082,6 @@ void CDecoderH264::interpret_full_frame_freeze_release_info(uint8_t *payload, in
 		}
 #endif
 
-#ifdef PRINT_FULL_FRAME_FREEZE_RELEASE_INFO
-#undef PRINT_FULL_FRAME_FREEZE_RELEASE_INFO
-#endif
 	}
 
 /*!
@@ -40221,9 +40115,6 @@ void CDecoderH264::interpret_full_frame_snapshot_info(uint8_t *payload, int16_t 
   theApp.FileSpool->print(CLogFile::flagInfo,"snapshot_id=%d", snapshot_id);
 #endif
   p_Memory->H264FREE(buf);
-#ifdef PRINT_FULL_FRAME_SNAPSHOT_INFO
-#undef PRINT_FULL_FRAME_SNAPSHOT_INFO
-#endif
 	}
 
 /*!
@@ -40259,9 +40150,6 @@ void CDecoderH264::interpret_progressive_refinement_start_info(uint8_t *payload,
   theApp.FileSpool->print(CLogFile::flagInfo,"num_refinement_steps_minus1=%d", num_refinement_steps_minus1);
 #endif
   p_Memory->H264FREE(buf);
-#ifdef PRINT_PROGRESSIVE_REFINEMENT_START_INFO
-#undef PRINT_PROGRESSIVE_REFINEMENT_START_INFO
-#endif
 	}
 
 
@@ -40296,9 +40184,6 @@ void CDecoderH264::interpret_progressive_refinement_end_info(uint8_t *payload, i
   theApp.FileSpool->print(CLogFile::flagInfo,"progressive_refinement_id  =%d", progressive_refinement_id);
 #endif
   p_Memory->H264FREE(buf);
-#ifdef PRINT_PROGRESSIVE_REFINEMENT_END_INFO
-#undef PRINT_PROGRESSIVE_REFINEMENT_END_INFO
-#endif
 	}
 
 
@@ -40358,9 +40243,6 @@ void CDecoderH264::interpret_motion_constrained_slice_group_set_info(uint8_t *pa
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_MOTION_CONST_SLICE_GROUP_SET_INFO
-#undef PRINT_MOTION_CONST_SLICE_GROUP_SET_INFO
-#endif
 	}
 
 /*!
@@ -40445,7 +40327,7 @@ void CDecoderH264::interpret_film_grain_characteristics_info(uint8_t *payload, i
         theApp.FileSpool->print(CLogFile::flagInfo,"num_intensity_intervals_minus1=%d", num_intensity_intervals_minus1);
         theApp.FileSpool->print(CLogFile::flagInfo,"num_model_values_minus1=%d", num_model_values_minus1);
 #endif
-        for(i=0; i <= num_intensity_intervals_minus1; i ++) {
+        for(i=0; i <= num_intensity_intervals_minus1; i++) {
           intensity_interval_lower_bound       =read_u_v(8, "SEI: intensity_interval_lower_bound", buf, &UsedBits);
           intensity_interval_upper_bound       =read_u_v(8, "SEI: intensity_interval_upper_bound", buf, &UsedBits);
 #ifdef PRINT_FILM_GRAIN_CHARACTERISTICS_INFO
@@ -40467,9 +40349,6 @@ void CDecoderH264::interpret_film_grain_characteristics_info(uint8_t *payload, i
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_FILM_GRAIN_CHARACTERISTICS_INFO
-#undef PRINT_FILM_GRAIN_CHARACTERISTICS_INFO
-#endif
 	}
 
 /*!
@@ -40511,9 +40390,6 @@ void CDecoderH264::interpret_deblocking_filter_display_preference_info(uint8_t *
 	  }
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_DEBLOCKING_FILTER_DISPLAY_PREFERENCE_INFO
-#undef PRINT_DEBLOCKING_FILTER_DISPLAY_PREFERENCE_INFO
-#endif
 	}
 
 /*!
@@ -40568,9 +40444,6 @@ void CDecoderH264::interpret_stereo_video_info_info(uint8_t *payload, int16_t si
 #endif
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_STEREO_VIDEO_INFO_INFO
-#undef PRINT_STEREO_VIDEO_INFO_INFO
-#endif
 	}
 
 /*!
@@ -40601,9 +40474,6 @@ void CDecoderH264::interpret_reserved_info(uint8_t *payload, int16_t size, CVide
     theApp.FileSpool->print(CLogFile::flagInfo,"reserved_sei_message_payload_byte=%d", payload_byte);
 #endif
 		}
-#ifdef PRINT_RESERVED_INFO
-#undef PRINT_RESERVED_INFO
-#endif
 	}
 
 
@@ -40673,9 +40543,6 @@ void CDecoderH264::interpret_buffering_period_info(uint8_t *payload, int16_t siz
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_BUFFERING_PERIOD_INFO
-#undef PRINT_BUFFERING_PERIOD_INFO
-#endif
 	}
 
 
@@ -40864,9 +40731,6 @@ void CDecoderH264::interpret_picture_timing_info(uint8_t *payload, int16_t size,
 		}
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_PICTURE_TIMING_INFO
-#undef PRINT_PICTURE_TIMING_INFO
-#endif
 	}
 
 /*!
@@ -40948,9 +40812,6 @@ void CDecoderH264::interpret_frame_packing_arrangement_info(uint8_t *payload, in
 #endif
 
   p_Memory->H264FREE(buf);
-#ifdef PRINT_FRAME_PACKING_ARRANGEMENT_INFO
-#undef PRINT_FRAME_PACKING_ARRANGEMENT_INFO
-#endif
 	}
 
 /*!
@@ -41367,7 +41228,7 @@ void CDecoderH264::icopy8x8(CMacroblock *currMB,   //!< current macroblock
  *************************************************************************************
  */
 int CDecoderH264::read_ue_v(char *tracestring, Bitstream *bitstream, int *used_bits) {
-  SyntaxElement symbol;
+  CSyntaxElement symbol;
 
   //assert(bitstream->streamBuffer != NULL);
   symbol.type=SE_HEADER;
@@ -41398,7 +41259,7 @@ int CDecoderH264::read_ue_v(char *tracestring, Bitstream *bitstream, int *used_b
  *************************************************************************************
  */
 int CDecoderH264::read_se_v(char *tracestring, Bitstream *bitstream, int *used_bits) {
-  SyntaxElement symbol;
+  CSyntaxElement symbol;
 
   //assert(bitstream->streamBuffer != NULL);
   symbol.type=SE_HEADER;
@@ -41432,7 +41293,7 @@ int CDecoderH264::read_se_v(char *tracestring, Bitstream *bitstream, int *used_b
  *************************************************************************************
  */
 int CDecoderH264::read_u_v(uint8_t LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits) {
-  SyntaxElement symbol;
+  CSyntaxElement symbol;
 
   symbol.inf=0;
 
@@ -41468,7 +41329,8 @@ int CDecoderH264::read_u_v(uint8_t LenInBits, char *tracestring, Bitstream *bits
  *************************************************************************************
  */
 int CDecoderH264::read_i_v(uint8_t LenInBits, char *tracestring, Bitstream *bitstream, int *used_bits) {
-  SyntaxElement symbol;
+  CSyntaxElement symbol;
+
   symbol.inf=0;
 
   //assert(bitstream->streamBuffer != NULL);
@@ -41673,7 +41535,7 @@ void CDecoderH264::linfo_levrun_c2x2(int len, int info, int8_t *level, int *irun
 *   map it to the corresponding syntax element
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_VLC(SyntaxElement *sym, Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_VLC(CSyntaxElement *sym, Bitstream *currStream) {
 
   sym->len= GetVLCSymbol(currStream->streamBuffer, currStream->frame_bitoffset, &sym->inf, currStream->bitstream_length);
   if(sym->len == -1)
@@ -41697,7 +41559,7 @@ int CDecoderH264::readSyntaxElement_VLC(SyntaxElement *sym, Bitstream *currStrea
 *   map it to the corresponding syntax element
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_UVLC(CMacroblock *currMB, SyntaxElement *sym, struct datapartition_dec *dP) {
+int CDecoderH264::readSyntaxElement_UVLC(CMacroblock *currMB, CSyntaxElement *sym, struct datapartition_dec *dP) {
   return readSyntaxElement_VLC(sym, dP->bitstream);
 	}
 
@@ -41708,7 +41570,7 @@ int CDecoderH264::readSyntaxElement_UVLC(CMacroblock *currMB, SyntaxElement *sym
 *   map it to the corresponding Intra Prediction Direction
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_Intra4x4PredictionMode(SyntaxElement *sym, Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_Intra4x4PredictionMode(CSyntaxElement *sym, Bitstream *currStream) {
 
   sym->len=GetVLCSymbol_IntraMode(currStream->streamBuffer, currStream->frame_bitoffset, &sym->inf, currStream->bitstream_length);
 
@@ -41802,7 +41664,7 @@ int CDecoderH264::more_rbsp_data(uint8_t buffer[],int totbitoffset,int bytecount
 *   Check if there are symbols for the next MB
  ************************************************************************
  */
-int CDecoderH264::uvlc_startcode_follows(CSlice *currSlice, bool dummy) {
+bool CDecoderH264::uvlc_startcode_follows(CSlice *currSlice, bool dummy) {
   uint8_t            dp_Nr=assignSE2partition[currSlice->dp_mode][SE_MBTYPE];
   DataPartition     *dP=&currSlice->partArr[dp_Nr];
   Bitstream *currStream=dP->bitstream;
@@ -41904,7 +41766,7 @@ inline int CDecoderH264::ShowBitsThres(int inf, int numbits) {
 *   code from bitstream(2d tables)
  ************************************************************************
  */
-int CDecoderH264::code_from_bitstream_2d(SyntaxElement *sym,Bitstream *currStream,
+int CDecoderH264::code_from_bitstream_2d(CSyntaxElement *sym,Bitstream *currStream,
                                   const uint8_t *lentab,const uint8_t *codtab,
                                   int tabwidth,int tabheight,
                                   int *code) {
@@ -41946,7 +41808,7 @@ int CDecoderH264::code_from_bitstream_2d(SyntaxElement *sym,Bitstream *currStrea
 *   read FLC codeword from UVLC-partition
  ************************************************************************
  */
-int8_t CDecoderH264::readSyntaxElement_FLC(SyntaxElement *sym, Bitstream *currStream) {
+int8_t CDecoderH264::readSyntaxElement_FLC(CSyntaxElement *sym, Bitstream *currStream) {
   int BitstreamLengthInBits = (currStream->bitstream_length << 3)+7;
   
   if(GetBits(currStream->streamBuffer, currStream->frame_bitoffset, &sym->inf, BitstreamLengthInBits, sym->len) < 0)
@@ -42006,7 +41868,7 @@ const uint8_t CDecoderH264::codtab[3][4][17]={
 	{ 0, 0, 0, 3, 3, 4, 4, 4, 4, 4,12,12, 8,12, 8,12, 8}}
 	};
 
-int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnes(SyntaxElement *sym, Bitstream *currStream,
+int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnes(CSyntaxElement *sym, Bitstream *currStream,
                                            char *type) {
   int frame_bitoffset       =currStream->frame_bitoffset;
   int BitstreamLengthInBytes=currStream->bitstream_length;
@@ -42062,7 +41924,7 @@ int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnes(SyntaxElement *sym, Bit
 *   read NumCoeff/TrailingOnes codeword from UVLC-partition ChromaDC
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnesChromaDC(CVideoParameters *p_Vid, SyntaxElement *sym,  Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnesChromaDC(CVideoParameters *p_Vid, CSyntaxElement *sym,  Bitstream *currStream) {
   int code;
   ColorFormat yuv=(ColorFormat)(p_Vid->active_sps->chroma_format_idc-1);
   int retval=code_from_bitstream_2d(sym, currStream, &lentab[yuv][0][0], &codtab[yuv][0][0], 17, 4, &code);
@@ -42091,7 +41953,7 @@ int CDecoderH264::readSyntaxElement_NumCoeffTrailingOnesChromaDC(CVideoParameter
 *   read Level VLC0 codeword from UVLC-partition
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_Level_VLC0(SyntaxElement *sym, Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_Level_VLC0(CSyntaxElement *sym, Bitstream *currStream) {
   int frame_bitoffset       =currStream->frame_bitoffset;
   int BitstreamLengthInBytes=currStream->bitstream_length;
   int BitstreamLengthInBits  =(BitstreamLengthInBytes << 3)+7;
@@ -42143,7 +42005,7 @@ int CDecoderH264::readSyntaxElement_Level_VLC0(SyntaxElement *sym, Bitstream *cu
 *   read Level VLC codeword from UVLC-partition
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_Level_VLCN(SyntaxElement *sym, int vlc, Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_Level_VLCN(CSyntaxElement *sym, int vlc, Bitstream *currStream) {
   int frame_bitoffset       =currStream->frame_bitoffset;
   int BitstreamLengthInBytes=currStream->bitstream_length;
   int BitstreamLengthInBits  =(BitstreamLengthInBytes << 3)+7;
@@ -42209,7 +42071,7 @@ int CDecoderH264::readSyntaxElement_Level_VLCN(SyntaxElement *sym, int vlc, Bits
 *   read Total Zeros codeword from UVLC-partition
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_TotalZeros(SyntaxElement *sym,  Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_TotalZeros(CSyntaxElement *sym,  Bitstream *currStream) {
   static const uint8_t lentab[TOTRUN_NUM][16]={
 		{ 1,3,3,4,4,5,5,6,6,7,7,8,8,9,9,9},
 		{ 3,3,3,3,3,4,4,4,4,5,5,6,6,6,6},
@@ -42270,7 +42132,7 @@ int CDecoderH264::readSyntaxElement_TotalZeros(SyntaxElement *sym,  Bitstream *c
 *   read Total Zeros Chroma DC codeword from UVLC-partition
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_TotalZerosChromaDC(CVideoParameters *p_Vid, SyntaxElement *sym,  Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_TotalZerosChromaDC(CVideoParameters *p_Vid, CSyntaxElement *sym,  Bitstream *currStream) {
   static const uint8_t lentab[3][TOTRUN_NUM][16]={
     //YUV420
 		{{ 1,2,3,3},
@@ -42359,7 +42221,7 @@ int CDecoderH264::readSyntaxElement_TotalZerosChromaDC(CVideoParameters *p_Vid, 
 *   read  Run codeword from UVLC-partition
  ************************************************************************
  */
-int CDecoderH264::readSyntaxElement_Run(SyntaxElement *sym, Bitstream *currStream) {
+int CDecoderH264::readSyntaxElement_Run(CSyntaxElement *sym, Bitstream *currStream) {
   static const uint8_t lentab[TOTRUN_NUM][16]={
 		{1,1},
 		{1,2,2},
@@ -42523,7 +42385,7 @@ void CDecoderH264::forward4x4(int **block, int **tblock, BLOCK_COORD pos_y, BLOC
     t3=p0-p3;
 
     ii=pos_x+i;
-    tblock[pos_y  ][ii]=t0+ t1;
+    tblock[pos_y ][ii]=t0+ t1;
     tblock[pos_y+1][ii]=t2 +(t3 << 1);
     tblock[pos_y+2][ii]=t0- t1;
     tblock[pos_y+3][ii]=t3 -(t2 << 1);
@@ -42570,7 +42432,7 @@ void CDecoderH264::inverse4x4(int **tblock, int **block, BLOCK_COORD pos_y, BLOC
     p3=t1 +(t3 >> 1);
 
     ii=i+pos_x;
-    block[pos_y  ][ii]=p0+p3;
+    block[pos_y ][ii]=p0+p3;
     block[pos_y+1][ii]=p1+p2;
     block[pos_y+2][ii]=p1-p2;
     block[pos_y+3][ii]=p0-p3;
@@ -42794,7 +42656,7 @@ void CDecoderH264::ihadamard2x2(int tblock[4], int block[4]) {
 */
 
 
-void CDecoderH264::forward8x8(int **block, int **tblock, PIXEL_COORD pos_y, PIXEL_COORD pos_x) {
+void CDecoderH264::forward8x8(int **block, int **tblock, BLOCK_COORD pos_y, BLOCK_COORD pos_x) {
   int i, ii;  
   int tmp[64];
   int *pTmp=tmp, *pblock;
@@ -42877,7 +42739,7 @@ void CDecoderH264::forward8x8(int **block, int **tblock, PIXEL_COORD pos_y, PIXE
     b7=a1-a2 +((a3 >> 1)+a3);
 
     ii=pos_x+i;
-    tblock[pos_y  ][ii]= b0+b1;
+    tblock[pos_y ][ii]= b0+b1;
     tblock[pos_y+1][ii]= b4 +(b7 >> 2);
     tblock[pos_y+2][ii]= b2 +(b3 >> 1);
     tblock[pos_y+3][ii]= b5 +(b6 >> 2);
@@ -43918,7 +43780,8 @@ void CDecoderH264::GetMotionVectorPredictorMBAFF(CMacroblock *currMB,
                                     BLOCK_COORD mb_x,BLOCK_COORD mb_y,
                                     BLOCK_COORD blockshape_x,BLOCK_COORD blockshape_y) {
   int mv_a, mv_b, mv_c, pred_vec=0;
-  int mvPredType, rFrameL, rFrameU, rFrameUR;
+  MVPredTypes mvPredType;
+	int rFrameL, rFrameU, rFrameUR;
   int hv;
   CVideoParameters *p_Vid=currMB->p_Vid;
 
@@ -44064,7 +43927,7 @@ void CDecoderH264::GetMotionVectorPredictorNormal(CMacroblock *currMB,
                                             int    list,
                                             BLOCK_COORD mb_x,BLOCK_COORD mb_y,
                                             BLOCK_COORD blockshape_x,BLOCK_COORD blockshape_y) {
-  int mvPredType=MVPRED_MEDIAN;
+  MVPredTypes mvPredType=MVPRED_MEDIAN;
 
   int rFrameL  =block[0].available ? mv_info[block[0].pos_y][block[0].pos_x].ref_idx[list] : -1;
   int rFrameU  =block[1].available ? mv_info[block[1].pos_y][block[1].pos_x].ref_idx[list] : -1;
@@ -44110,9 +43973,9 @@ void CDecoderH264::GetMotionVectorPredictorNormal(CMacroblock *currMB,
 					*pmv=zero_mv;
 				}
 			else	{
-				MotionVector *mv_a=block[0].available ? &mv_info[block[0].pos_y][block[0].pos_x].mv[list] :(MotionVector *) &zero_mv;
-				MotionVector *mv_b=block[1].available ? &mv_info[block[1].pos_y][block[1].pos_x].mv[list] :(MotionVector *) &zero_mv;
-				MotionVector *mv_c=block[2].available ? &mv_info[block[2].pos_y][block[2].pos_x].mv[list] :(MotionVector *) &zero_mv;
+				MotionVector *mv_a=block[0].available ? &mv_info[block[0].pos_y][block[0].pos_x].mv[list] : (MotionVector*)&zero_mv;
+				MotionVector *mv_b=block[1].available ? &mv_info[block[1].pos_y][block[1].pos_x].mv[list] : (MotionVector*)&zero_mv;
+				MotionVector *mv_c=block[2].available ? &mv_info[block[2].pos_y][block[2].pos_x].mv[list] : (MotionVector*)&zero_mv;
 
 				pmv->mv_x =(int16_t)imedian(mv_a->mv_x, mv_b->mv_x, mv_c->mv_x);
 				pmv->mv_y =(int16_t)imedian(mv_a->mv_y, mv_b->mv_y, mv_c->mv_y);
@@ -44551,7 +44414,7 @@ int CDecoderH264::GetSPS(CRTSPClientSocket *sock,seq_parameter_set_rbsp_t *sps) 
 	dp.bitstream->streamBuffer=(uint8_t*)(LPCTSTR)S;
 	dp.bitstream->streamBuffer++;
 	dp.bitstream->bitstream_length=127*8;
-	InterpretSPS(&vid, &dp, sps);
+	InterpretSPS(&dp, sps);
 	p_Memory->H264FREE(dp.bitstream);
 
 	return sps->Valid;
@@ -44571,11 +44434,10 @@ int CDecoderH264::GetPPS(CRTSPClientSocket *sock,pic_parameter_set_rbsp_t *pps) 
 	dp.bitstream=(Bitstream*)p_Memory->H264CALLOC(1,sizeof(Bitstream));
 	dp.bitstream->streamBuffer=(uint8_t*)(LPCTSTR)S;
 	dp.bitstream->bitstream_length=63*8;
-	InterpretPPS(&vid, &dp, pps);
+	InterpretPPS(&dp, pps);
 	p_Memory->H264FREE(dp.bitstream);
 
 	return pps->Valid;
-	return 1;
 	}
 
 
@@ -44584,17 +44446,25 @@ int CDecoderH264::GetPPS(CRTSPClientSocket *sock,pic_parameter_set_rbsp_t *pps) 
 CDecoderH264::CDecoderH264(const char *n,ColorModel c,uint32_t hsize) {
 
 	preconstruct(hsize);
+	p_Inp->outputFormat=c;
+	p_Inp->FileFormat=PAR_OF_ANNEXB;
+	p_Inp->silent=TRUE;
 	}
 
 CDecoderH264::CDecoderH264(CRTSPClientSocket *s,ColorModel c,uint32_t hsize) {
 
 	preconstruct(hsize);
+	p_Inp->outputFormat=c;
 	p_Vid->BitStreamFile=(int32_t)s;
+	p_Inp->FileFormat=PAR_OF_GDRTP;
+	p_Inp->silent=TRUE;
 	}
 
 CDecoderH264::CDecoderH264(ColorModel c,uint32_t hsize) {
 
 	preconstruct(hsize);
+	p_Inp->outputFormat=c;
+	p_Inp->silent=TRUE;
 	}
 
 void CDecoderH264::preconstruct(uint32_t hsize) {
@@ -44626,6 +44496,10 @@ void CDecoderH264::preconstruct(uint32_t hsize) {
   p_trace=NULL;
   bufferSize=0;
   bitcounter=0;
+
+	p_Inp->outbuf=(uint8_t*)HeapAlloc(GetProcessHeap(),HEAP_GENERATE_EXCEPTIONS,2000000L);		//new uint8_t[2000000L];
+	p_Inp->poc_scale=1;			// se no dà divisione per zero (dementi
+
 	}
 
 
@@ -44677,7 +44551,7 @@ int CDecoderH264::CloseDecoder() {
 #endif
 
   for(i=0; i<MAX_NUM_DPB_LAYERS; i++)
-   free_dpb(p_Vid->p_Dpb_layer[i]);
+    free_dpb(p_Vid->p_Dpb_layer[i]);
 
   uninit_out_buffer(p_Vid);
 #if _FLTDBG_
@@ -44689,7 +44563,10 @@ int CDecoderH264::CloseDecoder() {
 #endif
 
   free_img(p_Vid);
+	if(p_Inp->outbuf)
+		HeapFree(GetProcessHeap(),0,p_Inp->outbuf);
   p_Memory->H264FREE(p_Inp);
+	p_Inp=NULL;
 
   return DEC_CLOSE_NOERR;
 	}
@@ -44704,6 +44581,8 @@ int CDecoderH264::SetOptsDecoder(DecSet_t *pDecOpts) {
 
 CDecoderH264::~CDecoderH264() {
 
+	if(p_Inp && p_Inp->outbuf)
+		HeapFree(GetProcessHeap(),0,p_Inp->outbuf);
 	delete p_Memory;
 	}
 
@@ -44761,6 +44640,8 @@ void CDecoderH264::error(const char *text, int code) {
 //  exit(code);
 //	longjmp(mark, -1);
 #pragma message("RIMETTERE longjmp Error C++")
+		throw -1;
+		// proviamo
 //	assert(0);
 	}
 
@@ -44785,7 +44666,7 @@ int CDecoderH264_MemoryMgr::init_top_bot_planes(imgpel **imgFrame, int dim0, img
     no_mem_exit("init_top_bot_planes: imgBotField");
 
   for(i=0; i < (dim0/2); i++) {
-		(*imgTopField)[i]= imgFrame[2*i  ];
+		(*imgTopField)[i]= imgFrame[2*i ];
 		(*imgBotField)[i]= imgFrame[2*i+1];
 	  }
 
